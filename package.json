@@ -1,45 +1,19 @@
 {
-  "name": "@oked/sdk",
-  "version": "0.1.0",
-  "description": "OKed SDK — human approval layer for AI agents",
-  "type": "module",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
-  "exports": {
-    ".": {
-      "import": "./dist/index.js",
-      "types": "./dist/index.d.ts"
-    }
-  },
+  "name": "oked-sdk-monorepo",
+  "private": true,
+  "version": "0.0.0",
+  "description": "OKed SDK monorepo — @oked/sdk and @oked/claude-code",
+  "workspaces": [
+    "packages/*"
+  ],
   "scripts": {
-    "build": "tsc",
-    "dev": "tsc --watch",
-    "prepublishOnly": "npm run build"
+    "build": "npm run build --workspaces --if-present",
+    "dev": "npm run dev --workspace @oked/sdk",
+    "publish:all": "npm publish --workspaces --access public"
   },
-  "files": [
-    "dist"
-  ],
-  "keywords": [
-    "approval",
-    "agents",
-    "ai",
-    "sdk",
-    "security"
-  ],
   "repository": {
     "type": "git",
     "url": "git+https://github.com/aml11/oked-sdk.git"
   },
-  "bugs": {
-    "url": "https://github.com/aml11/oked-sdk/issues"
-  },
-  "homepage": "https://github.com/aml11/oked-sdk#readme",
-  "license": "MIT",
-  "publishConfig": {
-    "access": "public"
-  },
-  "devDependencies": {
-    "@types/node": "^22.13.10",
-    "typescript": "^5.6.0"
-  }
+  "license": "MIT"
 }
