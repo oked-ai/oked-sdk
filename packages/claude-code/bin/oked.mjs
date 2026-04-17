@@ -66,6 +66,11 @@ async function cmdInit() {
 
   let apiKey = process.env.OKED_API_KEY || settings?.env?.OKED_API_KEY || '';
   if (!apiKey) {
+    if (!process.stdin.isTTY) {
+      console.error('OKED_API_KEY not set and stdin is not interactive.');
+      console.error('Set OKED_API_KEY in your environment, or run interactively.');
+      process.exit(1);
+    }
     const rl = readline.createInterface({ input, output });
     apiKey = (await rl.question('OKED_API_KEY: ')).trim();
     rl.close();

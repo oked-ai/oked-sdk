@@ -9,7 +9,21 @@
  * Everything else passes through without touching the backend.
  */
 
-import { classify, OKedClient, describe as describeAction } from '@oked/sdk';
+let classify, OKedClient, describeAction;
+try {
+  ({ classify, OKedClient, describe: describeAction } = await import('@oked/sdk'));
+} catch (err) {
+  // If @oked/sdk can't be loaded (not built, missing, etc.), allow everything
+  // rather than blocking all tool use with a cryptic error.
+  process.stdout.write(JSON.stringify({
+    hookSpecificOutput: {
+      hookEventName: 'PreToolUse',
+      permissionDecision: 'allow',
+      permissionDecisionReason: `@oked/sdk not available: ${err.message}`,
+    },
+  }));
+  process.exit(0);
+}
 
 const oked = new OKedClient(); // reads OKED_API_KEY + OKED_BACKEND_URL from env
 
