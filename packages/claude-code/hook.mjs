@@ -13,15 +13,7 @@ let classify, OKedClient, describeAction;
 try {
   ({ classify, OKedClient, describe: describeAction } = await import('@oked/sdk'));
 } catch (err) {
-  // If @oked/sdk can't be loaded (not built, missing, etc.), allow everything
-  // rather than blocking all tool use with a cryptic error.
-  process.stdout.write(JSON.stringify({
-    hookSpecificOutput: {
-      hookEventName: 'PreToolUse',
-      permissionDecision: 'allow',
-      permissionDecisionReason: `@oked/sdk not available: ${err.message}`,
-    },
-  }));
+  // If @oked/sdk can't be loaded, defer to Claude's normal permission flow.
   process.exit(0);
 }
 
@@ -67,24 +59,18 @@ async function main() {
   try {
     input = JSON.parse(raw);
   } catch {
-    allow('Could not parse hook input');
-    return;
+    return; // can't parse — defer to Claude's normal flow
   }
 
   const { tool_name: toolName, tool_input: toolInput, session_id, cwd } = input;
 
-  // Pass through all non-Bash and non-MCP tools
-  if (PASSTHROUGH_TOOLS.has(toolName)) {
-    allow('Passthrough tool');
-    return;
-  }
+  // Non-dangerous tools — defer to Claude's normal permission flow
+  if (PASSTHROUGH_TOOLS.has(toolName)) return;
 
   const tier = classify(toolName, toolInput);
 
-  if (!NEEDS_APPROVAL.has(tier)) {
-    allow(`Tier: ${tier} — no approval needed`);
-    return;
-  }
+  // Not high-stakes — defer to Claude's normal flow
+  if (!NEEDS_APPROVAL.has(tier)) return;
 
   // This is a genuinely sensitive operation — send to OKed
   const description = describeAction(toolName, toolInput);
