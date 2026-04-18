@@ -1,4 +1,3 @@
-import path from "path";
 import type { RiskTier } from "./types.js";
 
 const SAFE_TOOLS = new Set([
@@ -76,24 +75,13 @@ const HIGH_STAKES_COMMANDS = [
   /\bnpx\s+.*\s+deploy\b/,
 ];
 
-function isInsideProject(filePath: string): boolean {
-  if (!filePath) return false;
-  try {
-    const resolved = path.resolve(filePath);
-    return resolved.startsWith(process.cwd());
-  } catch {
-    return false;
-  }
-}
-
 export function classify(toolName: string, toolInput: Record<string, unknown>): RiskTier {
   if (SAFE_TOOLS.has(toolName)) return "safe";
   if (HIGH_STAKES_TOOLS.has(toolName)) return "high_stakes";
   if (NORMAL_TOOLS.has(toolName)) return "normal";
 
   if (toolName === "Write" || toolName === "Edit" || toolName === "NotebookEdit") {
-    const filePath = toolInput.file_path as string;
-    return isInsideProject(filePath) ? "warning" : "normal";
+    return "normal";
   }
 
   if (toolName === "Agent") return "normal";
