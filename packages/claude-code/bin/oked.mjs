@@ -4,6 +4,7 @@
  *
  * Subcommands:
  *   oked init        Install the PreToolUse hook into ~/.claude/settings.json
+ *   oked test        Send a test approval request to see the full flow
  *   oked status      Print current install state + backend reachability
  *   oked uninstall   Remove the OKed hook from ~/.claude/settings.json
  */
@@ -95,7 +96,47 @@ async function cmdInit() {
   console.log(`  Hook script : ${HOOK_PATH}`);
   console.log(`  API key     : ${maskKey(apiKey)}`);
   console.log(`  Dashboard   : ${client.backendUrl}/dashboard`);
-  console.log('\nOpen a new Claude Code session to activate.\n');
+  console.log('\nOpen a new Claude Code session to activate.');
+  console.log('Run "oked test" to send a test approval request.\n');
+}
+
+async function cmdTest() {
+  const settings = await readSettings().catch(() => ({}));
+  const apiKey = settings?.env?.OKED_API_KEY || process.env.OKED_API_KEY || '';
+
+  if (!apiKey) {
+    console.error('No API key found. Run "oked init" first.');
+    process.exit(1);
+  }
+
+  const client = new OKedClient({ apiKey });
+
+  console.log('');
+  console.log('Sending test approval request...');
+  console.log(`  Dashboard: ${client.backendUrl}/dashboard`);
+  console.log('');
+  console.log('  Approve or deny it from your dashboard or Telegram.');
+  console.log('  Waiting...');
+  console.log('');
+
+  try {
+    const result = await client.approve({
+      action: 'oked-test',
+      description: 'Test approval from "oked test" — approve or deny to verify your setup works.',
+      tier: 'high_stakes',
+      session_id: `test-${Date.now()}`,
+      cwd: process.cwd(),
+    });
+
+    if (result.approved) {
+      console.log('  ✓ Approved! OKed is working end-to-end.\n');
+    } else {
+      console.log(`  ✗ ${result.decision}. OKed is working — the request was ${result.decision}.\n`);
+    }
+  } catch (err) {
+    console.error(`  Error: ${err.message}\n`);
+    process.exit(1);
+  }
 }
 
 async function cmdStatus() {
@@ -153,6 +194,7 @@ function usage() {
 
 Usage:
   oked init        Install the PreToolUse hook
+  oked test        Send a test approval request
   oked status      Show current install state
   oked uninstall   Remove the hook
   oked help        Show this message
@@ -164,6 +206,9 @@ async function main() {
   switch (cmd) {
     case 'init':
       await cmdInit();
+      break;
+    case 'test':
+      await cmdTest();
       break;
     case 'status':
       await cmdStatus();
