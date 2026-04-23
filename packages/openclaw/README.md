@@ -4,7 +4,7 @@ OpenClaw plugin that gates sensitive tool calls behind a human approval push to 
 
 ## Why
 
-OpenClaw's built-in iOS approvals cover **shell commands** (`exec.approval.*`). They do **not** automatically cover the skill / plugin tools agents actually use to touch the real world — sending iMessages, making phone calls, deploying sites, charging cards. Skill authors have to opt in to `plugin.approval.request`, and most don't.
+OpenClaw's built-in iOS approvals cover **shell commands** (`exec.approval.*`). They do **not** automatically cover the skill / plugin tools agents actually use to touch the real world (sending iMessages, making phone calls, deploying sites, charging cards). Skill authors have to opt in to `plugin.approval.request`, and most don't.
 
 This plugin closes that gap by registering a `before_tool_call` hook that fires for **every** tool the OpenClaw agent calls (built-in or skill-registered), classifies it, and freezes the agent on dangerous actions until you approve from the OKed mobile app.
 
@@ -52,13 +52,13 @@ The classifier matches OpenClaw skill naming conventions:
 - **High stakes** (always approval): `*_send`, `*_post`, `*_publish`, `*_call`, `*_dial`, `*_charge`, `*_pay`, `*_delete`, `*_drop`, `*_deploy`, `*_release`, etc.
 - **Warning** (approval at default `minTier`): `*_create`, `*_update`, `*_write`, `*_edit`, `*_rename`, `*_modify`.
 - **Safe** (never gated): `get_*`, `list_*`, `search_*`, `read_*`, `find_*`.
-- **Bash / shell / exec**: defers to the `@oked/sdk` shell classifier — `rm -rf`, `git push --force`, etc.
+- **Bash / shell / exec**: defers to the `@oked/sdk` shell classifier (`rm -rf`, `git push --force`, etc).
 
 For tool names the classifier doesn't recognize, the default tier is `normal` (not gated unless `minTier` is set to `normal`).
 
 ## Fail-safe behavior
 
-If the OKed backend is unreachable, the request times out, the API key is missing, or anything else goes wrong — the tool call is **denied**, not allowed. This matches the OKed core invariant: never let an agent proceed when in doubt.
+If the OKed backend is unreachable, the request times out, the API key is missing, or anything else goes wrong, the tool call is **denied**, not allowed. This matches the OKed core invariant: never let an agent proceed when in doubt.
 
 ## Comparison to OpenClaw built-in approvals
 
@@ -69,7 +69,7 @@ If the OKed backend is unreachable, the request times out, the API key is missin
 | Mobile push | iOS app paired via `device-pairing` | OKed mobile app, unified across Claude Code + OpenClaw + future tools |
 | Audit log | Gateway-local | Centralized OKed dashboard |
 
-Use both — OpenClaw's exec approvals stay in place, this plugin layers on top to cover the skill surface.
+Use both. OpenClaw's exec approvals stay in place, this plugin layers on top to cover the skill surface.
 
 ## Development
 

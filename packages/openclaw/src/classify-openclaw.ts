@@ -4,7 +4,7 @@ import { classify as classifyClaude, type RiskTier } from "@oked/sdk";
  * OpenClaw-aware risk classifier.
  *
  * OpenClaw skills register tools with names like `imessage_send`, `phone_call`,
- * `deploy_site`, `email_send` — names that the @oked/sdk Claude-Code classifier
+ * `deploy_site`, `email_send`. Names that the @oked/sdk Claude-Code classifier
  * doesn't recognize. We layer a suffix/prefix heuristic for OpenClaw skill
  * conventions on top of the @oked/sdk classifier so well-known sensitive
  * patterns (send, dial, deploy, charge, delete) trip approval automatically.
@@ -72,7 +72,7 @@ export function classifyOpenClawTool(
   if (opts?.alwaysAllow?.includes(toolName)) return "safe";
   if (opts?.alwaysApprove?.includes(toolName)) return "high_stakes";
 
-  // Bash / shell / exec — defer to the SDK's bash classifier.
+  // Bash / shell / exec: defer to the SDK's bash classifier.
   if (lower === "bash" || lower === "shell" || lower === "exec") {
     return classifyClaude(
       "Bash",

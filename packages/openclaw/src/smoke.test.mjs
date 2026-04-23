@@ -1,4 +1,4 @@
-// Standalone smoke test — no test runner required.
+// Standalone smoke test. No test runner required.
 // Runs the classifier against the exact pain points surfaced in the OKed
 // signal DB for r/openclaw (iMessage rename, phone call skill, deploy site,
 // shell reflex). All must classify as sensitive.
@@ -14,25 +14,25 @@ import plugin from "../dist/index.js";
 // --- classifier ---
 
 const cases = [
-  // The iMessage rename pain point — r/openclaw/1seh8wi
-  // Touches a real personal account — high_stakes.
+  // The iMessage rename pain point (r/openclaw/1seh8wi).
+  // Touches a real personal account, so high_stakes.
   ["rename_imessage_group", {}, "high_stakes"],
   ["imessage_send", { to: "+1...", body: "..." }, "high_stakes"],
 
-  // ClawCall phone call — r/openclaw/1sj4x1b
+  // ClawCall phone call (r/openclaw/1sj4x1b).
   ["make_phone_call", { number: "+1..." }, "high_stakes"],
   ["phone_dial", {}, "high_stakes"],
 
-  // Deploy — r/openclaw/1sdulyd
+  // Deploy (r/openclaw/1sdulyd).
   ["deploy_site", {}, "high_stakes"],
   ["publish_release", {}, "high_stakes"],
 
-  // Shell reflex — r/LocalLLaMA/1shl0vd
+  // Shell reflex (r/LocalLLaMA/1shl0vd).
   ["bash", { command: "rm -rf ./dist" }, "high_stakes"],
   ["bash", { command: "ls -la" }, "safe"],
   ["bash", { command: "git push --force" }, "high_stakes"],
 
-  // Safe tools — should never fire
+  // Safe tools. Should never fire.
   ["list_sessions", {}, "safe"],
   ["search_messages", { q: "hi" }, "safe"],
   ["read_file", {}, "safe"],

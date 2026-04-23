@@ -1,5 +1,5 @@
 /**
- * @oked/openclaw — OKed plugin for OpenClaw.
+ * @oked/openclaw. OKed plugin for OpenClaw.
  *
  * Registers a `before_tool_call` hook that runs for *every* tool the agent
  * invokes (built-in or skill-registered). For tool calls classified as
@@ -7,7 +7,7 @@
  * the OKed backend (push to your phone). The agent only proceeds on Approve;
  * any other outcome blocks the call.
  *
- * Failure semantics — fail safe always: if the OKed backend is unreachable,
+ * Failure semantics: fail safe always. If the OKed backend is unreachable,
  * if the approval times out, or if the response is malformed, the tool call
  * is denied. Never let an agent proceed when in doubt.
  *
@@ -102,7 +102,7 @@ const plugin = {
 
     if (!oked.apiKey) {
       log?.warn?.(
-        `[oked] no apiKey configured — plugin will fail-safe DENY every sensitive tool call. ` +
+        `[oked] no apiKey configured. Plugin will fail-safe DENY every sensitive tool call. ` +
           `Set OKED_API_KEY env var or plugins.entries.oked.apiKey in openclaw.json.`,
       );
     }
@@ -120,9 +120,9 @@ const plugin = {
           alwaysAllow: cfg.alwaysAllow,
         });
       } catch (err) {
-        // Classifier should never throw, but if it does — fail safe.
+        // Classifier should never throw, but if it does, fail safe.
         log?.error?.(`[oked] classifier error on ${toolName}: ${String(err)}`);
-        return { block: true, blockReason: "OKed classifier error — fail-safe deny" };
+        return { block: true, blockReason: "OKed classifier error. Fail-safe deny." };
       }
 
       // Below threshold or above-threshold-but-not-in-approval-set → allow.
@@ -130,7 +130,7 @@ const plugin = {
         return; // void = allow
       }
 
-      // Sensitive — ask the human.
+      // Sensitive. Ask the human.
       const description = describeAction(toolName, params);
       log?.info?.(
         `[oked] requesting approval: tool=${toolName} tier=${tier} session=${
@@ -150,22 +150,22 @@ const plugin = {
         });
 
         if (result.approved) {
-          log?.info?.(`[oked] ✓ approved — ${toolName}`);
+          log?.info?.(`[oked] ✓ approved ${toolName}`);
           return; // allow
         }
 
-        log?.info?.(`[oked] ✗ ${result.decision} — blocking ${toolName}`);
+        log?.info?.(`[oked] ✗ ${result.decision}, blocking ${toolName}`);
         return {
           block: true,
           blockReason: `${result.decision} via OKed (approval ${result.approval_id})`,
         };
       } catch (err) {
-        // Backend unreachable, network error, etc. — fail safe DENY.
+        // Backend unreachable, network error, etc. Fail safe DENY.
         const msg = err instanceof Error ? err.message : String(err);
-        log?.error?.(`[oked] approval request failed for ${toolName}: ${msg} — fail-safe deny`);
+        log?.error?.(`[oked] approval request failed for ${toolName}: ${msg}. Fail-safe deny.`);
         return {
           block: true,
-          blockReason: `OKed backend error — fail-safe deny: ${msg}`,
+          blockReason: `OKed backend error, fail-safe deny: ${msg}`,
         };
       }
     });
