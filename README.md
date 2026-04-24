@@ -8,6 +8,7 @@ Monorepo for the OKed SDK packages.
 |---|---|
 | [`@oked/sdk`](./packages/sdk) | Core library — `OKedClient.approve()`, tier classifier, action describer. Use directly from any Node.js code (OpenAI SDK, LangChain, custom agents). |
 | [`@oked/claude-code`](./packages/claude-code) | Zero-code Claude Code integration — `npm install -g @oked/claude-code && oked init`. |
+| [`@oked/openclaw`](./packages/openclaw) | OpenClaw `before_tool_call` plugin — routes agent tool calls through OKed for approval. |
 
 ## Develop
 

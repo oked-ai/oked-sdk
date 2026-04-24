@@ -49,7 +49,7 @@ still work as usual.
 
 ## Environment
 
-- `OKED_API_KEY` — stored in `settings.json.env` by `oked init`
+- `OKED_API_KEY` — stored under `env.OKED_API_KEY` in `~/.claude/settings.json` by `oked init`
 - `OKED_BACKEND_URL` — optional override, defaults to the hosted backend
 
 ## License
