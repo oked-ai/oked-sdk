@@ -1,0 +1,39 @@
+{
+  "name": "@oked/claude-code",
+  "version": "0.1.0",
+  "description": "OKed for Claude Code — zero-code human approval for sensitive actions",
+  "type": "module",
+  "bin": {
+    "oked": "./bin/oked.mjs"
+  },
+  "files": [
+    "bin",
+    "hook.mjs",
+    "README.md",
+    "LICENSE"
+  ],
+  "keywords": [
+    "claude-code",
+    "claude",
+    "approval",
+    "hook",
+    "agents",
+    "oked"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/oked-ai/oked-sdk.git",
+    "directory": "packages/claude-code"
+  },
+  "bugs": {
+    "url": "https://github.com/oked-ai/oked-sdk/issues"
+  },
+  "homepage": "https://github.com/oked-ai/oked-sdk#readme",
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "@oked/sdk": "^0.1.0"
+  }
+}

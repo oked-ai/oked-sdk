@@ -1,0 +1,19 @@
+{
+  "name": "oked-sdk-repo",
+  "private": true,
+  "version": "0.0.0",
+  "description": "OKed SDK repository — @oked/sdk and official integrations",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "dev": "npm run dev --workspace @oked/sdk",
+    "publish:all": "npm publish --workspaces --access public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/oked-ai/oked-sdk.git"
+  },
+  "license": "MIT"
+}
