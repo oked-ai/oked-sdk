@@ -14,7 +14,7 @@
 </p>
 
 <p align="center">
-  <img src="assets/hero.png" alt="OKed approval card" width="900">
+  <img src="assets/hero.png" alt="OKed approval card" width="320">
 </p>
 
 ---
@@ -23,7 +23,7 @@
 
 Running agents unsupervised is a bet. OKed adds the checkpoint: it intercepts sensitive tool calls *before* execution, pushes them to your phone over Telegram or Web Push, and blocks the agent until you approve or deny.
 
-It runs **outside the agent process**, so it can't be configured away — even an agent that flips itself into `bypassPermissions` mode still routes sensitive actions through OKed.
+It runs **outside the agent process**, so it can't be configured away. Even an agent that flips itself into `bypassPermissions` mode still routes sensitive actions through OKed.
 
 ## Quick start
 
@@ -32,10 +32,10 @@ Pick the path that matches your agent:
 | I'm using… | Install |
 |---|---|
 | **Claude Code** | `npm install -g @oked/claude-code && oked init` |
-| **OpenClaw** | `npm install @oked/openclaw` (then enable in `~/.openclaw/openclaw.json` — see [package README](./packages/openclaw)) |
+| **OpenClaw** | `npm install -g @oked/openclaw && oked init` |
 | **Node.js SDK** (OpenAI / Anthropic / LangChain / custom) | `npm install @oked/sdk` |
 
-Then sign in at [app.oked.ai](https://app.oked.ai/dashboard/) and link your Telegram (or enable web push) — that's where approvals show up.
+Then sign in at [app.oked.ai](https://app.oked.ai/dashboard/) and link your Telegram (or enable web push). That's where approvals show up.
 
 ## How it works
 
@@ -49,7 +49,7 @@ Agent: Read ./src/app.ts             →  ✓ allowed (safe)
 
 1. **Before execution.** The hook receives each tool call before it runs. Runs outside the agent process so it cannot be bypassed.
 2. **Tiered scoring.** Safe read-only operations pass instantly. Unknown or risky actions move to approval. Tiers: `safe` · `warning` · `normal` · `high_stakes`.
-3. **Push to your phone.** Approval lands in Telegram or as a Web Push notification with full context — what the agent wants to do and why it was flagged.
+3. **Push to your phone.** Approval lands in Telegram or as a Web Push notification with full context: what the agent wants to do and why it was flagged.
 4. **Every decision logged.** Each request, classification, and decision is persisted with a timestamp. Full audit trail, exportable any time.
 
 ### Fail-safe by default
@@ -82,7 +82,7 @@ The call returns `{ approved, approval_id, decision }`, where `decision` is `"ap
 
 | Package | Purpose |
 |---|---|
-| [`@oked/sdk`](./packages/sdk) | Core library — programmatic approval API (`OKedClient.approve()`, tier classifier, action describer). Call directly from any Node.js agent. |
+| [`@oked/sdk`](./packages/sdk) | Core library: programmatic approval API (`OKedClient.approve()`, tier classifier, action describer). Call directly from any Node.js agent. |
 | [`@oked/claude-code`](./packages/claude-code) | Zero-code integration for Claude Code. `oked init` writes a PreToolUse hook into your project's `.claude/settings.json`. |
 | [`@oked/openclaw`](./packages/openclaw) | Zero-code integration for OpenClaw via the `before_tool_call` plugin. |
 
