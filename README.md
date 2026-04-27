@@ -32,7 +32,7 @@ Pick the path that matches your agent:
 | I'm using… | Install |
 |---|---|
 | **Claude Code** | `npm install -g @oked/claude-code && oked init` |
-| **OpenClaw** | `npm install -g @oked/openclaw && oked init` |
+| **OpenClaw** | `npm install @oked/openclaw` (then enable in `~/.openclaw/openclaw.json` — see [package README](./packages/openclaw)) |
 | **Node.js SDK** (OpenAI / Anthropic / LangChain / custom) | `npm install @oked/sdk` |
 
 Then sign in at [app.oked.ai](https://app.oked.ai/dashboard/) and link your Telegram (or enable web push) — that's where approvals show up.
