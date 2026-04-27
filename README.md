@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <a href="https://oked.ai">oked.ai</a> &middot;
+  <a href="https://oked.ai">OKed.ai</a> &middot;
   <a href="#quick-start">Quick start</a> &middot;
   <a href="#how-it-works">How it works</a> &middot;
   <a href="#packages">Packages</a>
