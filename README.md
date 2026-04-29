@@ -14,7 +14,7 @@
 </p>
 
 <p align="center">
-  <img src="assets/hero.png" alt="OKed approval card" width="320">
+  <img src="assets/hero.svg" alt="OKed approval card" width="320">
 </p>
 
 ---
