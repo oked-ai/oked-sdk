@@ -42,7 +42,7 @@ All keys go under `plugins.entries.oked`:
 |---|---|---|---|
 | `apiKey` | `string` | `OKED_API_KEY` env | Your OKed API key. Required. |
 | `backendUrl` | `string` | OKed hosted backend | Override the OKed backend URL. |
-| `minTier` | `"warning" \| "high_stakes"` | `"warning"` | Minimum risk tier that triggers approval. Set to `"high_stakes"` to only gate the most dangerous calls. |
+| `minTier` | `"review" \| "warning" \| "high_stakes"` | `"warning"` | Minimum risk tier that triggers approval. Set to `"high_stakes"` to only gate the most dangerous calls. |
 | `alwaysApprove` | `string[]` | `[]` | Tool names to always require approval for, regardless of classifier. |
 | `alwaysAllow` | `string[]` | `[]` | Tool names to never gate. Use sparingly. |
 | `timeoutMs` | `number` | OKed default | Per-approval timeout in ms. |
@@ -56,7 +56,7 @@ The classifier matches OpenClaw skill naming conventions:
 - **Safe** (never gated): `get_*`, `list_*`, `search_*`, `read_*`, `find_*`.
 - **Bash / shell / exec**: defers to the `@oked/sdk` shell classifier (`rm -rf`, `git push --force`, ...).
 
-For tool names the classifier doesn't recognize, the default tier is `normal` (not gated unless `minTier` is set to `normal`).
+For tool names the classifier doesn't recognize, the default tier is `review` (not gated unless `minTier` is set to `"review"`).
 
 ## Fail-safe behavior
 

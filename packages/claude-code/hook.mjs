@@ -20,7 +20,7 @@ try {
 const oked = new OKedClient(); // reads OKED_API_KEY + OKED_BACKEND_URL from env
 
 // Only these tiers go to OKed for approval
-const NEEDS_APPROVAL = new Set(['high_stakes', 'normal']);
+const NEEDS_APPROVAL = new Set(['high_stakes', 'review']);
 
 // Tools that never need approval (read-only, meta, internal)
 const PASSTHROUGH_TOOLS = new Set([
