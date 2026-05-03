@@ -27,12 +27,16 @@ oked init
 
 ## What gets intercepted
 
-Only genuinely sensitive operations:
+The hook uses a four-tier classifier:
 
-- Bash commands classified `high_stakes` (`rm -rf`, `git push --force`, `DROP TABLE`, `docker system prune`, ...).
-- MCP tools in the `warning` / `high_stakes` tiers (`send_email`, `create_payment`, `delete_*`, ...).
+| Tier | Behavior | Examples |
+|---|---|---|
+| `safe` | Auto-allow, no notification | `Read`, `Glob`, read-only Bash (`ls`, `git status`, plain `curl` GET) |
+| `warning` | Terminal log only, no push | `Write` / `Edit` / `NotebookEdit` on a file inside the project |
+| `review` | Push notification, tap to approve | `Write` / `Edit` on a file outside the project, MCP `create_*` / `send_*` / `update_*` |
+| `high_stakes` | Push notification with confirmation | `rm -rf`, `git push --force`, `DROP TABLE`, `delete_*` MCP tools |
 
-Everything else passes through silently — Claude's normal permission prompts still work as usual.
+Everything not matched by the classifier defaults to `review`.
 
 ## How it works
 
