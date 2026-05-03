@@ -1,4 +1,4 @@
-export type RiskTier = "safe" | "warning" | "normal" | "high_stakes";
+export type RiskTier = "safe" | "warning" | "review" | "high_stakes";
 
 export interface ApprovalRequest {
   action: string;

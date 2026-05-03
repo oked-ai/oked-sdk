@@ -48,7 +48,7 @@ Agent: Read ./src/app.ts             →  ✓ allowed (safe)
 ```
 
 1. **Before execution.** The hook receives each tool call before it runs. Runs outside the agent process so it cannot be bypassed.
-2. **Tiered scoring.** Safe read-only operations pass instantly. Unknown or risky actions move to approval. Tiers: `safe` · `warning` · `normal` · `high_stakes`.
+2. **Tiered scoring.** Safe read-only operations pass instantly. Unknown or risky actions move to approval. Tiers: `safe` · `warning` · `review` · `high_stakes`.
 3. **Push to your phone.** Approval lands in Telegram or as a Web Push notification with full context: what the agent wants to do and why it was flagged.
 4. **Every decision logged.** Each request, classification, and decision is persisted with a timestamp. Full audit trail, exportable any time.
 

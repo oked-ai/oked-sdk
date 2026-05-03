@@ -92,5 +92,5 @@ export function classifyOpenClawTool(
     if (re.test(lower)) return "warning";
   }
 
-  return "normal";
+  return "review";
 }

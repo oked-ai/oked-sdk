@@ -11,7 +11,7 @@ const SAFE_TOOLS = new Set([
   "TaskList",
 ]);
 
-const NORMAL_TOOLS = new Set<string>([]);
+const REVIEW_TOOLS = new Set<string>([]);
 const HIGH_STAKES_TOOLS = new Set<string>([]);
 
 const SAFE_COMMANDS = [
@@ -90,19 +90,19 @@ function isInsideProject(filePath: string, cwd: string): boolean {
 export function classify(toolName: string, toolInput: Record<string, unknown>, cwd?: string): RiskTier {
   if (SAFE_TOOLS.has(toolName)) return "safe";
   if (HIGH_STAKES_TOOLS.has(toolName)) return "high_stakes";
-  if (NORMAL_TOOLS.has(toolName)) return "normal";
+  if (REVIEW_TOOLS.has(toolName)) return "review";
 
   if (toolName === "Write" || toolName === "Edit" || toolName === "NotebookEdit") {
-    if (!cwd) return "normal";
+    if (!cwd) return "review";
     const filePath =
       toolName === "NotebookEdit"
         ? (toolInput.notebook_path as string | undefined)
         : (toolInput.file_path as string | undefined);
-    if (typeof filePath !== "string") return "normal";
-    return isInsideProject(filePath, cwd) ? "warning" : "normal";
+    if (typeof filePath !== "string") return "review";
+    return isInsideProject(filePath, cwd) ? "warning" : "review";
   }
 
-  if (toolName === "Agent") return "normal";
+  if (toolName === "Agent") return "review";
 
   if (toolName === "Bash") {
     return classifyBashCommand(toolInput.command as string);
@@ -112,7 +112,7 @@ export function classify(toolName: string, toolInput: Record<string, unknown>, c
     return classifyMcpTool(toolName);
   }
 
-  return "normal";
+  return "review";
 }
 
 function classifyBashCommand(command: string): RiskTier {
@@ -125,7 +125,7 @@ function classifyBashCommand(command: string): RiskTier {
     for (const pattern of HIGH_STAKES_COMMANDS) {
       if (pattern.test(inner)) return "high_stakes";
     }
-    return "normal";
+    return "review";
   }
 
   for (const pattern of HIGH_STAKES_COMMANDS) {
@@ -136,7 +136,7 @@ function classifyBashCommand(command: string): RiskTier {
     if (pattern.test(trimmed)) return "safe";
   }
 
-  return "normal";
+  return "review";
 }
 
 function classifyMcpTool(toolName: string): RiskTier {
@@ -150,8 +150,8 @@ function classifyMcpTool(toolName: string): RiskTier {
     return "high_stakes";
   }
   if (tool.startsWith("send_") || tool.startsWith("create_") || tool.startsWith("update_")) {
-    return "normal";
+    return "review";
   }
 
-  return "normal";
+  return "review";
 }
