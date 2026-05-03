@@ -28,7 +28,6 @@ const PASSTHROUGH_TOOLS = new Set([
   'TodoRead', 'TodoWrite', 'TaskGet', 'TaskList',
   'ExitPlanMode', 'EnterPlanMode',
   'ToolSearch', 'Agent', 'Skill',
-  'Write', 'Edit', 'NotebookEdit', // file edits — only Bash destructive ops need approval
 ]);
 
 function allow(reason) {
@@ -67,7 +66,14 @@ async function main() {
   // Non-dangerous tools — defer to Claude's normal permission flow
   if (PASSTHROUGH_TOOLS.has(toolName)) return;
 
-  const tier = classify(toolName, toolInput);
+  const tier = classify(toolName, toolInput, cwd);
+
+  // warning = in-project file edit: log to terminal, allow without push
+  if (tier === 'warning') {
+    const filePath = String(toolInput.file_path ?? toolInput.notebook_path ?? toolName);
+    process.stderr.write(`[OKed] ⚠ in-project edit: ${filePath}\n`);
+    return;
+  }
 
   // Not high-stakes — defer to Claude's normal flow
   if (!NEEDS_APPROVAL.has(tier)) return;
