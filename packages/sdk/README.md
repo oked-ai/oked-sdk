@@ -58,7 +58,7 @@ Request fields:
 |---|---|---|---|
 | `action` | `string` | yes | Short action identifier (e.g. `"deploy"`, `"send_email"`). |
 | `description` | `string` | yes | Human-readable summary shown in the approval UI. |
-| `tier` | `"safe" \| "warning" \| "normal" \| "high_stakes"` | yes | Risk tier. Use `classify()` if unsure. |
+| `tier` | `"safe" \| "warning" \| "review" \| "high_stakes"` | yes | Risk tier. Use `classify()` if unsure. |
 | `tool_input` | `unknown` | no | Raw tool arguments, included in the audit log. |
 | `session_id` | `string` | no | Groups related approvals under one session. |
 | `cwd` | `string` | no | Working directory, shown in the UI for context. |

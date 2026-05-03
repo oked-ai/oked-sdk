@@ -26,7 +26,7 @@ import { classifyOpenClawTool, type ClassifyOptions } from "./classify-openclaw.
 
 const TIER_ORDER: Record<RiskTier, number> = {
   safe: 0,
-  normal: 1,
+  review: 1,
   warning: 2,
   high_stakes: 3,
 };
