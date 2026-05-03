@@ -45,6 +45,7 @@ const SAFE_COMMANDS = [
   /^fd\b/,
   /^jq\b/,
   /^curl\s+-s.*\|\s*(jq|python|node)/,
+  /^curl\b(?!.*(?:-X\b|--request\b))/,
 ];
 
 const HIGH_STAKES_COMMANDS = [
@@ -70,6 +71,7 @@ const HIGH_STAKES_COMMANDS = [
   /\bcurl\s+.*--request\s*(DELETE|PUT|POST)\b/,
   /\bwget\s+.*\|\s*(bash|sh|zsh)\b/,
   /\bcurl\s+.*\|\s*(bash|sh|zsh)\b/,
+  /\bcurl\b.*(?:\$\(|`)/,
   /\bnpm\s+publish\b/,
   /\bnpm\s+unpublish\b/,
   /\bnpx\s+.*\s+deploy\b/,
