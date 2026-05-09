@@ -11,7 +11,11 @@
       "types": "./dist/index.d.ts"
     }
   },
+  "bin": {
+    "oked-openclaw": "./bin/oked-openclaw.mjs"
+  },
   "files": [
+    "bin",
     "dist",
     "index.ts",
     "README.md"
