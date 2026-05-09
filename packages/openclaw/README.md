@@ -13,10 +13,21 @@ OpenClaw's built-in iOS approvals cover **shell commands** (`exec.approval.*`). 
 ## Install
 
 ```bash
-npm install @oked/openclaw
+npm install -g @oked/openclaw
+oked-openclaw init
 ```
 
-In your `~/.openclaw/openclaw.json`:
+`oked-openclaw init` merges the plugin entry into `~/.openclaw/openclaw.json` (preserving anything else there), persists your `OKED_API_KEY`, detects how the OpenClaw daemon is running (systemd, pm2, launchd, or a bare process), and offers to restart it for you.
+
+Other subcommands:
+
+| Command | Description |
+|---|---|
+| `oked-openclaw status` | Show current install state + backend reachability |
+| `oked-openclaw test` | Send a test approval request through the OKed SDK |
+| `oked-openclaw uninstall` | Remove the OKed entry from `openclaw.json` |
+
+If you'd rather configure it by hand, in `~/.openclaw/openclaw.json`:
 
 ```json
 {
