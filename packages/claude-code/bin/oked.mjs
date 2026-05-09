@@ -122,7 +122,7 @@ async function cmdTest() {
   try {
     const result = await client.approve({
       action: 'oked-test',
-      description: 'Test approval from "oked test" — approve or deny to verify your setup works.',
+      description: 'Test approval from "oked test". Approve or deny to verify your setup works.',
       tier: 'high_stakes',
       session_id: `test-${Date.now()}`,
       cwd: process.cwd(),
