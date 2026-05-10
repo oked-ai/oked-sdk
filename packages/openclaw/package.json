@@ -22,6 +22,11 @@
     "dev": "tsc --watch",
     "prepublishOnly": "npm run build"
   },
+  "openclaw": {
+    "extensions": [
+      "./dist/index.js"
+    ]
+  },
   "peerDependencies": {
     "openclaw": ">=2026.4.20"
   },
