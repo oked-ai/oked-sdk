@@ -107,7 +107,13 @@ const plugin = {
       );
     }
 
-    const minTier: RiskTier = cfg.minTier ?? "warning";
+    // minTier resolution order: openclaw.json > OKED_MIN_TIER env var > default.
+    // (The env-var fallback exists because some OpenClaw versions reject
+    // unknown keys under plugins.entries.<id>, so cfg.minTier is unavailable.)
+    const envMinTier = process.env.OKED_MIN_TIER as RiskTier | undefined;
+    const resolvedMinTier =
+      cfg.minTier ?? (envMinTier && envMinTier in TIER_ORDER ? envMinTier : undefined) ?? "warning";
+    const minTier: RiskTier = resolvedMinTier;
     const minTierLevel = TIER_ORDER[minTier];
 
     api.on("before_tool_call", async (event, ctx) => {
