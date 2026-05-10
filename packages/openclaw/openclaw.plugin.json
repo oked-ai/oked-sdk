@@ -1,0 +1,72 @@
+{
+  "id": "oked",
+  "name": "OKed",
+  "description": "Human approval layer for AI agents — freezes the agent before sensitive tool calls and asks for human approval via Telegram or the OKed dashboard.",
+  "activation": {
+    "onStartup": true
+  },
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "enabled": {
+        "type": "boolean"
+      },
+      "apiKey": {
+        "type": "string"
+      },
+      "backendUrl": {
+        "type": "string"
+      },
+      "minTier": {
+        "type": "string",
+        "enum": ["safe", "review", "warning", "high_stakes"]
+      },
+      "alwaysApprove": {
+        "type": "array",
+        "items": { "type": "string" }
+      },
+      "alwaysAllow": {
+        "type": "array",
+        "items": { "type": "string" }
+      },
+      "timeoutMs": {
+        "type": "integer",
+        "minimum": 1000,
+        "maximum": 600000
+      }
+    }
+  },
+  "uiHints": {
+    "enabled": {
+      "label": "OKed Approvals",
+      "help": "Globally enable or pause the OKed approval gate."
+    },
+    "apiKey": {
+      "label": "OKed API Key",
+      "placeholder": "ok_...",
+      "help": "Your OKed API key from https://app.oked.ai/dashboard."
+    },
+    "backendUrl": {
+      "label": "Backend URL",
+      "placeholder": "https://api.oked.ai",
+      "help": "Override the OKed backend URL. Default is the hosted backend."
+    },
+    "minTier": {
+      "label": "Minimum Approval Tier",
+      "help": "Lowest risk tier that requires human approval. Use 'review' to gate everything except clearly safe reads, 'warning' for state-changing actions only, or 'high_stakes' for the most dangerous calls only."
+    },
+    "alwaysApprove": {
+      "label": "Always Require Approval",
+      "help": "Tool names that should always require approval, regardless of the classifier."
+    },
+    "alwaysAllow": {
+      "label": "Always Allow",
+      "help": "Tool names to never gate. Use sparingly."
+    },
+    "timeoutMs": {
+      "label": "Approval Timeout (ms)",
+      "help": "How long to wait for a human decision before the action is denied. Defaults to the SDK's value."
+    }
+  }
+}
