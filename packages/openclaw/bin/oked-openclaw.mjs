@@ -139,8 +139,10 @@ function detectDaemon() {
         const unit = line.trim().split(/\s+/)[0];
         return {
           kind: 'systemd-user',
+          unit,
           label: `systemd --user unit ${unit}`,
           restartCmd: ['systemctl', ['--user', 'restart', unit]],
+          reloadCmd: ['systemctl', ['--user', 'daemon-reload']],
         };
       }
     }
@@ -150,9 +152,11 @@ function detectDaemon() {
       if (line) {
         const unit = line.trim().split(/\s+/)[0];
         return {
-          kind: 'systemd',
+          kind: 'systemd-system',
+          unit,
           label: `systemd unit ${unit} (sudo required)`,
           restartCmd: ['sudo', ['systemctl', 'restart', unit]],
+          reloadCmd: ['sudo', ['systemctl', 'daemon-reload']],
         };
       }
     }
@@ -201,6 +205,135 @@ function detectDaemon() {
   return null;
 }
 
+// ─── env persistence ──────────────────────────────────────────────────────
+
+function buildSystemdDropIn(apiKey, minTier) {
+  let body = `[Service]\nEnvironment="OKED_API_KEY=${apiKey}"\n`;
+  if (minTier) body += `Environment="OKED_MIN_TIER=${minTier}"\n`;
+  return body;
+}
+
+async function writeUserSystemdDropIn(unit, apiKey, minTier) {
+  const dir = path.join(homedir(), '.config', 'systemd', 'user', `${unit}.d`);
+  const file = path.join(dir, '10-oked.conf');
+  await mkdir(dir, { recursive: true });
+  await writeFile(file, buildSystemdDropIn(apiKey, minTier), 'utf8');
+  return file;
+}
+
+function writeSystemSystemdDropIn(unit, apiKey, minTier) {
+  // Needs sudo. Use `sudo tee` so we don't have to write a temp file.
+  const dir = `/etc/systemd/system/${unit}.d`;
+  const file = `${dir}/10-oked.conf`;
+  const mk = run('sudo', ['mkdir', '-p', dir]);
+  if (mk.code !== 0) return { ok: false, reason: mk.stderr || 'sudo mkdir failed' };
+  const body = buildSystemdDropIn(apiKey, minTier);
+  const r = spawnSync('sudo', ['tee', file], { input: body, encoding: 'utf8' });
+  if (r.status !== 0) return { ok: false, reason: r.stderr || 'sudo tee failed' };
+  return { ok: true, file };
+}
+
+async function appendToProfile(apiKey, minTier) {
+  const profile = path.join(homedir(), '.profile');
+  let existing = '';
+  try { existing = await readFile(profile, 'utf8'); } catch { /* missing is fine */ }
+
+  // Strip any prior OKed-managed block.
+  const begin = '# >>> OKed env (managed by oked-openclaw) >>>';
+  const end = '# <<< OKed env <<<';
+  const re = new RegExp(`\\n?${begin.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&')}[\\s\\S]*?${end.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&')}\\n?`, 'g');
+  existing = existing.replace(re, '');
+
+  let block = `\n${begin}\nexport OKED_API_KEY=${apiKey}\n`;
+  if (minTier) block += `export OKED_MIN_TIER=${minTier}\n`;
+  block += `${end}\n`;
+
+  await writeFile(profile, existing.trimEnd() + block, 'utf8');
+  return profile;
+}
+
+// ─── reading persisted env vars (systemd drop-ins, ~/.profile) ───────────
+
+function parseEnvFromSystemdConf(text) {
+  // Matches: Environment="KEY=VALUE"  or  Environment=KEY=VALUE
+  const out = {};
+  const re = /^Environment=(?:"([^"=]+)=([^"]*)"|([^\s="]+)=(\S*))/gm;
+  let m;
+  while ((m = re.exec(text)) !== null) {
+    const k = m[1] || m[3];
+    const v = m[2] !== undefined ? m[2] : m[4];
+    if (k) out[k] = v;
+  }
+  return out;
+}
+
+function parseEnvFromProfile(text) {
+  // Only reads keys inside our managed block.
+  const out = {};
+  const begin = '# >>> OKed env (managed by oked-openclaw) >>>';
+  const end = '# <<< OKed env <<<';
+  const i = text.indexOf(begin);
+  const j = text.indexOf(end, i);
+  if (i < 0 || j < 0) return out;
+  const block = text.slice(i, j);
+  const re = /^export\s+([A-Za-z_][A-Za-z0-9_]*)=(.*)$/gm;
+  let m;
+  while ((m = re.exec(block)) !== null) {
+    out[m[1]] = m[2].replace(/^["']|["']$/g, '');
+  }
+  return out;
+}
+
+async function readPersistedEnv() {
+  // Sources, in priority order: process.env > systemd-user drop-in > systemd-system drop-in > ~/.profile.
+  const env = { OKED_API_KEY: '', OKED_MIN_TIER: '', source: 'none' };
+  if (process.env.OKED_API_KEY) {
+    env.OKED_API_KEY = process.env.OKED_API_KEY;
+    env.OKED_MIN_TIER = process.env.OKED_MIN_TIER || '';
+    env.source = 'process.env';
+    return env;
+  }
+  // Try systemd drop-ins for any unit matching openclaw.
+  const daemon = detectDaemon();
+  const candidates = [];
+  if (daemon?.kind === 'systemd-user' && daemon.unit) {
+    candidates.push(path.join(homedir(), '.config', 'systemd', 'user', `${daemon.unit}.d`, '10-oked.conf'));
+  }
+  if (daemon?.kind === 'systemd-system' && daemon.unit) {
+    candidates.push(`/etc/systemd/system/${daemon.unit}.d/10-oked.conf`);
+  }
+  // Also probe common openclaw unit names if daemon detection failed.
+  if (!daemon) {
+    for (const u of ['openclaw.service', 'openclaw-gateway.service']) {
+      candidates.push(path.join(homedir(), '.config', 'systemd', 'user', `${u}.d`, '10-oked.conf'));
+    }
+  }
+  for (const file of candidates) {
+    try {
+      const raw = await readFile(file, 'utf8');
+      const parsed = parseEnvFromSystemdConf(raw);
+      if (parsed.OKED_API_KEY) {
+        env.OKED_API_KEY = parsed.OKED_API_KEY;
+        env.OKED_MIN_TIER = parsed.OKED_MIN_TIER || '';
+        env.source = file;
+        return env;
+      }
+    } catch { /* file missing, ignore */ }
+  }
+  // Fall back to ~/.profile managed block.
+  try {
+    const raw = await readFile(path.join(homedir(), '.profile'), 'utf8');
+    const parsed = parseEnvFromProfile(raw);
+    if (parsed.OKED_API_KEY) {
+      env.OKED_API_KEY = parsed.OKED_API_KEY;
+      env.OKED_MIN_TIER = parsed.OKED_MIN_TIER || '';
+      env.source = '~/.profile';
+      return env;
+    }
+  } catch { /* missing, ignore */ }
+  return env;
+}
+
 // ─── commands ─────────────────────────────────────────────────────────────
 
 async function cmdInit() {
@@ -219,7 +352,7 @@ async function cmdInit() {
 
   // 2. API key.
   const existing = await readConfig();
-  let apiKey = process.env.OKED_API_KEY || existing?.plugins?.entries?.oked?.apiKey || '';
+  let apiKey = process.env.OKED_API_KEY || '';
   if (!apiKey) {
     if (!process.stdin.isTTY) {
       console.error('OKED_API_KEY not set and stdin is not interactive. Aborting.');
@@ -231,10 +364,25 @@ async function cmdInit() {
       process.exit(1);
     }
   } else {
-    console.log(`2. Using API key: ${maskKey(apiKey)}`);
+    console.log(`2. Using API key from env: ${maskKey(apiKey)}`);
   }
 
-  // 3. Merge openclaw.json (preserve other fields).
+  // 2b. Optional minTier.
+  let minTier = process.env.OKED_MIN_TIER || '';
+  if (!minTier && process.stdin.isTTY) {
+    const a = await prompt(`   minTier (review|warning|high_stakes) [review]: `);
+    minTier = (a || 'review').toLowerCase();
+    if (!['review', 'warning', 'high_stakes'].includes(minTier)) {
+      console.error(`   "${minTier}" is not a valid tier. Defaulting to "review".`);
+      minTier = 'review';
+    }
+  } else if (!minTier) {
+    minTier = 'review';
+  }
+
+  // 3. Merge openclaw.json — minimal shape only. Some OpenClaw versions reject
+  //    unknown keys under plugins.entries.<id>, so we put nothing but `enabled`.
+  //    apiKey/minTier go into the daemon's environment instead (Step 4).
   process.stdout.write('3. Updating ~/.openclaw/openclaw.json... ');
   const cfg = existing && typeof existing === 'object' ? existing : {};
   cfg.plugins = cfg.plugins || {};
@@ -242,25 +390,52 @@ async function cmdInit() {
   if (!allow.includes('oked')) allow.push('oked');
   cfg.plugins.allow = allow;
   cfg.plugins.entries = cfg.plugins.entries || {};
-  cfg.plugins.entries.oked = {
-    ...(cfg.plugins.entries.oked || {}),
-    enabled: true,
-    apiKey,
-    minTier: cfg.plugins.entries.oked?.minTier || 'review',
-  };
+  cfg.plugins.entries.oked = { enabled: true };
   await writeConfig(cfg);
   console.log('done');
-  console.log(`   File: ${OPENCLAW_CONFIG}\n`);
+  console.log(`   File: ${OPENCLAW_CONFIG} (only "enabled: true" written)\n`);
 
-  // 4. Restart the daemon.
+  // 4. Detect the daemon and persist env vars where it can see them.
   console.log('4. Detecting OpenClaw process...');
   const daemon = detectDaemon();
   if (!daemon) {
     console.log('   No running OpenClaw process found.');
-    console.log('   Start (or restart) OpenClaw the way you normally do, then run "oked-openclaw test".\n');
+    const profile = await appendToProfile(apiKey, minTier);
+    console.log(`   Wrote OKED_API_KEY + OKED_MIN_TIER to ${profile}.`);
+    console.log('   Open a new shell (or "source ~/.profile") and start OpenClaw.\n');
     return;
   }
   console.log(`   Found: ${daemon.label}`);
+
+  process.stdout.write('   Persisting OKED_API_KEY for the daemon... ');
+  if (daemon.kind === 'systemd-user') {
+    const file = await writeUserSystemdDropIn(daemon.unit, apiKey, minTier);
+    console.log('done');
+    console.log(`   Drop-in: ${file}`);
+  } else if (daemon.kind === 'systemd-system') {
+    console.log('(needs sudo)');
+    const r = writeSystemSystemdDropIn(daemon.unit, apiKey, minTier);
+    if (!r.ok) {
+      console.error(`   Failed to write drop-in: ${r.reason}`);
+      console.error(`   Run manually:  sudo systemctl edit ${daemon.unit}`);
+      console.error(`   And add: Environment="OKED_API_KEY=${maskKey(apiKey)}"\n`);
+      process.exit(1);
+    }
+    console.log(`   Drop-in: ${r.file}`);
+  } else {
+    // pm2, launchd, bare process — fall back to ~/.profile + a clear message.
+    const profile = await appendToProfile(apiKey, minTier);
+    console.log(`wrote ${profile}`);
+    console.log(`   Note: ${daemon.kind} processes don't read ~/.profile automatically.`);
+    console.log(`   You may need to set OKED_API_KEY in ${daemon.kind}'s own env config.`);
+  }
+
+  // 5. Reload + restart.
+  if (daemon.reloadCmd) {
+    const [rc, ra] = daemon.reloadCmd;
+    console.log(`\n   $ ${rc} ${ra.join(' ')}`);
+    await runStreaming(rc, ra);
+  }
 
   if (!daemon.restartCmd) {
     console.log('\n   Bare processes can be stopped but not safely auto-relaunched.');
@@ -274,7 +449,8 @@ async function cmdInit() {
         const r = run('kill', [pid]);
         console.log(`     kill ${pid}: ${r.code === 0 ? 'sent' : `failed (${r.stderr})`}`);
       }
-      console.log('\n   Now relaunch OpenClaw the same way you started it, then run "oked-openclaw test".\n');
+      console.log('\n   Now relaunch OpenClaw the same way you started it (env vars are in ~/.profile).');
+      console.log('   Then run "oked-openclaw test".\n');
     } else {
       console.log('   Skipped. Restart OpenClaw manually, then run "oked-openclaw test".\n');
     }
@@ -303,13 +479,15 @@ async function cmdStatus() {
   const cfg = await readConfig().catch(() => ({}));
   const entry = cfg?.plugins?.entries?.oked;
   const allowed = Array.isArray(cfg?.plugins?.allow) && cfg.plugins.allow.includes('oked');
-  const apiKey = entry?.apiKey || process.env.OKED_API_KEY || '';
+  const env = await readPersistedEnv();
+  const apiKey = entry?.apiKey || env.OKED_API_KEY || '';
+  const minTier = entry?.minTier || env.OKED_MIN_TIER || '';
 
   console.log(`Config file   : ${OPENCLAW_CONFIG}`);
   console.log(`Plugin allowed: ${allowed ? 'yes' : 'no'}`);
   console.log(`Plugin enabled: ${entry?.enabled ? 'yes' : 'no'}`);
-  console.log(`API key       : ${maskKey(apiKey)}`);
-  console.log(`minTier       : ${entry?.minTier || '(default)'}`);
+  console.log(`API key       : ${maskKey(apiKey)} (from ${env.source})`);
+  console.log(`minTier       : ${minTier || '(default warning)'}`);
 
   const daemon = detectDaemon();
   console.log(`Daemon        : ${daemon ? daemon.label : 'not detected'}`);
@@ -358,11 +536,16 @@ async function cmdUninstall() {
 
 async function cmdTest() {
   const cfg = await readConfig().catch(() => ({}));
-  const apiKey = cfg?.plugins?.entries?.oked?.apiKey || process.env.OKED_API_KEY || '';
+  const env = await readPersistedEnv();
+  const apiKey = cfg?.plugins?.entries?.oked?.apiKey || env.OKED_API_KEY || '';
 
   if (!apiKey) {
     console.error('No API key found. Run "oked-openclaw init" first.');
+    console.error('(Looked in: process.env.OKED_API_KEY, systemd drop-ins, ~/.profile, openclaw.json)');
     process.exit(1);
+  }
+  if (env.source !== 'process.env' && env.source !== 'none') {
+    console.log(`Using API key from ${env.source}`);
   }
 
   const client = new OKedClient({ apiKey });
