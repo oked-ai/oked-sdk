@@ -1,0 +1,38 @@
+{
+  "name": "@oked/openclaw-cli",
+  "version": "0.1.0",
+  "description": "Installer CLI for the @oked/openclaw plugin. Wraps `openclaw plugins install` and configures the plugin entry in openclaw.json.",
+  "type": "module",
+  "bin": {
+    "oked-openclaw": "./bin/oked-openclaw.mjs"
+  },
+  "files": [
+    "bin",
+    "README.md"
+  ],
+  "scripts": {
+    "test": "node --check bin/oked-openclaw.mjs"
+  },
+  "dependencies": {
+    "@oked/sdk": "^0.1.0"
+  },
+  "keywords": [
+    "openclaw",
+    "openclaw-cli",
+    "oked",
+    "installer"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/oked-ai/oked-sdk.git",
+    "directory": "packages/openclaw-cli"
+  },
+  "bugs": {
+    "url": "https://github.com/oked-ai/oked-sdk/issues"
+  },
+  "homepage": "https://github.com/oked-ai/oked-sdk/tree/main/packages/openclaw-cli#readme",
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  }
+}
