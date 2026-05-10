@@ -11,13 +11,9 @@
       "types": "./dist/index.d.ts"
     }
   },
-  "bin": {
-    "oked-openclaw": "./bin/oked-openclaw.mjs"
-  },
   "files": [
-    "bin",
     "dist",
-    "index.ts",
+    "openclaw.plugin.json",
     "README.md"
   ],
   "scripts": {
@@ -25,11 +21,6 @@
     "build": "tsc",
     "dev": "tsc --watch",
     "prepublishOnly": "npm run build"
-  },
-  "openclaw": {
-    "extensions": [
-      "./dist/index.js"
-    ]
   },
   "peerDependencies": {
     "openclaw": ">=2026.4.20"

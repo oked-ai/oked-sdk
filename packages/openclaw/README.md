@@ -13,48 +13,36 @@ OpenClaw's built-in iOS approvals cover **shell commands** (`exec.approval.*`). 
 ## Install
 
 ```bash
-npm install -g @oked/openclaw
+npm install -g @oked/openclaw @oked/openclaw-cli
 oked-openclaw init
 ```
 
-`oked-openclaw init` merges the plugin entry into `~/.openclaw/openclaw.json` (preserving anything else there), persists your `OKED_API_KEY`, detects how the OpenClaw daemon is running (systemd, pm2, launchd, or a bare process), and offers to restart it for you.
+The CLI ([`@oked/openclaw-cli`](../openclaw-cli)) runs `openclaw plugins install --link` against this package, prompts for your API key + `minTier`, writes the entry into `~/.openclaw/openclaw.json`, and restarts the OpenClaw daemon.
 
-Other subcommands:
+If you'd rather do it by hand:
 
-| Command | Description |
-|---|---|
-| `oked-openclaw status` | Show current install state + backend reachability |
-| `oked-openclaw test` | Send a test approval request through the OKed SDK |
-| `oked-openclaw uninstall` | Remove the OKed entry from `openclaw.json` |
+```bash
+openclaw plugins install --link <path-to-this-package>
+```
 
-If you'd rather configure it by hand, in `~/.openclaw/openclaw.json`:
+Then in `~/.openclaw/openclaw.json`:
 
 ```json
 {
   "plugins": {
     "allow": ["oked"],
     "entries": {
-      "oked": { "enabled": true }
+      "oked": {
+        "enabled": true,
+        "apiKey": "ok_...",
+        "minTier": "review"
+      }
     }
   }
 }
 ```
 
-…and put the API key (and optional minTier) in the daemon's environment, since some OpenClaw versions reject extra keys under `plugins.entries.<id>`:
-
-```bash
-# systemd --user
-mkdir -p ~/.config/systemd/user/openclaw.service.d
-cat > ~/.config/systemd/user/openclaw.service.d/10-oked.conf <<EOF
-[Service]
-Environment="OKED_API_KEY=ok_..."
-Environment="OKED_MIN_TIER=review"
-EOF
-systemctl --user daemon-reload
-systemctl --user restart openclaw.service
-```
-
-Or just set `OKED_API_KEY` (and optionally `OKED_MIN_TIER`) in whatever shell launches OpenClaw.
+Restart the OpenClaw gateway and you're done.
 
 ## Configuration
 
@@ -62,9 +50,9 @@ All keys go under `plugins.entries.oked`:
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `apiKey` | `string` | `OKED_API_KEY` env | Your OKed API key. Required. **Note:** OpenClaw 2026.5+ rejects this key in `plugins.entries.oked`; set `OKED_API_KEY` in the daemon's env instead. |
+| `apiKey` | `string` | `OKED_API_KEY` env | Your OKed API key. Required. |
 | `backendUrl` | `string` | `OKED_BACKEND_URL` env | Override the OKed backend URL. |
-| `minTier` | `"review" \| "warning" \| "high_stakes"` | `"warning"` (or `OKED_MIN_TIER` env) | Minimum risk tier that triggers approval. Set to `"high_stakes"` to only gate the most dangerous calls. Same caveat as `apiKey` — prefer the env var on strict OpenClaw versions. |
+| `minTier` | `"review" \| "warning" \| "high_stakes"` | `"warning"` | Minimum risk tier that triggers approval. Set to `"high_stakes"` to only gate the most dangerous calls. |
 | `alwaysApprove` | `string[]` | `[]` | Tool names to always require approval for, regardless of classifier. |
 | `alwaysAllow` | `string[]` | `[]` | Tool names to never gate. Use sparingly. |
 | `timeoutMs` | `number` | OKed default | Per-approval timeout in ms. |
