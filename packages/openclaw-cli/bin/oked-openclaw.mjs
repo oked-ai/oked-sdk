@@ -212,7 +212,7 @@ async function cmdInit() {
 
   // 2. Register the plugin with OpenClaw.
   console.log('2. Installing into OpenClaw...');
-  const installArgs = ['plugins', 'install', '--link', '--force', pluginPath];
+  const installArgs = ['plugins', 'install', '--link', pluginPath];
   console.log(`   $ openclaw ${installArgs.join(' ')}`);
   const installCode = await runStreaming('openclaw', installArgs);
   if (installCode !== 0) {
