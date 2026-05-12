@@ -11,8 +11,8 @@
  *   oked-openclaw uninstall  Remove the OKed entry from openclaw.json and uninstall the plugin.
  */
 
-import { readFile, writeFile, mkdir, access } from 'node:fs/promises';
-import { homedir, platform } from 'node:os';
+import { readFile, writeFile, mkdir, access, chmod } from 'node:fs/promises';
+import { homedir, hostname, platform } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import readline from 'node:readline/promises';
@@ -23,6 +23,88 @@ import { OKedClient } from '@oked/sdk';
 
 const OPENCLAW_DIR = path.join(homedir(), '.openclaw');
 const OPENCLAW_CONFIG = path.join(OPENCLAW_DIR, 'openclaw.json');
+const OKED_DIR = path.join(homedir(), '.oked');
+const OKED_CONFIG = path.join(OKED_DIR, 'config.json');
+const DEFAULT_BACKEND_URL =
+  process.env.OKED_BACKEND_URL || 'https://claude-test-project-production.up.railway.app';
+const CLIENT_VERSION = '0.1.0';
+
+async function writeOkedConfig(apiKey, backendUrl) {
+  await mkdir(OKED_DIR, { recursive: true });
+  let existing = {};
+  try {
+    existing = JSON.parse(await readFile(OKED_CONFIG, 'utf8')) || {};
+    if (typeof existing !== 'object') existing = {};
+  } catch {
+    existing = {};
+  }
+  const payload = { ...existing, apiKey, backendUrl };
+  await writeFile(OKED_CONFIG, JSON.stringify(payload, null, 2) + '\n', 'utf8');
+  try { await chmod(OKED_CONFIG, 0o600); } catch { /* Windows */ }
+}
+
+function openBrowser(url) {
+  const plat = platform();
+  let cmd;
+  let args;
+  if (plat === 'darwin') {
+    cmd = 'open'; args = [url];
+  } else if (plat === 'win32') {
+    cmd = 'cmd'; args = ['/c', 'start', '', url];
+  } else {
+    cmd = 'xdg-open'; args = [url];
+  }
+  try {
+    spawn(cmd, args, { detached: true, stdio: 'ignore' }).unref();
+  } catch { /* best effort */ }
+}
+
+async function deviceCodePair() {
+  const codeRes = await fetch(`${DEFAULT_BACKEND_URL}/api/v1/device/code`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      client_type: 'openclaw',
+      hostname: hostname(),
+      client_version: CLIENT_VERSION,
+    }),
+  });
+  if (!codeRes.ok) {
+    throw new Error(`Pairing request failed: ${codeRes.status} ${await codeRes.text()}`);
+  }
+  const code = await codeRes.json();
+
+  console.log('');
+  console.log('   To pair this device, open in your browser:');
+  console.log(`     ${code.verification_uri_complete}`);
+  console.log('');
+  console.log(`   Or visit ${code.verification_uri} and enter the code:`);
+  console.log(`     ${code.user_code}`);
+  console.log('');
+  console.log('   Waiting for confirmation...');
+
+  openBrowser(code.verification_uri_complete);
+
+  const deadline = Date.now() + (code.expires_in || 600) * 1000;
+  const intervalMs = Math.max(1, code.interval || 3) * 1000;
+  while (Date.now() < deadline) {
+    await new Promise((r) => setTimeout(r, intervalMs));
+    const pollRes = await fetch(`${DEFAULT_BACKEND_URL}/api/v1/device/poll`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ device_code: code.device_code }),
+    });
+    if (pollRes.status === 410) {
+      throw new Error('Pairing code expired. Run init again.');
+    }
+    if (!pollRes.ok) continue;
+    const body = await pollRes.json();
+    if (body.status === 'approved' && body.api_key) {
+      return body.api_key;
+    }
+  }
+  throw new Error('Pairing timed out. Run init again.');
+}
 
 // ─── helpers ──────────────────────────────────────────────────────────────
 
@@ -221,22 +303,23 @@ async function cmdInit() {
   }
   console.log('');
 
-  // 3. API key + minTier prompt.
+  // 3. API key — reuse existing if present, otherwise pair this device.
   const existing = await readConfig();
   const existingEntry = existing?.plugins?.entries?.oked || {};
   let apiKey = process.env.OKED_API_KEY || existingEntry.apiKey || '';
-  if (!apiKey) {
-    if (!process.stdin.isTTY) {
-      console.error('OKED_API_KEY not set and stdin is not interactive. Aborting.');
-      process.exit(1);
-    }
-    apiKey = await prompt('3. OKED_API_KEY: ');
-    if (!apiKey) {
-      console.error('No API key provided. Aborting.');
-      process.exit(1);
-    }
-  } else {
+  if (apiKey) {
     console.log(`3. Using existing API key: ${maskKey(apiKey)}`);
+  } else {
+    console.log('3. Pairing this device with OKed...');
+    try {
+      apiKey = await deviceCodePair();
+      console.log(`   Paired. API key: ${maskKey(apiKey)}`);
+      await writeOkedConfig(apiKey, DEFAULT_BACKEND_URL);
+      console.log(`   Saved to ${OKED_CONFIG}`);
+    } catch (err) {
+      console.error(`   ${err.message}`);
+      process.exit(1);
+    }
   }
 
   let minTier = process.env.OKED_MIN_TIER || existingEntry.minTier || '';
