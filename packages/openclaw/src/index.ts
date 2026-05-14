@@ -26,12 +26,12 @@ import { classifyOpenClawTool, type ClassifyOptions } from "./classify-openclaw.
 
 const TIER_ORDER: Record<RiskTier, number> = {
   safe: 0,
-  review: 1,
-  warning: 2,
+  warning: 1,
+  review: 2,
   high_stakes: 3,
 };
 
-const APPROVAL_TIERS: ReadonlySet<RiskTier> = new Set(["warning", "high_stakes"]);
+const APPROVAL_TIERS: ReadonlySet<RiskTier> = new Set(["review", "high_stakes"]);
 
 interface OkedPluginConfig extends ClassifyOptions {
   apiKey?: string;
@@ -112,7 +112,7 @@ const plugin = {
     // unknown keys under plugins.entries.<id>, so cfg.minTier is unavailable.)
     const envMinTier = process.env.OKED_MIN_TIER as RiskTier | undefined;
     const resolvedMinTier =
-      cfg.minTier ?? (envMinTier && envMinTier in TIER_ORDER ? envMinTier : undefined) ?? "warning";
+      cfg.minTier ?? (envMinTier && envMinTier in TIER_ORDER ? envMinTier : undefined) ?? "review";
     const minTier: RiskTier = resolvedMinTier;
     const minTierLevel = TIER_ORDER[minTier];
 
