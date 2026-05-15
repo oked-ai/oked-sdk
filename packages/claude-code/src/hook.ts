@@ -49,7 +49,7 @@ async function main(): Promise<void> {
   // Warning - allow through, log to terminal only, no network call
   if (tier === "warning") {
     const summary = (toolInput.file_path ?? toolInput.command ?? toolName) as string;
-    process.stderr.write(`⚠  OKed: ${toolName} ${summary} - allowed (inside project)\n`);
+    process.stderr.write(`WARNING  OKed: ${toolName} ${summary} - allowed (inside project)\n`);
     process.stdout.write(JSON.stringify(makeOutput("allow")));
     return;
   }

@@ -5,7 +5,7 @@
 
 Zero-code integration for Claude Code. Installs a `PreToolUse` hook that routes sensitive actions (destructive Bash commands, payment MCP tools, etc.) through the OKed backend and waits for a human decision before Claude Code proceeds.
 
-Non-dangerous actions are left to Claude's normal permission flow — OKed only intervenes when it matters.
+Non-dangerous actions are left to Claude's normal permission flow - OKed only intervenes when it matters.
 
 ## Install
 
@@ -44,7 +44,7 @@ Everything not matched by the classifier defaults to `review`.
 2. The hook classifies the action locally (no network call for safe actions).
 3. If it's high-stakes, it sends an approval request to the OKed backend.
 4. You get a notification (Telegram, web push, or dashboard).
-5. Approve or deny — Claude waits for your decision.
+5. Approve or deny - Claude waits for your decision.
 
 ## Environment
 

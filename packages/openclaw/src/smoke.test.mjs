@@ -50,7 +50,7 @@ for (const [name, input, expected] of cases) {
     `classifier(${name}) expected ${expected} got ${got}`,
   );
 }
-console.log(`✓ classifier: ${cases.length} cases`);
+console.log(`OK classifier: ${cases.length} cases`);
 
 // --- plugin register + hook behavior ---
 
@@ -73,7 +73,7 @@ function makeStubApi(pluginConfig) {
   };
 }
 
-// Case 1: missing apiKey → plugin warns and fail-safe denies sensitive calls.
+// Case 1: missing apiKey -> plugin warns and fail-safe denies sensitive calls.
 {
   // Ensure env doesn't leak an apiKey into this case.
   delete process.env.OKED_API_KEY;
@@ -92,10 +92,10 @@ function makeStubApi(pluginConfig) {
     logs.some(([lvl, m]) => lvl === "warn" && /apiKey/.test(m)),
     "warns about missing apiKey",
   );
-  console.log("✓ plugin: fail-safe deny when no apiKey");
+  console.log("OK plugin: fail-safe deny when no apiKey");
 }
 
-// Case 2: safe tool → passes through without calling backend.
+// Case 2: safe tool -> passes through without calling backend.
 {
   const { api, handlers } = makeStubApi({});
   plugin.register(api);
@@ -105,7 +105,7 @@ function makeStubApi(pluginConfig) {
     { toolName: "read_file" },
   );
   assert.equal(result, undefined, "safe tool not blocked");
-  console.log("✓ plugin: safe tool passes through");
+  console.log("OK plugin: safe tool passes through");
 }
 
 // Case 3: alwaysAllow override lets a normally-gated tool through.
@@ -118,7 +118,7 @@ function makeStubApi(pluginConfig) {
     { toolName: "deploy_site" },
   );
   assert.equal(result, undefined, "alwaysAllow bypasses approval");
-  console.log("✓ plugin: alwaysAllow bypasses");
+  console.log("OK plugin: alwaysAllow bypasses");
 }
 
 // Case 4: alwaysApprove forces approval on an otherwise-normal tool.
@@ -130,9 +130,9 @@ function makeStubApi(pluginConfig) {
     { toolName: "run_report", params: {} },
     { toolName: "run_report" },
   );
-  // No apiKey → fail-safe deny.
+  // No apiKey -> fail-safe deny.
   assert.equal(result?.block, true, "alwaysApprove forces approval");
-  console.log("✓ plugin: alwaysApprove forces approval");
+  console.log("OK plugin: alwaysApprove forces approval");
 }
 
 console.log("\nAll smoke tests passed.");

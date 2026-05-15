@@ -4,7 +4,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](./LICENSE)
 [![Types: included](https://img.shields.io/npm/types/@oked/sdk.svg)](./dist/index.d.ts)
 
-Core library — programmatic approval API for AI agents. Sends sensitive actions to the OKed backend, waits for a human decision, and resolves only when the user approves or denies.
+Core library - programmatic approval API for AI agents. Sends sensitive actions to the OKed backend, waits for a human decision, and resolves only when the user approves or denies.
 
 Use this package directly from any Node.js agent (OpenAI SDK, LangChain, custom). For drop-in integrations, see [`@oked/claude-code`](../claude-code) or [`@oked/openclaw`](../openclaw).
 
@@ -44,7 +44,7 @@ Pass to `new OKedClient(config)`:
 |---|---|---|---|
 | `apiKey` | `string` | `OKED_API_KEY` env | Your OKed API key. Required. |
 | `backendUrl` | `string` | `https://api.oked.ai` | Override the OKed backend URL. |
-| `timeout` | `number` | OKed default | Per-approval timeout in ms. |
+| `timeout` | `number` | `300000` | Per-approval timeout in ms. |
 
 ## API
 
@@ -77,8 +77,8 @@ Returns `true` when the backend is reachable. Use for startup health checks.
 
 ### Helpers
 
-- `classify(input)` — classifies a shell command or tool call into a risk tier.
-- `describe(input)` — generates a human-readable description for the approval UI.
+- `classify(input)` - classifies a shell command or tool call into a risk tier.
+- `describe(input)` - generates a human-readable description for the approval UI.
 
 Full type definitions ship with the package (`dist/index.d.ts`).
 
