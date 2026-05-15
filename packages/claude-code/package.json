@@ -4,11 +4,16 @@
   "description": "OKed for Claude Code — zero-code human approval for sensitive actions",
   "type": "module",
   "bin": {
-    "oked": "./bin/oked.mjs"
+    "oked": "./bin/oked.js",
+    "oked-hook": "./bin/oked-hook.js"
+  },
+  "scripts": {
+    "prebuild": "npm run build --workspace=@oked/sdk",
+    "build": "tsc"
   },
   "files": [
+    "dist",
     "bin",
-    "hook.mjs",
     "README.md",
     "LICENSE"
   ],
@@ -34,6 +39,9 @@
     "access": "public"
   },
   "dependencies": {
-    "@oked/sdk": "^0.1.0"
+    "@oked/sdk": "0.1.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.0"
   }
 }
