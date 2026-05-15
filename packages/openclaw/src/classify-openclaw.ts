@@ -51,7 +51,7 @@ const HIGH_STAKES_PATTERNS = [
   /(_|^)(schedule_meeting|cancel_meeting|book|reschedule)$/,
 ];
 
-const WARNING_PATTERNS = [
+const REVIEW_PATTERNS = [
   /(_|^)(create|update|edit|write|modify|patch|set)$/,
   /(_|^)(create|update|edit|write|modify|patch|set)_/,
   /(_|^)(rename|move|copy)_/,
@@ -88,8 +88,8 @@ export function classifyOpenClawTool(
     if (re.test(lower)) return "high_stakes";
   }
 
-  for (const re of WARNING_PATTERNS) {
-    if (re.test(lower)) return "warning";
+  for (const re of REVIEW_PATTERNS) {
+    if (re.test(lower)) return "review";
   }
 
   return "review";
