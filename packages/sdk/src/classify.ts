@@ -132,6 +132,10 @@ function classifyBashCommand(command: string): RiskTier {
     if (pattern.test(trimmed)) return "high_stakes";
   }
 
+  // Output redirection writes to a file — never safe regardless of the leading command
+  // (e.g. `echo "x" > /path/file`). Excludes `2>&1` and similar fd redirects.
+  if (/\s>>?[^&>]/.test(trimmed)) return "review";
+
   for (const pattern of SAFE_COMMANDS) {
     if (pattern.test(trimmed)) return "safe";
   }
