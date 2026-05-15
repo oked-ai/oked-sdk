@@ -1,4 +1,4 @@
-import path from "path";
+import { isAbsolute, relative, resolve } from "node:path";
 import type { RiskTier } from "./types.js";
 import { findSqlInCommand } from "./describe.js";
 
@@ -80,11 +80,13 @@ const HIGH_STAKES_COMMANDS = [
   /\bnpx\s+.*\s+deploy\b/,
 ];
 
-function isInsideProject(filePath: string): boolean {
+function isInsideProject(filePath: string, cwd = process.cwd()): boolean {
   if (!filePath) return false;
   try {
-    const resolved = path.resolve(filePath);
-    return resolved.startsWith(process.cwd());
+    const root = resolve(cwd);
+    const abs = isAbsolute(filePath) ? resolve(filePath) : resolve(root, filePath);
+    const rel = relative(root, abs);
+    return rel === "" || (!rel.startsWith("..") && !isAbsolute(rel));
   } catch {
     return false;
   }
@@ -92,15 +94,19 @@ function isInsideProject(filePath: string): boolean {
 
 export function classify(
   toolName: string,
-  toolInput: Record<string, unknown>
+  toolInput: Record<string, unknown>,
+  cwd = process.cwd()
 ): RiskTier {
   if (SAFE_TOOLS.has(toolName)) return "safe";
   if (HIGH_STAKES_TOOLS.has(toolName)) return "high_stakes";
   if (REVIEW_TOOLS.has(toolName)) return "review";
 
   if (toolName === "Write" || toolName === "Edit" || toolName === "NotebookEdit") {
-    const filePath = toolInput.file_path as string;
-    return isInsideProject(filePath) ? "warning" : "review";
+    const filePath =
+      toolName === "NotebookEdit"
+        ? (toolInput.notebook_path ?? toolInput.file_path)
+        : toolInput.file_path;
+    return isInsideProject(filePath as string, cwd) ? "warning" : "review";
   }
 
   if (toolName === "Agent") return "review";
@@ -127,7 +133,7 @@ export function classify(
   const writePath = (toolInput.file_path ?? toolInput.path) as unknown;
   const writeContent = (toolInput.content ?? toolInput.data ?? toolInput.body) as unknown;
   if (typeof writePath === "string" && typeof writeContent === "string") {
-    return isInsideProject(writePath) ? "warning" : "review";
+    return isInsideProject(writePath, cwd) ? "warning" : "review";
   }
 
   return "review";
@@ -157,7 +163,7 @@ function classifyBashCommand(command: string): RiskTier {
   }
 
   // File-mutating shell patterns. Content-creation idioms (echo > X, tee,
-  // dd of=, touch, sed -i, heredoc) always require approval — they're
+  // dd of=, touch, sed -i, heredoc) always require approval - they're
   // exactly the bypass route from a denied Write. cp/mv just rearrange
   // existing bytes and stay safe.
   const ops = extractShellWriteOps(trimmed);

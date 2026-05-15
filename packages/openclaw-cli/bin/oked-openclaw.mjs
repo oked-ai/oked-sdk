@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * @oked/openclaw-cli — installer for the @oked/openclaw plugin.
+ * @oked/openclaw-cli - installer for the @oked/openclaw plugin.
  *
  * Subcommands:
  *   oked-openclaw init       Install the plugin via `openclaw plugins install`,
@@ -25,8 +25,7 @@ const OPENCLAW_DIR = path.join(homedir(), '.openclaw');
 const OPENCLAW_CONFIG = path.join(OPENCLAW_DIR, 'openclaw.json');
 const OKED_DIR = path.join(homedir(), '.oked');
 const OKED_CONFIG = path.join(OKED_DIR, 'config.json');
-const DEFAULT_BACKEND_URL =
-  process.env.OKED_BACKEND_URL || 'https://claude-test-project-production.up.railway.app';
+const DEFAULT_BACKEND_URL = process.env.OKED_BACKEND_URL || 'https://api.oked.ai';
 const CLIENT_VERSION = '0.1.0';
 
 async function writeOkedConfig(apiKey, backendUrl) {
@@ -106,12 +105,12 @@ async function deviceCodePair() {
   throw new Error('Pairing timed out. Run init again.');
 }
 
-// ─── helpers ──────────────────────────────────────────────────────────────
+// --- helpers --------------------------------------------------------------
 
 function maskKey(key) {
   if (!key) return '(not set)';
   if (key.length <= 8) return '****';
-  return `${key.slice(0, 4)}…${key.slice(-4)}`;
+  return `${key.slice(0, 4)}...${key.slice(-4)}`;
 }
 
 function run(cmd, args, opts = {}) {
@@ -174,7 +173,7 @@ function runStreaming(cmd, args) {
   });
 }
 
-// ─── plugin path discovery ────────────────────────────────────────────────
+// --- plugin path discovery ------------------------------------------------
 
 async function findPluginPath() {
   // Sibling package in the same monorepo. Walk up from this file looking for
@@ -196,7 +195,7 @@ async function findPluginPath() {
   return null;
 }
 
-// ─── daemon detection ─────────────────────────────────────────────────────
+// --- daemon detection -----------------------------------------------------
 
 function detectDaemon() {
   if (commandExists('systemctl')) {
@@ -268,10 +267,10 @@ function detectDaemon() {
   return null;
 }
 
-// ─── commands ─────────────────────────────────────────────────────────────
+// --- commands -------------------------------------------------------------
 
 async function cmdInit() {
-  console.log('\nOKed → OpenClaw plugin installer\n');
+  console.log('\nOKed -> OpenClaw plugin installer\n');
 
   if (!commandExists('openclaw')) {
     console.error('The "openclaw" command was not found on your PATH.');
@@ -298,12 +297,12 @@ async function cmdInit() {
   console.log(`   $ openclaw ${installArgs.join(' ')}`);
   const installCode = await runStreaming('openclaw', installArgs);
   if (installCode !== 0) {
-    console.error(`\n   ✗ openclaw plugins install exited ${installCode}.`);
+    console.error(`\n   X openclaw plugins install exited ${installCode}.`);
     process.exit(installCode);
   }
   console.log('');
 
-  // 3. API key — reuse existing if present, otherwise pair this device.
+  // 3. API key - reuse existing if present, otherwise pair this device.
   const existing = await readConfig();
   const existingEntry = existing?.plugins?.entries?.oked || {};
   let apiKey = process.env.OKED_API_KEY || existingEntry.apiKey || '';
@@ -331,7 +330,7 @@ async function cmdInit() {
     minTier = 'review';
   }
 
-  // 4. Update openclaw.json — apiKey/minTier are now declared in the plugin's
+  // 4. Update openclaw.json - apiKey/minTier are now declared in the plugin's
   //    configSchema, so OpenClaw 2026.5+ will accept them under entries.oked.
   process.stdout.write('4. Updating ~/.openclaw/openclaw.json... ');
   const cfg = existing && typeof existing === 'object' ? existing : {};
@@ -344,6 +343,7 @@ async function cmdInit() {
     ...(cfg.plugins.entries.oked || {}),
     enabled: true,
     apiKey,
+    backendUrl: DEFAULT_BACKEND_URL,
     minTier,
   };
   await writeConfig(cfg);
@@ -389,10 +389,10 @@ async function cmdInit() {
   console.log(`\n   $ ${cmdline}`);
   const code = await runStreaming(cmd, args);
   if (code === 0) {
-    console.log('\n   ✓ Restart command exited 0.');
+    console.log('\n   OK Restart command exited 0.');
     console.log('   Run "oked-openclaw test" or trigger a real OpenClaw tool call to verify.\n');
   } else {
-    console.log(`\n   ✗ Restart command exited ${code}. Restart OpenClaw manually and try again.\n`);
+    console.log(`\n   X Restart command exited ${code}. Restart OpenClaw manually and try again.\n`);
     process.exit(code);
   }
 }
@@ -402,42 +402,45 @@ async function cmdStatus() {
   const entry = cfg?.plugins?.entries?.oked || {};
   const allowed = Array.isArray(cfg?.plugins?.allow) && cfg.plugins.allow.includes('oked');
   const apiKey = entry.apiKey || process.env.OKED_API_KEY || '';
+  const backendUrl = entry.backendUrl || process.env.OKED_BACKEND_URL || DEFAULT_BACKEND_URL;
 
   console.log(`Config file   : ${OPENCLAW_CONFIG}`);
   console.log(`Plugin allowed: ${allowed ? 'yes' : 'no'}`);
   console.log(`Plugin enabled: ${entry.enabled ? 'yes' : 'no'}`);
   console.log(`API key       : ${maskKey(apiKey)}`);
-  console.log(`minTier       : ${entry.minTier || '(default warning)'}`);
+  console.log(`minTier       : ${entry.minTier || '(default review)'}`);
 
   if (commandExists('openclaw')) {
     const r = run('openclaw', ['plugins', 'list']);
     const installed = /\boked\b/.test(r.stdout) && !/\boked\b.*not\s+found/i.test(r.stdout);
-    console.log(`Plugin installed: ${installed ? 'yes' : 'no — run "oked-openclaw init"'}`);
+    console.log(`Plugin installed: ${installed ? 'yes' : 'no - run "oked-openclaw init"'}`);
   }
 
   const daemon = detectDaemon();
   console.log(`Daemon        : ${daemon ? daemon.label : 'not detected'}`);
 
-  const client = new OKedClient({ apiKey });
+  const client = new OKedClient({ apiKey, backendUrl });
   console.log(`Backend URL   : ${client.backendUrl}`);
   try {
     const ok = await client.ping();
     console.log(`Backend reach : ${ok ? 'ok' : 'unreachable'}`);
   } catch (err) {
-    console.log(`Backend reach : error — ${err.message}`);
+    console.log(`Backend reach : error - ${err.message}`);
   }
 }
 
 async function cmdTest() {
   const cfg = await readConfig().catch(() => ({}));
-  const apiKey = cfg?.plugins?.entries?.oked?.apiKey || process.env.OKED_API_KEY || '';
+  const entry = cfg?.plugins?.entries?.oked || {};
+  const apiKey = entry.apiKey || process.env.OKED_API_KEY || '';
+  const backendUrl = entry.backendUrl || process.env.OKED_BACKEND_URL || DEFAULT_BACKEND_URL;
 
   if (!apiKey) {
     console.error('No API key found. Run "oked-openclaw init" first.');
     process.exit(1);
   }
 
-  const client = new OKedClient({ apiKey });
+  const client = new OKedClient({ apiKey, backendUrl });
   console.log('');
   console.log('Sending test approval request...');
   console.log(`  Dashboard: ${client.backendUrl}/dashboard`);
@@ -449,17 +452,17 @@ async function cmdTest() {
   try {
     const result = await client.approve({
       action: 'oked-openclaw-test',
-      description: 'Test approval from "oked-openclaw test" — approve or deny to verify your setup works.',
+      description: 'Test approval from "oked-openclaw test" - approve or deny to verify your setup works.',
       tier: 'high_stakes',
       session_id: `openclaw-test-${Date.now()}`,
       cwd: process.cwd(),
     });
     if (result.approved) {
-      console.log('  ✓ Approved! OKed is working end-to-end.\n');
+      console.log('  OK Approved! OKed is working end-to-end.\n');
       console.log('  Note: this only verifies the SDK + backend + Telegram path.');
       console.log('  Trigger a real OpenClaw tool call to confirm the plugin is loaded.\n');
     } else {
-      console.log(`  ✗ ${result.decision}. OKed is working — the request was ${result.decision}.\n`);
+      console.log(`  X ${result.decision}. OKed is working - the request was ${result.decision}.\n`);
     }
   } catch (err) {
     console.error(`  Error: ${err.message}\n`);
@@ -473,7 +476,7 @@ async function cmdUninstall() {
     await access(OPENCLAW_CONFIG);
     cfg = await readConfig();
   } catch {
-    console.log('No openclaw.json found — nothing to remove.');
+    console.log('No openclaw.json found - nothing to remove.');
   }
 
   if (cfg) {
@@ -491,7 +494,7 @@ async function cmdUninstall() {
     }
     if (changed) {
       await writeConfig(cfg);
-      console.log(`✓ Removed OKed entry from ${OPENCLAW_CONFIG}`);
+      console.log(`OK Removed OKed entry from ${OPENCLAW_CONFIG}`);
     } else {
       console.log('No OKed entry was present in openclaw.json.');
     }
@@ -505,7 +508,7 @@ async function cmdUninstall() {
 }
 
 function usage() {
-  console.log(`oked-openclaw — installer for the @oked/openclaw plugin
+  console.log(`oked-openclaw - installer for the @oked/openclaw plugin
 
 Usage:
   oked-openclaw init        Install the plugin and configure openclaw.json
