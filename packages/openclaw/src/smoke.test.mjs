@@ -37,9 +37,9 @@ const cases = [
   ["search_messages", { q: "hi" }, "safe"],
   ["read_file", {}, "safe"],
 
-  // Warning tier (edit-like)
-  ["create_note", {}, "warning"],
-  ["update_profile", {}, "warning"],
+  // Review tier (state-changing edit-like tools require approval)
+  ["create_note", {}, "review"],
+  ["update_profile", {}, "review"],
 ];
 
 for (const [name, input, expected] of cases) {
