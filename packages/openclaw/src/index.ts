@@ -21,8 +21,23 @@
  * }
  */
 
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
 import { OKedClient, describe as describeAction, type RiskTier } from "@oked/sdk";
 import { classifyOpenClawTool, type ClassifyOptions } from "./classify-openclaw.js";
+
+function tryStatRmTarget(command: string): number | undefined {
+  const m = command.trim().match(/\b(?:rm|trash|trash-put|rmdir)\s+(?:-[^\s]+\s+)*(['"]?)([^\s'"]+)\1/);
+  if (!m) return undefined;
+  let target = m[2];
+  if (target.startsWith("~/")) target = path.join(os.homedir(), target.slice(2));
+  try {
+    return fs.statSync(target).size;
+  } catch {
+    return undefined;
+  }
+}
 
 const TIER_ORDER: Record<RiskTier, number> = {
   safe: 0,
@@ -144,12 +159,24 @@ const plugin = {
         }`,
       );
 
+      // Enrich tool_input with file size for delete operations so the backend
+      // can display it in the approval card (same as Create file shows size).
+      let enrichedParams = params;
+      const lowerTool = toolName.toLowerCase();
+      if (lowerTool === "bash" || lowerTool === "shell" || lowerTool === "exec") {
+        const cmd = (params.command ?? params.cmd) as string | undefined;
+        if (typeof cmd === "string") {
+          const sizeBytes = tryStatRmTarget(cmd);
+          if (sizeBytes !== undefined) enrichedParams = { ...params, _file_size_bytes: sizeBytes };
+        }
+      }
+
       try {
         const result = await oked.approve({
           action: toolName,
           description,
           tier,
-          tool_input: params,
+          tool_input: enrichedParams,
           ...(ctx.sessionId ? { session_id: ctx.sessionId } : {}),
           ...(ctx.sessionKey && !ctx.sessionId ? { session_id: ctx.sessionKey } : {}),
           cwd: process.cwd(),
