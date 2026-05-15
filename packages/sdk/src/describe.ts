@@ -85,9 +85,17 @@ function describeBash(command: string): string {
     return `Deploy via npx: ${cmd.length > 60 ? cmd.slice(0, 57) + "..." : cmd}`;
   }
 
-  if (/DROP\s+(TABLE|DATABASE)/i.test(cmd)) {
-    const match = cmd.match(/DROP\s+(TABLE|DATABASE)\s+(\S+)/i);
-    return `Drop ${match?.[1]?.toLowerCase()} '${match?.[2]}'`;
+  if (/CREATE\s+TABLE/i.test(cmd)) {
+    const match = cmd.match(/CREATE\s+TABLE(?:\s+IF\s+NOT\s+EXISTS)?\s+(\S+)/i);
+    return `Create DB table${match?.[1] ? ` '${match[1]}'` : ""}`;
+  }
+  if (/DROP\s+TABLE/i.test(cmd)) {
+    const match = cmd.match(/DROP\s+TABLE(?:\s+IF\s+EXISTS)?\s+(\S+)/i);
+    return `Drop DB table${match?.[1] ? ` '${match[1]}'` : ""}`;
+  }
+  if (/DROP\s+DATABASE/i.test(cmd)) {
+    const match = cmd.match(/DROP\s+DATABASE\s+(\S+)/i);
+    return `Drop database '${match?.[1]}'`;
   }
   if (/DELETE\s+FROM/i.test(cmd)) {
     const match = cmd.match(/DELETE\s+FROM\s+(\S+)/i);
@@ -171,6 +179,15 @@ function describeMcp(toolName: string, input: Record<string, unknown>): string {
   }
   if (tool === "query_database") {
     return `Run SQL query: ${(input.query as string)?.slice(0, 60) || "..."}`;
+  }
+  if (tool === "create_table") {
+    const name = (input.name ?? input.table ?? input.table_name ?? null) as string | null;
+    const preview = name ? ` "${name}"` : "";
+    return `Create DB table${preview} via ${server}`;
+  }
+  if (tool === "drop_table") {
+    const name = (input.name ?? input.table ?? input.table_name ?? null) as string | null;
+    return `Drop DB table${name ? ` '${name}'` : ""} via ${server}`;
   }
   if (tool.startsWith("delete_")) return `Delete ${tool.replace("delete_", "")} via ${server}`;
   if (tool === "create_payment" || tool === "charge_card" || tool.includes("payment") || tool.includes("charge")) {
