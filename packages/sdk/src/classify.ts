@@ -1,5 +1,6 @@
-import { resolve } from "node:path";
+import path from "path";
 import type { RiskTier } from "./types.js";
+import { findSqlInCommand } from "./describe.js";
 
 const SAFE_TOOLS = new Set([
   "Read",
@@ -46,12 +47,14 @@ const SAFE_COMMANDS = [
   /^fd\b/,
   /^jq\b/,
   /^curl\s+-s.*\|\s*(jq|python|node)/,
-  /^curl\b(?!.*(?:-X\b|--request\b))/,
+  /^curl\b/,
 ];
 
 const HIGH_STAKES_COMMANDS = [
   /\brm\s+(-rf?|--recursive)\b/,
   /\brm\b.*\s+\//,
+  /\btrash\b/,
+  /\btrash-put\b/,
   /\bgit\s+push\b/,
   /\bgit\s+push\s+--force\b/,
   /\bgit\s+push\s+-f\b/,
@@ -72,34 +75,32 @@ const HIGH_STAKES_COMMANDS = [
   /\bcurl\s+.*--request\s*(DELETE|PUT|POST)\b/,
   /\bwget\s+.*\|\s*(bash|sh|zsh)\b/,
   /\bcurl\s+.*\|\s*(bash|sh|zsh)\b/,
-  /\bcurl\b.*(?:\$\(|`)/,
   /\bnpm\s+publish\b/,
   /\bnpm\s+unpublish\b/,
   /\bnpx\s+.*\s+deploy\b/,
 ];
 
-function isInsideProject(filePath: string, cwd: string): boolean {
+function isInsideProject(filePath: string): boolean {
+  if (!filePath) return false;
   try {
-    const abs = resolve(filePath);
-    return abs === cwd || abs.startsWith(cwd + "/");
+    const resolved = path.resolve(filePath);
+    return resolved.startsWith(process.cwd());
   } catch {
     return false;
   }
 }
 
-export function classify(toolName: string, toolInput: Record<string, unknown>, cwd?: string): RiskTier {
+export function classify(
+  toolName: string,
+  toolInput: Record<string, unknown>
+): RiskTier {
   if (SAFE_TOOLS.has(toolName)) return "safe";
   if (HIGH_STAKES_TOOLS.has(toolName)) return "high_stakes";
   if (REVIEW_TOOLS.has(toolName)) return "review";
 
   if (toolName === "Write" || toolName === "Edit" || toolName === "NotebookEdit") {
-    if (!cwd) return "review";
-    const filePath =
-      toolName === "NotebookEdit"
-        ? (toolInput.notebook_path as string | undefined)
-        : (toolInput.file_path as string | undefined);
-    if (typeof filePath !== "string") return "review";
-    return isInsideProject(filePath, cwd) ? "warning" : "review";
+    const filePath = toolInput.file_path as string;
+    return isInsideProject(filePath) ? "warning" : "review";
   }
 
   if (toolName === "Agent") return "review";
@@ -110,6 +111,23 @@ export function classify(toolName: string, toolInput: Record<string, unknown>, c
 
   if (toolName.startsWith("mcp__")) {
     return classifyMcpTool(toolName);
+  }
+
+  // Shell-exec-style tools from other agents (Codex CLI's `exec`, OpenClaw,
+  // generic `run`/`run_command`/`shell`). Detect by signature: a string
+  // command/cmd field. Route through bash classification.
+  const shellCommand = (toolInput.command ?? toolInput.cmd) as unknown;
+  if (typeof shellCommand === "string") {
+    return classifyBashCommand(shellCommand);
+  }
+
+  // File-write-style tools from other agents (OpenClaw `write`, generic
+  // `create_file`, `file_write`). Detect by signature: string path field
+  // alongside string content/data field. Treat like Write.
+  const writePath = (toolInput.file_path ?? toolInput.path) as unknown;
+  const writeContent = (toolInput.content ?? toolInput.data ?? toolInput.body) as unknown;
+  if (typeof writePath === "string" && typeof writeContent === "string") {
+    return isInsideProject(writePath) ? "warning" : "review";
   }
 
   return "review";
@@ -128,19 +146,167 @@ function classifyBashCommand(command: string): RiskTier {
     return "review";
   }
 
+  // SQL hidden inside an interpreter wrapper (python -c, node -e, heredoc),
+  // a DB CLI (psql -c, sqlite3 db "...", mysql -e), or at the top of the
+  // command. Severity comes from the statement, not the wrapper.
+  const sql = findSqlInCommand(trimmed);
+  if (sql) return classifySqlSeverity(sql);
+
   for (const pattern of HIGH_STAKES_COMMANDS) {
     if (pattern.test(trimmed)) return "high_stakes";
   }
 
-  // Output redirection writes to a file — never safe regardless of the leading command
-  // (e.g. `echo "x" > /path/file`). Excludes `2>&1` and similar fd redirects.
-  if (/\s>>?[^&>]/.test(trimmed)) return "review";
+  // File-mutating shell patterns. Content-creation idioms (echo > X, tee,
+  // dd of=, touch, sed -i, heredoc) always require approval — they're
+  // exactly the bypass route from a denied Write. cp/mv just rearrange
+  // existing bytes and stay safe.
+  const ops = extractShellWriteOps(trimmed);
+  if (ops.length > 0) {
+    const creates = ops.filter((o) => o.kind !== "copy" && o.kind !== "move");
+    if (creates.length > 0) return "review";
+    return "safe";
+  }
 
   for (const pattern of SAFE_COMMANDS) {
     if (pattern.test(trimmed)) return "safe";
   }
 
   return "review";
+}
+
+function classifySqlSeverity(sql: string): RiskTier {
+  if (/\bDROP\s+(TABLE|DATABASE|INDEX|VIEW)\b/i.test(sql)) return "high_stakes";
+  if (/\bTRUNCATE\b/i.test(sql)) return "high_stakes";
+  if (/\bDELETE\s+FROM\b/i.test(sql)) return "high_stakes";
+  if (/\bUPDATE\s+\w+\s+SET\b/i.test(sql) && !/\bWHERE\b/i.test(sql)) return "high_stakes";
+  return "review";
+}
+
+export type ShellWriteKind = "create" | "append" | "edit" | "touch" | "copy" | "move";
+
+export interface ShellWriteOp {
+  kind: ShellWriteKind;
+  target: string;
+  source?: string;
+  content?: string;
+}
+
+/**
+ * Detects shell idioms that mutate the filesystem. Used by classify (to
+ * choose tier) and describe (to render the operation as a Create/Append/
+ * Copy/etc. sentence rather than as a shell command).
+ *
+ * Skips /dev/null and bare-digit FD duplicates (2>&1).
+ */
+export function extractShellWriteOps(command: string): ShellWriteOp[] {
+  const cmd = command.trim();
+  const ops: ShellWriteOp[] = [];
+
+  // Output redirects: > path, >> path, &> path, 2> path. Try to pull the
+  // literal content when the LHS is echo/printf.
+  const redirRe = /(?:^|[^>])([12]?>>?|&>>?)\s*([^\s>|&;]+)/g;
+  for (const m of cmd.matchAll(redirRe)) {
+    const op = m[1];
+    const target = unquote(m[2]);
+    if (!target || /^\d+$/.test(target) || isDevNullish(target)) continue;
+    const append = op === ">>" || op === "&>>";
+    const content = extractEchoContent(cmd);
+    ops.push({ kind: append ? "append" : "create", target, content });
+  }
+
+  // tee [-a] path
+  const teeM = cmd.match(/\btee\b\s+(-[aA]\s+)?([^\s|;&]+)/);
+  if (teeM) {
+    const target = unquote(teeM[2]);
+    if (target && !isDevNullish(target) && !target.startsWith("-")) {
+      ops.push({ kind: teeM[1] ? "append" : "create", target });
+    }
+  }
+
+  // cp src dest
+  const cpM = cmd.match(/^\s*cp\b\s+(.+)$/);
+  if (cpM) {
+    const args = splitArgs(cpM[1]).filter((a) => !a.startsWith("-"));
+    if (args.length >= 2) {
+      ops.push({ kind: "copy", target: unquote(args[args.length - 1]), source: unquote(args[0]) });
+    }
+  }
+
+  // mv src dest
+  const mvM = cmd.match(/^\s*mv\b\s+(.+)$/);
+  if (mvM) {
+    const args = splitArgs(mvM[1]).filter((a) => !a.startsWith("-"));
+    if (args.length >= 2) {
+      ops.push({ kind: "move", target: unquote(args[args.length - 1]), source: unquote(args[0]) });
+    }
+  }
+
+  // sed -i
+  if (/\bsed\b/.test(cmd) && /-i(?:\.\w+)?\b/.test(cmd)) {
+    const sedM = cmd.match(/^\s*sed\b\s+(.+)$/);
+    if (sedM) {
+      const args = splitArgs(sedM[1]);
+      let scriptSeen = false;
+      for (const a of args) {
+        if (a.startsWith("-")) continue;
+        if (!scriptSeen) { scriptSeen = true; continue; }
+        ops.push({ kind: "edit", target: unquote(a) });
+      }
+    }
+  }
+
+  // dd of=path
+  const ddRe = /\bdd\b[^|;&]*\bof=([^\s|;&]+)/g;
+  for (const m of cmd.matchAll(ddRe)) {
+    const target = unquote(m[1]);
+    if (target && !isDevNullish(target)) ops.push({ kind: "create", target });
+  }
+
+  // touch path1 path2...
+  const touchM = cmd.match(/^\s*touch\b\s+(.+)$/);
+  if (touchM) {
+    for (const a of splitArgs(touchM[1])) {
+      if (!a.startsWith("-")) ops.push({ kind: "touch", target: unquote(a) });
+    }
+  }
+
+  return ops;
+}
+
+function extractEchoContent(cmd: string): string | undefined {
+  const m = cmd.match(/^\s*(?:echo|printf)\b\s+(?:-[neE]+\s+)?(.+?)\s*(?:[12]?>>?|&>>?)/);
+  if (!m) return undefined;
+  const raw = m[1].trim();
+  if (!raw) return undefined;
+  return unquote(raw);
+}
+
+function unquote(s: string): string {
+  return s.replace(/^['"]|['"]$/g, "");
+}
+
+function isDevNullish(p: string): boolean {
+  return p === "/dev/null" || p === "/dev/stdout" || p === "/dev/stderr";
+}
+
+function splitArgs(s: string): string[] {
+  const out: string[] = [];
+  let cur = "";
+  let quote: '"' | "'" | null = null;
+  for (const ch of s) {
+    if (quote) {
+      if (ch === quote) quote = null;
+      else cur += ch;
+    } else if (ch === '"' || ch === "'") {
+      quote = ch;
+    } else if (/\s/.test(ch)) {
+      if (cur) { out.push(cur); cur = ""; }
+    } else {
+      cur += ch;
+    }
+  }
+  if (cur) out.push(cur);
+  return out;
 }
 
 function classifyMcpTool(toolName: string): RiskTier {
