@@ -4,6 +4,7 @@ export interface ApprovalRequest {
   action: string;
   description: string;
   tier: RiskTier;
+  fields?: Record<string, string>;
   tool_input?: unknown;
   session_id?: string;
   cwd?: string;
