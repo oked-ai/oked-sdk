@@ -35,6 +35,7 @@ Then in `~/.openclaw/openclaw.json`:
       "oked": {
         "enabled": true,
         "apiKey": "ok_...",
+        "backendUrl": "https://api.oked.ai",
         "minTier": "review"
       }
     }
@@ -51,22 +52,23 @@ All keys go under `plugins.entries.oked`:
 | Key | Type | Default | Description |
 |---|---|---|---|
 | `apiKey` | `string` | `OKED_API_KEY` env | Your OKed API key. Required. |
-| `backendUrl` | `string` | `OKED_BACKEND_URL` env | Override the OKed backend URL. |
-| `minTier` | `"review" \| "warning" \| "high_stakes"` | `"warning"` | Minimum risk tier that triggers approval. Set to `"high_stakes"` to only gate the most dangerous calls. |
+| `backendUrl` | `string` | `https://api.oked.ai` | Override the OKed backend URL. |
+| `minTier` | `"review" \| "high_stakes"` | `"review"` | Minimum risk tier that triggers approval. Set to `"high_stakes"` to only gate the most dangerous calls. `warning` is informational only and does not block. |
 | `alwaysApprove` | `string[]` | `[]` | Tool names to always require approval for, regardless of classifier. |
 | `alwaysAllow` | `string[]` | `[]` | Tool names to never gate. Use sparingly. |
-| `timeoutMs` | `number` | OKed default | Per-approval timeout in ms. |
+| `timeoutMs` | `number` | `300000` | Per-approval timeout in ms. |
 
 ## What gets gated
 
 The classifier matches OpenClaw skill naming conventions:
 
 - **High stakes** (always approval): `*_send`, `*_post`, `*_publish`, `*_call`, `*_dial`, `*_charge`, `*_pay`, `*_delete`, `*_drop`, `*_deploy`, `*_release`, ...
-- **Warning** (approval at default `minTier`): `*_create`, `*_update`, `*_write`, `*_edit`, `*_rename`, `*_modify`.
+- **Review** (approval at default `minTier`): `*_create`, `*_update`, `*_write`, `*_edit`, `*_rename`, `*_modify`, and unknown tool names.
+- **Warning** (log / allow): lower-risk state changes from shared SDK classifiers.
 - **Safe** (never gated): `get_*`, `list_*`, `search_*`, `read_*`, `find_*`.
 - **Bash / shell / exec**: defers to the `@oked/sdk` shell classifier (`rm -rf`, `git push --force`, ...).
 
-For tool names the classifier doesn't recognize, the default tier is `review` (not gated unless `minTier` is set to `"review"`).
+For tool names the classifier doesn't recognize, the default tier is `review`, so they are gated by the default configuration.
 
 ## Fail-safe behavior
 
@@ -76,8 +78,8 @@ If the backend is unreachable, the request times out, or the API key is missing,
 
 |  | OpenClaw `exec.approval.*` | `@oked/openclaw` |
 |---|---|---|
-| Shell commands | ✅ | ✅ (via classifier) |
-| Skill / plugin tools | Only if skill author opts in | ✅ all tools |
+| Shell commands | OK | OK (via classifier) |
+| Skill / plugin tools | Only if skill author opts in | OK all tools |
 | Mobile push | iOS app paired via `device-pairing` | OKed mobile app, unified across Claude Code + OpenClaw + future tools |
 | Audit log | Gateway-local | Centralized OKed dashboard |
 
@@ -88,6 +90,7 @@ Use both. OpenClaw's exec approvals stay in place; this plugin layers on top to 
 ```bash
 npm install
 npm run build
+npm test
 ```
 
 ## License

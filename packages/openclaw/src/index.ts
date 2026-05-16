@@ -17,7 +17,7 @@
  *   "backendUrl": "https://...",         // optional override
  *   "alwaysApprove": ["custom_tool"],    // additional names to require approval for
  *   "alwaysAllow":   ["safe_tool"],      // names to never gate
- *   "minTier": "warning"                 // minimum tier to require approval (default: "warning")
+ *   "minTier": "review"                  // minimum tier to require approval (default: "review")
  * }
  */
 
@@ -146,7 +146,7 @@ const plugin = {
         return { block: true, blockReason: "OKed classifier error. Fail-safe deny." };
       }
 
-      // Below threshold or above-threshold-but-not-in-approval-set → allow.
+      // Warning is informational only; only review/high_stakes can block.
       if (TIER_ORDER[tier] < minTierLevel || !APPROVAL_TIERS.has(tier)) {
         return; // void = allow
       }
@@ -183,11 +183,11 @@ const plugin = {
         });
 
         if (result.approved) {
-          log?.info?.(`[oked] ✓ approved ${toolName}`);
+          log?.info?.(`[oked] OK approved ${toolName}`);
           return; // allow
         }
 
-        log?.info?.(`[oked] ✗ ${result.decision}, blocking ${toolName}`);
+        log?.info?.(`[oked] X ${result.decision}, blocking ${toolName}`);
         return {
           block: true,
           blockReason: `${result.decision} via OKed (approval ${result.approval_id})`,

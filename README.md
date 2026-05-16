@@ -29,7 +29,7 @@ It runs **outside the agent process**, so it can't be configured away. Even an a
 
 Pick the path that matches your agent:
 
-| I'm using… | Install |
+| I'm using... | Install |
 |---|---|
 | **Claude Code** | `npm install -g @oked/claude-code && oked init` |
 | **OpenClaw** | `npm install @oked/openclaw` (then enable in `~/.openclaw/openclaw.json`, see [package README](./packages/openclaw)) |
@@ -40,21 +40,21 @@ Then sign in at [app.oked.ai](https://app.oked.ai/dashboard/) and link your Tele
 ## How it works
 
 ```
-Agent: send_email("vendor@…")        →  📱 Approve / Deny
-Agent: rm node_modules               →  ✓ allowed (safe)
-Agent: DELETE /users/42              →  📱 Approve / Deny  ⚠ irreversible
-Agent: git push --force              →  📱 Approve / Deny
-Agent: Read ./src/app.ts             →  ✓ allowed (safe)
+Agent: send_email("vendor@...")        ->  [phone] Approve / Deny
+Agent: rm node_modules               ->  OK allowed (safe)
+Agent: DELETE /users/42              ->  [phone] Approve / Deny  WARNING irreversible
+Agent: git push --force              ->  [phone] Approve / Deny
+Agent: Read ./src/app.ts             ->  OK allowed (safe)
 ```
 
 1. **Before execution.** The hook receives each tool call before it runs. Runs outside the agent process so it cannot be bypassed.
-2. **Tiered scoring.** Safe read-only operations pass instantly. Unknown or risky actions move to approval. Tiers: `safe` · `warning` · `review` · `high_stakes`.
+2. **Tiered scoring.** Safe read-only operations pass instantly. Unknown or risky actions move to approval. Tiers: `safe` | `warning` | `review` | `high_stakes`.
 3. **Push to your phone.** Approval lands in Telegram or as a Web Push notification with full context: what the agent wants to do and why it was flagged.
 4. **Every decision logged.** Each request, classification, and decision is persisted with a timestamp. Full audit trail, exportable any time.
 
 ### Fail-safe by default
 
-If the OKed backend is unreachable, if the request times out, or if anything parses wrong → the agent is **denied**. The only exception is a missing API key, which falls back to the agent's native permission prompt.
+If the OKed backend is unreachable, if the request times out, or if anything parses wrong -> the agent is **denied**. The only exception is a missing API key, which falls back to the agent's native permission prompt.
 
 ## SDK example
 
@@ -91,6 +91,7 @@ The call returns `{ approved, approval_id, decision }`, where `decision` is `"ap
 ```bash
 npm install
 npm run build
+npm test
 ```
 
 Runs the build for every workspace that defines one.

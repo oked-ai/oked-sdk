@@ -1,7 +1,7 @@
 {
   "name": "@oked/sdk",
   "version": "0.1.0",
-  "description": "OKed SDK — human approval layer for AI agents",
+  "description": "OKed SDK - human approval layer for AI agents",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

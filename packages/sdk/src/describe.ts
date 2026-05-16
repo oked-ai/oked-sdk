@@ -53,9 +53,9 @@ export function describeFields(
   return out;
 }
 
-// ───────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------
 // Top-level dispatch
-// ───────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------
 
 function summarize(toolName: string, toolInput: Record<string, unknown>): Rendered {
   const fileSizeBytes = typeof toolInput._file_size_bytes === "number" ? toolInput._file_size_bytes : undefined;
@@ -96,9 +96,9 @@ function summarize(toolName: string, toolInput: Record<string, unknown>): Render
   return summarizeFallback(toolName, toolInput);
 }
 
-// ───────────────────────────────────────────────────────────────────────
-// Bash / shell — semantic rerendering
-// ───────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------
+// Bash / shell - semantic rerendering
+// -----------------------------------------------------------------------
 
 function summarizeBash(command: string, sizeBytes?: number): Rendered {
   const cmd = (command || "").trim();
@@ -114,7 +114,7 @@ function summarizeBash(command: string, sizeBytes?: number): Rendered {
   const shellWrite = summarizeShellWrite(cmd);
   if (shellWrite) return shellWrite;
 
-  // rm / trash — file deletion
+  // rm / trash - file deletion
   const rmMatch = cmd.match(/\b(?:rm|trash|trash-put|rmdir)\s+(?:(-rf?|-fr|--recursive|-r)\s+)?(.+)$/);
   if (rmMatch) {
     const recursive = !!rmMatch[1] || /^rm\s+-/.test(cmd);
@@ -131,13 +131,13 @@ function summarizeBash(command: string, sizeBytes?: number): Rendered {
   // git
   if (/\bgit\s+push\s+(?:--force|-f)\b/.test(cmd)) {
     const m = cmd.match(/git\s+push\s+(?:--force|-f)\s+(\S+)\s+(\S+)/);
-    return { title: "Force push", target: m ? `${m[2]} → ${m[1]}` : "current branch", kind: "git_force_push" };
+    return { title: "Force push", target: m ? `${m[2]} -> ${m[1]}` : "current branch", kind: "git_force_push" };
   }
   if (/\bgit\s+push\b/.test(cmd)) {
     const m = cmd.match(/git\s+push\s+(\S+)\s+(\S+)/);
-    return { title: "Push", target: m ? `${m[2]} → ${m[1]}` : "current branch", kind: "git_push" };
+    return { title: "Push", target: m ? `${m[2]} -> ${m[1]}` : "current branch", kind: "git_push" };
   }
-  if (/\bgit\s+reset\s+--hard\b/.test(cmd)) return { title: "Hard reset — discard all local changes", kind: "git_reset_hard" };
+  if (/\bgit\s+reset\s+--hard\b/.test(cmd)) return { title: "Hard reset - discard all local changes", kind: "git_reset_hard" };
   if (/\bgit\s+clean\s+-f/.test(cmd)) return { title: "Remove all untracked files", kind: "git_clean" };
   if (/\bgit\s+checkout\s+--\s+\./.test(cmd)) return { title: "Discard all unstaged changes", kind: "git_checkout" };
   if (/\bgit\s+restore\s+--staged\s+\./.test(cmd)) return { title: "Unstage all staged changes", kind: "git_restore" };
@@ -223,13 +223,13 @@ function summarizeShellWrite(cmd: string): Rendered | null {
     case "copy":
       return {
         title: "Copy file",
-        target: op.source ? `${shortenPath(op.source)} → ${path}` : path,
+        target: op.source ? `${shortenPath(op.source)} -> ${path}` : path,
         kind: "file_copy",
       };
     case "move":
       return {
         title: "Move file",
-        target: op.source ? `${shortenPath(op.source)} → ${path}` : path,
+        target: op.source ? `${shortenPath(op.source)} -> ${path}` : path,
         kind: "file_move",
       };
   }
@@ -331,9 +331,9 @@ function summarizeSql(sql: string, originalCommand: string): Rendered {
   return { title: "Run SQL statement", body: sql || originalCommand, kind: "sql_query" };
 }
 
-// ───────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------
 // File operations
-// ───────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------
 
 function summarizeWrite(input: Record<string, unknown>): Rendered {
   const filePath = (input.file_path ?? input.path) as string;
@@ -350,7 +350,7 @@ function summarizeWrite(input: Record<string, unknown>): Rendered {
     annotation = `(${formatByteCount(bytes)})`;
     if (content.trim()) {
       body = content.length > BODY_PREVIEW_MAX
-        ? content.slice(0, BODY_PREVIEW_MAX - 1).trimEnd() + "…"
+        ? content.slice(0, BODY_PREVIEW_MAX - 1).trimEnd() + "..."
         : content;
     }
   }
@@ -369,12 +369,12 @@ function summarizeEdit(input: Record<string, unknown>): Rendered {
     let footnote: string | undefined;
     let body = diff.lines.slice(0, DIFF_HUNK_MAX_LINES).join("\n");
     if (diff.lines.length > DIFF_HUNK_MAX_LINES) {
-      footnote = `… and ${diff.lines.length - DIFF_HUNK_MAX_LINES} more lines`;
+      footnote = `... and ${diff.lines.length - DIFF_HUNK_MAX_LINES} more lines`;
     }
     return {
       title: "Edit file",
       target: shortPath,
-      annotation: `+${diff.added} −${diff.removed}`,
+      annotation: `+${diff.added} -${diff.removed}`,
       body,
       footnote,
       kind: "file_edit",
@@ -393,15 +393,15 @@ function miniDiff(oldStr: string, newStr: string): { lines: string[]; added: num
 }
 
 function summarizeNotebookEdit(input: Record<string, unknown>): Rendered {
-  const filePath = input.file_path as string;
+  const filePath = (input.notebook_path ?? input.file_path) as string | undefined;
   return filePath
     ? { title: "Edit notebook", target: shortenPath(filePath), kind: "file_edit" }
     : { title: "Edit notebook", kind: "file_edit" };
 }
 
-// ───────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------
 // Agents & MCP
-// ───────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------
 
 function summarizeAgent(input: Record<string, unknown>): Rendered {
   const prompt = input.prompt as string;
@@ -490,9 +490,9 @@ function identifyTarget(input: Record<string, unknown>): string | null {
   return null;
 }
 
-// ───────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------
 // Email / payment / chat message
-// ───────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------
 
 function summarizeEmail(input: Record<string, unknown>): Rendered {
   const join = (v: unknown): string | null => {
@@ -528,13 +528,13 @@ function summarizeEmail(input: Record<string, unknown>): Rendered {
       }
       return String(a);
     });
-    sublineParts.push(`📎 ${list.join(", ")}`);
+    sublineParts.push(`attachment: ${list.join(", ")}`);
   }
 
   let bodyText: string | undefined;
   if (typeof body === "string" && body.trim()) {
     bodyText = body.length > BODY_PREVIEW_MAX
-      ? body.slice(0, BODY_PREVIEW_MAX - 1).trimEnd() + "…"
+      ? body.slice(0, BODY_PREVIEW_MAX - 1).trimEnd() + "..."
       : body;
   }
 
@@ -594,7 +594,7 @@ function summarizeMessage(input: Record<string, unknown>, server: string): Rende
   let body: string | undefined;
   if (typeof text === "string" && text.trim()) {
     body = text.length > BODY_PREVIEW_MAX
-      ? text.slice(0, BODY_PREVIEW_MAX - 1).trimEnd() + "…"
+      ? text.slice(0, BODY_PREVIEW_MAX - 1).trimEnd() + "..."
       : text;
   }
   return { title, body, kind: "chat_message" };
@@ -608,9 +608,9 @@ function prettyServer(server: string): string {
   return server;
 }
 
-// ───────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------
 // Fallback
-// ───────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------
 
 function summarizeFallback(toolName: string, toolInput: Record<string, unknown>): Rendered {
   const keys = Object.keys(toolInput);
@@ -625,16 +625,16 @@ function summarizeFallback(toolName: string, toolInput: Record<string, unknown>)
   return { title: toolName, body: summary, kind: "unknown_tool" };
 }
 
-// ───────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------
 // Helpers
-// ───────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------
 
 function formatMoney(amount: unknown, currency: unknown): string {
   const num = typeof amount === "number" ? amount : parseFloat(String(amount));
   if (isNaN(num)) return String(amount);
   const cur = String(currency || "").toLowerCase();
-  const symbols: Record<string, string> = { usd: "$", eur: "€", gbp: "£", jpy: "¥", cad: "CA$", aud: "A$" };
-  const symbol = symbols[cur] || (cur ? cur.toUpperCase() + " " : "");
+  const symbols: Record<string, string> = { usd: "$", eur: "EUR ", gbp: "GBP ", jpy: "JPY ", cad: "CA$", aud: "A$" };
+  const symbol = symbols[cur] || (cur ? `${cur.toUpperCase()} ` : "");
   const wholeCurrencies = ["jpy", "krw", "vnd", "clp"];
   const isWhole = wholeCurrencies.includes(cur);
   const value = isWhole ? num : num / 100;
@@ -670,7 +670,7 @@ function stripQuotes(s: string): string {
 }
 
 function truncate(s: string, max: number): string {
-  return s.length > max ? s.slice(0, max - 1).trimEnd() + "…" : s;
+  return s.length > max ? s.slice(0, max - 1).trimEnd() + "..." : s;
 }
 
 function stmtSlice(trimmed: string, startIdx: number): string {
