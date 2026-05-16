@@ -1,7 +1,7 @@
 {
   "id": "oked",
   "name": "OKed",
-  "description": "Human approval layer for AI agents — freezes the agent before sensitive tool calls and asks for human approval via Telegram or the OKed dashboard.",
+  "description": "Human approval layer for AI agents - freezes the agent before sensitive tool calls and asks for human approval via Telegram or the OKed dashboard.",
   "activation": {
     "onStartup": true
   },

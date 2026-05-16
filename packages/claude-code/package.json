@@ -1,7 +1,7 @@
 {
   "name": "@oked/claude-code",
   "version": "0.1.0",
-  "description": "OKed for Claude Code — zero-code human approval for sensitive actions",
+  "description": "OKed for Claude Code - zero-code human approval for sensitive actions",
   "type": "module",
   "bin": {
     "oked": "./bin/oked.js",

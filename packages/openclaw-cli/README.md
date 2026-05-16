@@ -12,9 +12,9 @@ oked-openclaw init
 `init` will:
 
 1. Locate the plugin source (sibling monorepo package or the global install).
-2. Run `openclaw plugins install --link --force <path>`.
+2. Run `openclaw plugins install --link <path>`.
 3. Prompt for `OKED_API_KEY` and `minTier` (defaults to `review`).
-4. Write `plugins.allow: ["oked"]` and `plugins.entries.oked: { enabled, apiKey, minTier }` into `openclaw.json`.
+4. Write `plugins.allow: ["oked"]` and `plugins.entries.oked: { enabled, apiKey, backendUrl, minTier }` into `openclaw.json`.
 5. Detect the OpenClaw daemon (systemd / pm2 / launchd / bare process) and offer to restart it.
 
 ## Subcommands
