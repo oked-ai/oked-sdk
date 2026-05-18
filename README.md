@@ -32,6 +32,7 @@ Pick the path that matches your agent:
 | I'm using... | Install |
 |---|---|
 | **Claude Code** | `npm install -g @oked/claude-code && oked init` |
+| **Claude Agent SDK** | `npm install @oked/claude-agent-sdk` (wire into `options.hooks`, see [package README](./packages/claude-agent-sdk)) |
 | **OpenClaw** | `npm install @oked/openclaw` (then enable in `~/.openclaw/openclaw.json`, see [package README](./packages/openclaw)) |
 | **Node.js SDK** (OpenAI / Anthropic / LangChain / custom) | `npm install @oked/sdk` |
 
@@ -84,6 +85,7 @@ The call returns `{ approved, approval_id, decision }`, where `decision` is `"ap
 |---|---|
 | [`@oked/sdk`](./packages/sdk) | Core library: programmatic approval API (`OKedClient.approve()`, tier classifier, action describer). Call directly from any Node.js agent. |
 | [`@oked/claude-code`](./packages/claude-code) | Zero-code integration for Claude Code. `oked init` writes a PreToolUse hook into your project's `.claude/settings.json`. |
+| [`@oked/claude-agent-sdk`](./packages/claude-agent-sdk) | Ready-made `PreToolUse` hook callback for the Claude Agent SDK. Wire into `options.hooks`. |
 | [`@oked/openclaw`](./packages/openclaw) | Zero-code integration for OpenClaw via the `before_tool_call` plugin. |
 
 ## Develop
