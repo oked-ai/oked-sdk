@@ -20,6 +20,14 @@ export interface OKedConfig {
   apiKey: string;
   backendUrl: string;
   timeout: number;
+  /**
+   * When true, an unreachable backend hard-denies every sensitive action
+   * (the original fail-safe behavior). When false (default), an unreachable
+   * backend degrades to "allow" for non-high-stakes tiers so a single outage
+   * does not mass-abort every user's agent. `high_stakes` always denies on
+   * outage regardless of this flag. See degradedDecision().
+   */
+  strictFailClosed: boolean;
 }
 
 export interface HookInput {

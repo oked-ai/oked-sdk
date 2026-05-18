@@ -5,6 +5,7 @@ import { join } from "path";
 export interface PersistedConfig {
   apiKey?: string;
   backendUrl?: string;
+  strictFailClosed?: boolean;
 }
 
 export const OKED_CONFIG_PATH = join(homedir(), ".oked", "config.json");
@@ -22,6 +23,7 @@ export function loadOKedConfig(): PersistedConfig {
     const out: PersistedConfig = {};
     if (typeof parsed.apiKey === "string" && parsed.apiKey) out.apiKey = parsed.apiKey;
     if (typeof parsed.backendUrl === "string" && parsed.backendUrl) out.backendUrl = parsed.backendUrl;
+    if (typeof parsed.strictFailClosed === "boolean") out.strictFailClosed = parsed.strictFailClosed;
     return out;
   } catch {
     return {};
