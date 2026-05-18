@@ -9,7 +9,26 @@
 
 import { strict as assert } from "node:assert";
 import { classifyOpenClawTool } from "../dist/classify-openclaw.js";
-import plugin from "../dist/index.js";
+import plugin, { OkedDeniedError } from "../dist/index.js";
+
+// A denied tool call must ABORT by throwing OkedDeniedError, not merely
+// return { block: true } (a returned shape OpenClaw was observed to ignore,
+// failing open). Asserts the throw + that the error carries the block info.
+async function assertDenied(handler, event, ctx, reMsg) {
+  let threw;
+  try {
+    await handler(event, ctx);
+  } catch (e) {
+    threw = e;
+  }
+  assert.ok(threw, `expected ${event.toolName} to be DENIED (throw), but it did not`);
+  assert.ok(
+    threw instanceof OkedDeniedError,
+    `expected OkedDeniedError, got ${threw?.name}: ${threw?.message}`,
+  );
+  assert.equal(threw.okedBlock, true);
+  if (reMsg) assert.match(threw.blockReason ?? "", reMsg);
+}
 
 // --- classifier ---
 
@@ -77,22 +96,26 @@ function makeStubApi(pluginConfig) {
 {
   // Ensure env doesn't leak an apiKey into this case.
   delete process.env.OKED_API_KEY;
-  const { api, handlers, logs } = makeStubApi({ apiKey: "" });
+  const { api, handlers, logs } = makeStubApi({
+    apiKey: "",
+    backendUrl: "http://127.0.0.1:1",
+    timeoutMs: 1500,
+  });
   plugin.register(api);
   const handler = handlers.get("before_tool_call");
   assert.ok(handler, "before_tool_call handler registered");
 
-  const result = await handler(
+  await assertDenied(
+    handler,
     { toolName: "imessage_send", params: { to: "+1", body: "hi" } },
     { toolName: "imessage_send", sessionKey: "agent:main:main" },
+    /fail-safe|deny|unreachable/i,
   );
-  assert.equal(result?.block, true, "denied when backend unreachable");
-  assert.match(result?.blockReason ?? "", /fail-safe|deny/i);
   assert.ok(
     logs.some(([lvl, m]) => lvl === "warn" && /apiKey/.test(m)),
     "warns about missing apiKey",
   );
-  console.log("OK plugin: fail-safe deny when no apiKey");
+  console.log("OK plugin: fail-safe deny (throws) when no apiKey");
 }
 
 // Case 2: safe tool -> passes through without calling backend.
@@ -123,16 +146,22 @@ function makeStubApi(pluginConfig) {
 
 // Case 4: alwaysApprove forces approval on an otherwise-normal tool.
 {
-  const { api, handlers } = makeStubApi({ alwaysApprove: ["run_report"] });
+  delete process.env.OKED_API_KEY;
+  const { api, handlers } = makeStubApi({
+    alwaysApprove: ["run_report"],
+    apiKey: "",
+    backendUrl: "http://127.0.0.1:1",
+    timeoutMs: 1500,
+  });
   plugin.register(api);
   const handler = handlers.get("before_tool_call");
-  const result = await handler(
+  // alwaysApprove -> high_stakes; no apiKey + unreachable -> fail-safe deny.
+  await assertDenied(
+    handler,
     { toolName: "run_report", params: {} },
     { toolName: "run_report" },
   );
-  // No apiKey -> fail-safe deny.
-  assert.equal(result?.block, true, "alwaysApprove forces approval");
-  console.log("OK plugin: alwaysApprove forces approval");
+  console.log("OK plugin: alwaysApprove forces approval (throws)");
 }
 
 // --- degraded mode (backend unreachable) ---
@@ -165,13 +194,13 @@ const UNREACHABLE = "http://127.0.0.1:1";
   });
   plugin.register(api);
   const handler = handlers.get("before_tool_call");
-  const result = await handler(
+  await assertDenied(
+    handler,
     { toolName: "deploy_site", params: {} },
     { toolName: "deploy_site" },
+    /high-stakes denied|fail-safe/i,
   );
-  assert.equal(result?.block, true, "high_stakes still denied on outage");
-  assert.match(result?.blockReason ?? "", /high-stakes denied|fail-safe/i);
-  console.log("OK degraded: high_stakes denied when backend unreachable");
+  console.log("OK degraded: high_stakes denied (throws) when backend unreachable");
 }
 
 // Case 7: strictFailClosed restores deny-everything on outage.
@@ -184,12 +213,46 @@ const UNREACHABLE = "http://127.0.0.1:1";
   });
   plugin.register(api);
   const handler = handlers.get("before_tool_call");
-  const result = await handler(
+  await assertDenied(
+    handler,
     { toolName: "create_note", params: {} },
     { toolName: "create_note" },
+    /strict fail-closed|fail-safe/i,
   );
-  assert.equal(result?.block, true, "strictFailClosed denies review on outage");
-  console.log("OK degraded: strictFailClosed denies review when unreachable");
+  console.log("OK degraded: strictFailClosed denies review (throws) when unreachable");
+}
+
+// Case 8: THE production bug. Backend reachable, user explicitly DENIES.
+// Previously the handler only returned { block: true } (ignored by the host,
+// so a denied `rm` still ran). It must now THROW to abort.
+{
+  const { createServer } = await import("node:http");
+  const server = createServer((_req, res) => {
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(
+      JSON.stringify({ approval_id: "ap_1", decision: "denied", status: "denied" }),
+    );
+  });
+  await new Promise((r) => server.listen(0, "127.0.0.1", r));
+  const port = server.address().port;
+  try {
+    const { api, handlers } = makeStubApi({
+      apiKey: "ok_test",
+      backendUrl: `http://127.0.0.1:${port}`,
+      timeoutMs: 3000,
+    });
+    plugin.register(api);
+    const handler = handlers.get("before_tool_call");
+    await assertDenied(
+      handler,
+      { toolName: "bash", params: { command: "rm random_table.sql" } },
+      { toolName: "bash", sessionKey: "agent:main:main" },
+      /denied via OKed/i,
+    );
+    console.log("OK plugin: explicit user DENY aborts the tool (throws)");
+  } finally {
+    server.close();
+  }
 }
 
 console.log("\nAll smoke tests passed.");
