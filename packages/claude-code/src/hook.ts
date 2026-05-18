@@ -1,5 +1,13 @@
 #!/usr/bin/env node
-import { OKedClient, classify, describe, describeFields } from "@oked/sdk";
+import {
+  OKedClient,
+  classify,
+  describe,
+  describeFields,
+  degradedDecision,
+  OKedAuthError,
+  OKedBackendUnreachableError,
+} from "@oked/sdk";
 import type { HookInput, HookOutput } from "@oked/sdk";
 
 function makeOutput(
@@ -93,20 +101,46 @@ async function main(): Promise<void> {
       );
     }
   } catch (err) {
-    const message =
-      err instanceof Error ? err.message : "Unknown error";
-
-    if (message.includes("backend error 401")) {
+    if (err instanceof OKedAuthError) {
+      // Auth misconfig is not an outage - always deny.
       log(`Invalid API key - action denied`);
       process.stdout.write(
         JSON.stringify(makeOutput("deny", "OKed: invalid API key"))
       );
+    } else if (err instanceof OKedBackendUnreachableError) {
+      const decision = degradedDecision(tier, {
+        strictFailClosed: client.strictFailClosed,
+      });
+      if (decision === "allow") {
+        log(`Backend unreachable - allowed (degraded; ${tier}, non-high-stakes)`);
+        process.stdout.write(
+          JSON.stringify(
+            makeOutput(
+              "allow",
+              "OKed backend unreachable - allowed (degraded; non-high-stakes)"
+            )
+          )
+        );
+      } else {
+        const why = client.strictFailClosed
+          ? "strict fail-closed"
+          : "high-stakes";
+        log(`Backend unreachable - ${why} denied (fail-safe)`);
+        process.stdout.write(
+          JSON.stringify(
+            makeOutput(
+              "deny",
+              `OKed backend unreachable - ${why} denied (fail-safe)`
+            )
+          )
+        );
+      }
     } else {
-      // Fail-safe: deny on any error
-      log(`Backend unreachable - action denied (fail-safe)`);
+      // Unknown error - fail safe deny.
+      log(`Unexpected error - action denied (fail-safe)`);
       process.stdout.write(
         JSON.stringify(
-          makeOutput("deny", "OKed: backend unreachable (fail-safe)")
+          makeOutput("deny", "OKed: unexpected error (fail-safe)")
         )
       );
     }

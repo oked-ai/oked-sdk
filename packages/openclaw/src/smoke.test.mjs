@@ -135,4 +135,61 @@ function makeStubApi(pluginConfig) {
   console.log("OK plugin: alwaysApprove forces approval");
 }
 
+// --- degraded mode (backend unreachable) ---
+
+const UNREACHABLE = "http://127.0.0.1:1";
+
+// Case 5: apiKey set, backend unreachable, review tier -> degraded ALLOW.
+{
+  const { api, handlers } = makeStubApi({
+    apiKey: "ok_test",
+    backendUrl: UNREACHABLE,
+    timeoutMs: 1500,
+  });
+  plugin.register(api);
+  const handler = handlers.get("before_tool_call");
+  const result = await handler(
+    { toolName: "create_note", params: {} },
+    { toolName: "create_note" },
+  );
+  assert.equal(result, undefined, "review tier degrades to allow on outage");
+  console.log("OK degraded: review allowed when backend unreachable");
+}
+
+// Case 6: apiKey set, backend unreachable, high_stakes -> still DENY.
+{
+  const { api, handlers } = makeStubApi({
+    apiKey: "ok_test",
+    backendUrl: UNREACHABLE,
+    timeoutMs: 1500,
+  });
+  plugin.register(api);
+  const handler = handlers.get("before_tool_call");
+  const result = await handler(
+    { toolName: "deploy_site", params: {} },
+    { toolName: "deploy_site" },
+  );
+  assert.equal(result?.block, true, "high_stakes still denied on outage");
+  assert.match(result?.blockReason ?? "", /high-stakes denied|fail-safe/i);
+  console.log("OK degraded: high_stakes denied when backend unreachable");
+}
+
+// Case 7: strictFailClosed restores deny-everything on outage.
+{
+  const { api, handlers } = makeStubApi({
+    apiKey: "ok_test",
+    backendUrl: UNREACHABLE,
+    timeoutMs: 1500,
+    strictFailClosed: true,
+  });
+  plugin.register(api);
+  const handler = handlers.get("before_tool_call");
+  const result = await handler(
+    { toolName: "create_note", params: {} },
+    { toolName: "create_note" },
+  );
+  assert.equal(result?.block, true, "strictFailClosed denies review on outage");
+  console.log("OK degraded: strictFailClosed denies review when unreachable");
+}
+
 console.log("\nAll smoke tests passed.");

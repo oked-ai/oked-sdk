@@ -1,5 +1,12 @@
 import type { ApprovalRequest, ApprovalResponse, OKedConfig } from "./types.js";
 import { loadOKedConfig } from "./config.js";
+import { OKedAuthError, OKedBackendUnreachableError } from "./errors.js";
+
+function envStrictFailClosed(): boolean | undefined {
+  const raw = process.env.OKED_STRICT_FAIL_CLOSED;
+  if (raw === undefined) return undefined;
+  return raw === "1" || raw.toLowerCase() === "true";
+}
 
 export class OKedClient {
   private config: OKedConfig;
@@ -14,7 +21,17 @@ export class OKedClient {
         persisted.backendUrl ||
         "https://api.oked.ai",
       timeout: config?.timeout || 300_000,
+      // Precedence: constructor > env > ~/.oked/config.json > default false.
+      strictFailClosed:
+        config?.strictFailClosed ??
+        envStrictFailClosed() ??
+        persisted.strictFailClosed ??
+        false,
     };
+  }
+
+  get strictFailClosed(): boolean {
+    return this.config.strictFailClosed;
   }
 
   get apiKey(): string {
@@ -50,18 +67,34 @@ export class OKedClient {
 
     let res: Response;
     try {
-      res = await doFetch();
-    } catch (err) {
-      if (isRetriableConnectError(err)) {
-        await new Promise((r) => setTimeout(r, 200));
+      try {
         res = await doFetch();
-      } else {
-        throw err;
+      } catch (err) {
+        if (isRetriableConnectError(err)) {
+          await new Promise((r) => setTimeout(r, 200));
+          res = await doFetch();
+        } else {
+          throw err;
+        }
       }
+    } catch (err) {
+      // Network failure or the request-level timeout firing (AbortError).
+      // Both mean we never got a decision from the backend -> treat as an
+      // outage so degraded-mode can apply.
+      throw new OKedBackendUnreachableError(
+        err instanceof Error ? `OKed backend unreachable: ${err.message}` : "OKed backend unreachable",
+        err,
+      );
     }
 
     if (!res.ok) {
       const body = await res.text().catch(() => "");
+      if (res.status === 401 || res.status === 403) {
+        throw new OKedAuthError(`OKed backend error ${res.status}: ${body}`, res.status);
+      }
+      if (res.status >= 500) {
+        throw new OKedBackendUnreachableError(`OKed backend error ${res.status}: ${body}`);
+      }
       throw new Error(`OKed backend error ${res.status}: ${body}`);
     }
 
@@ -103,6 +136,8 @@ function isRetriableConnectError(err: unknown): boolean {
   );
 }
 
+export { OKedAuthError, OKedBackendUnreachableError } from "./errors.js";
+export { TIER_ORDER, degradedDecision } from "./degraded.js";
 export { classify } from "./classify.js";
 export { describe, describeFields } from "./describe.js";
 export type { Rendered } from "./describe.js";
