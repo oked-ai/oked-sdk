@@ -76,12 +76,19 @@ permission flow (`ask`); invalid key → deny; backend unreachable → degrade
 per tier (`degradedDecision` — high-stakes / strict fail-closed deny, others
 may proceed); any unexpected error → deny. Never proceeds when in doubt.
 
-## Attribution note
+## Attribution
 
-This package authenticates with an API key (no device pairing), so its
-approvals are recorded under the generic `sdk` source. First-class
-`claude-agent-sdk` attribution in the dashboard requires the upcoming
-per-request `source` on `@oked/sdk` (tracked separately).
+Approvals are attributed by the **API key's pairing record** — not a
+per-request field. Pair a device with `client_type: "claude-agent-sdk"`
+and that clientType plus the host/device name are bonded to the issued API
+key (`device_codes` ↔ `api_keys`). Every approval made with that key is
+then attributable to `claude-agent-sdk` in the dashboard, via the same
+mechanism used for the other integrations.
+
+This package ships no pairing CLI (callback-only, BYO key), so obtain a
+`claude-agent-sdk`-typed key through your pairing flow. A key minted from
+the dashboard "create key" UI has no device record and falls back to the
+generic `sdk` bucket.
 
 ## License
 
