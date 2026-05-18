@@ -104,6 +104,31 @@ interface OpenClawPluginApi {
   ) => void;
 }
 
+/**
+ * Thrown to abort a tool call OKed denied.
+ *
+ * Why throw instead of only returning `{ block: true }`: a returned block
+ * directive is silently ignored unless the host recognizes that exact shape,
+ * which fails OPEN (observed in production: a denied `rm` still executed). A
+ * thrown exception from a pre-execution hook is the most universally honored
+ * "abort" signal across plugin/hook runtimes, so it is the safe default for a
+ * trust tool. `okedBlock`/`blockReason` are kept on the error so hosts that
+ * DO inspect a structured result still get one.
+ *
+ * Caveat: if the host fires `before_tool_call` without awaiting the async
+ * handler, neither a throw nor a return can stop the call - that is a host
+ * bug OKed cannot fix from the plugin side.
+ */
+export class OkedDeniedError extends Error {
+  readonly okedBlock = true as const;
+  readonly blockReason: string;
+  constructor(reason: string) {
+    super(reason);
+    this.name = "OkedDeniedError";
+    this.blockReason = reason;
+  }
+}
+
 const PLUGIN_ID = "oked";
 
 const plugin = {
@@ -144,6 +169,11 @@ const plugin = {
     api.on("before_tool_call", async (event, ctx) => {
       const { toolName, params } = event;
 
+      const deny = (reason: string): never => {
+        log?.info?.(`[oked] X blocking ${toolName}: ${reason}`);
+        throw new OkedDeniedError(reason);
+      };
+
       let tier: RiskTier;
       try {
         tier = classifyOpenClawTool(toolName, params, {
@@ -153,7 +183,7 @@ const plugin = {
       } catch (err) {
         // Classifier should never throw, but if it does, fail safe.
         log?.error?.(`[oked] classifier error on ${toolName}: ${String(err)}`);
-        return { block: true, blockReason: "OKed classifier error. Fail-safe deny." };
+        return deny("OKed classifier error. Fail-safe deny.");
       }
 
       // Warning is informational only; only review/high_stakes can block.
@@ -181,6 +211,9 @@ const plugin = {
         }
       }
 
+      // Compute the outcome first; only throw/return AFTER the try/catch so a
+      // deny is never swallowed by this block's own catch.
+      let outcome: "allow" | string;
       try {
         const result = await oked.approve({
           action: toolName,
@@ -191,24 +224,15 @@ const plugin = {
           ...(ctx.sessionKey && !ctx.sessionId ? { session_id: ctx.sessionKey } : {}),
           cwd: process.cwd(),
         });
-
-        if (result.approved) {
-          log?.info?.(`[oked] OK approved ${toolName}`);
-          return; // allow
-        }
-
-        log?.info?.(`[oked] X ${result.decision}, blocking ${toolName}`);
-        return {
-          block: true,
-          blockReason: `${result.decision} via OKed (approval ${result.approval_id})`,
-        };
+        outcome = result.approved
+          ? "allow"
+          : `${result.decision} via OKed (approval ${result.approval_id})`;
       } catch (err) {
         if (err instanceof OKedAuthError) {
           // Auth misconfig is not an outage - always deny.
-          log?.error?.(`[oked] invalid API key for ${toolName}. Deny.`);
-          return { block: true, blockReason: "OKed: invalid API key" };
-        }
-        if (err instanceof OKedBackendUnreachableError) {
+          log?.error?.(`[oked] invalid API key for ${toolName}.`);
+          outcome = "OKed: invalid API key";
+        } else if (err instanceof OKedBackendUnreachableError) {
           const decision = degradedDecision(tier, {
             strictFailClosed: oked.strictFailClosed,
           });
@@ -217,25 +241,26 @@ const plugin = {
             log?.warn?.(
               `[oked] backend unreachable - ${toolName} (${tier}) allowed (degraded; non-high-stakes)`,
             );
-            return; // allow
+            outcome = "allow";
+          } else {
+            const why = oked.strictFailClosed ? "strict fail-closed" : "high-stakes";
+            log?.error?.(
+              `[oked] backend unreachable - ${toolName} (${tier}) denied (${why}, fail-safe)`,
+            );
+            outcome = `OKed backend unreachable - ${why} denied (fail-safe)`;
           }
-          const why = oked.strictFailClosed ? "strict fail-closed" : "high-stakes";
-          log?.error?.(
-            `[oked] backend unreachable - ${toolName} (${tier}) denied (${why}, fail-safe)`,
-          );
-          return {
-            block: true,
-            blockReason: `OKed backend unreachable - ${why} denied (fail-safe)`,
-          };
+        } else {
+          const msg = err instanceof Error ? err.message : String(err);
+          log?.error?.(`[oked] approval request failed for ${toolName}: ${msg}.`);
+          outcome = `OKed backend error, fail-safe deny: ${msg}`;
         }
-        // Unknown error. Fail safe DENY.
-        const msg = err instanceof Error ? err.message : String(err);
-        log?.error?.(`[oked] approval request failed for ${toolName}: ${msg}. Fail-safe deny.`);
-        return {
-          block: true,
-          blockReason: `OKed backend error, fail-safe deny: ${msg}`,
-        };
       }
+
+      if (outcome === "allow") {
+        log?.info?.(`[oked] OK ${toolName} allowed`);
+        return; // allow
+      }
+      return deny(outcome); // throws OkedDeniedError - strongest abort signal
     });
   },
 };
