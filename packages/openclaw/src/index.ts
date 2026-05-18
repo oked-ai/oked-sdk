@@ -24,7 +24,15 @@
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { OKedClient, describe as describeAction, type RiskTier } from "@oked/sdk";
+import {
+  OKedClient,
+  describe as describeAction,
+  degradedDecision,
+  OKedAuthError,
+  OKedBackendUnreachableError,
+  TIER_ORDER,
+  type RiskTier,
+} from "@oked/sdk";
 import { classifyOpenClawTool, type ClassifyOptions } from "./classify-openclaw.js";
 
 function tryStatRmTarget(command: string): number | undefined {
@@ -39,13 +47,6 @@ function tryStatRmTarget(command: string): number | undefined {
   }
 }
 
-const TIER_ORDER: Record<RiskTier, number> = {
-  safe: 0,
-  warning: 1,
-  review: 2,
-  high_stakes: 3,
-};
-
 const APPROVAL_TIERS: ReadonlySet<RiskTier> = new Set(["review", "high_stakes"]);
 
 interface OkedPluginConfig extends ClassifyOptions {
@@ -54,6 +55,12 @@ interface OkedPluginConfig extends ClassifyOptions {
   minTier?: RiskTier;
   /** Approval timeout in ms; defaults to OKed backend default. */
   timeoutMs?: number;
+  /**
+   * When true, an unreachable backend hard-denies every sensitive tool call.
+   * When false (default), it degrades to allow for non-high-stakes tiers so a
+   * single outage does not mass-abort the agent. high_stakes always denies.
+   */
+  strictFailClosed?: boolean;
 }
 
 interface BeforeToolCallEvent {
@@ -113,6 +120,9 @@ const plugin = {
       apiKey: cfg.apiKey ?? process.env.OKED_API_KEY,
       backendUrl: cfg.backendUrl ?? process.env.OKED_BACKEND_URL,
       ...(cfg.timeoutMs ? { timeout: cfg.timeoutMs } : {}),
+      ...(cfg.strictFailClosed !== undefined
+        ? { strictFailClosed: cfg.strictFailClosed }
+        : {}),
     });
 
     if (!oked.apiKey) {
@@ -193,7 +203,32 @@ const plugin = {
           blockReason: `${result.decision} via OKed (approval ${result.approval_id})`,
         };
       } catch (err) {
-        // Backend unreachable, network error, etc. Fail safe DENY.
+        if (err instanceof OKedAuthError) {
+          // Auth misconfig is not an outage - always deny.
+          log?.error?.(`[oked] invalid API key for ${toolName}. Deny.`);
+          return { block: true, blockReason: "OKed: invalid API key" };
+        }
+        if (err instanceof OKedBackendUnreachableError) {
+          const decision = degradedDecision(tier, {
+            strictFailClosed: oked.strictFailClosed,
+          });
+          if (decision === "allow") {
+            // OpenClaw has no native "ask"; degraded non-high-stakes proceeds.
+            log?.warn?.(
+              `[oked] backend unreachable - ${toolName} (${tier}) allowed (degraded; non-high-stakes)`,
+            );
+            return; // allow
+          }
+          const why = oked.strictFailClosed ? "strict fail-closed" : "high-stakes";
+          log?.error?.(
+            `[oked] backend unreachable - ${toolName} (${tier}) denied (${why}, fail-safe)`,
+          );
+          return {
+            block: true,
+            blockReason: `OKed backend unreachable - ${why} denied (fail-safe)`,
+          };
+        }
+        // Unknown error. Fail safe DENY.
         const msg = err instanceof Error ? err.message : String(err);
         log?.error?.(`[oked] approval request failed for ${toolName}: ${msg}. Fail-safe deny.`);
         return {
