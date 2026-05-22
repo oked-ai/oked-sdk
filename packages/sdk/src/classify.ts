@@ -322,6 +322,10 @@ function classifyMcpTool(toolName: string): RiskTier {
   if (tool.startsWith("list_") || tool.startsWith("get_") || tool.startsWith("search_")) {
     return "safe";
   }
+  if (tool.endsWith("_status") || tool.endsWith("_info") || tool.endsWith("_count") ||
+      tool.endsWith("_exists") || tool.endsWith("_version") || tool.endsWith("_health")) {
+    return "safe";
+  }
   if (tool.startsWith("delete_") || tool.startsWith("drop_") || tool.startsWith("remove_")) {
     return "high_stakes";
   }
