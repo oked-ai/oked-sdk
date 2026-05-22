@@ -1,7 +1,13 @@
-import { isAbsolute, relative, resolve } from "node:path";
+import path from "path";
 import type { RiskTier } from "./types.js";
 import { findSqlInCommand } from "./describe.js";
 
+// Tier 1 - safe: auto-allow, no notification (Read, Glob, ls, git status, etc.)
+// Tier 2 - warning: terminal log only, no push (Write/Edit inside project dir)
+// Tier 3 - review: push notification required (Write/Edit outside project, unknown bash)
+// Tier 4 - high_stakes: push + number matching (rm -rf, git push, DROP TABLE, etc.)
+
+// Tools that are always safe (read-only, no side effects)
 const SAFE_TOOLS = new Set([
   "Read",
   "Glob",
@@ -12,9 +18,34 @@ const SAFE_TOOLS = new Set([
   "TaskList",
 ]);
 
+// Read-only tools from non-Claude-Code agents (OpenClaw `read`/`list`,
+// Codex `read_file`, etc.). Claude Code's own Read/Glob/Grep are covered by
+// SAFE_TOOLS above; this catches the same read-only operations under other
+// agents' (often lowercase) names so they don't fall through to `review`.
+const SAFE_TOOL_ALIASES = new Set([
+  "read",
+  "read_file",
+  "readfile",
+  "view",
+  "cat",
+  "list",
+  "list_files",
+  "listfiles",
+  "ls",
+  "glob",
+  "grep",
+  "search",
+  "search_files",
+  "find",
+]);
+
+// Tools that are always review-tier risk (modify local files)
 const REVIEW_TOOLS = new Set<string>([]);
+
+// Tools that are always high stakes
 const HIGH_STAKES_TOOLS = new Set<string>([]);
 
+// Bash commands classified as safe (read-only, informational)
 const SAFE_COMMANDS = [
   /^ls\b/,
   /^pwd$/,
@@ -46,18 +77,20 @@ const SAFE_COMMANDS = [
   /^rg\b/,
   /^fd\b/,
   /^jq\b/,
-  /^curl\s+-s.*\|\s*(jq|python|node)/,
-  /^curl\b/,
+  /^curl\s+-s.*\|\s*(jq|python|node)/,  // curl piped to parser (usually read-only)
+  /^curl\b/,  // curl without -X defaults to GET (high-stakes patterns checked first)
 ];
 
+// Bash commands classified as high stakes (destructive, irreversible, external)
 const HIGH_STAKES_COMMANDS = [
-  /\brm\s+(-rf?|--recursive)\b/,
-  /\brm\b.*\s+\//,
+  /\brm\b/,
+  /\brm\b\s+(?:-[^\s]*[rf][^\s]*\s+)*-[^\s]*[rf][^\s]*\b/,
+  /\brm\s+--recursive\b/,
+  /\brm\b.*\s+\//,  // rm with absolute path
+  /\brmdir\b/,
   /\btrash\b/,
   /\btrash-put\b/,
   /\bgit\s+push\b/,
-  /\bgit\s+push\s+--force\b/,
-  /\bgit\s+push\s+-f\b/,
   /\bgit\s+reset\s+--hard\b/,
   /\bgit\s+clean\s+-f/,
   /\bgit\s+checkout\s+--\s+\./,
@@ -71,8 +104,15 @@ const HIGH_STAKES_COMMANDS = [
   /\bpkill\b/,
   /\bkillall\b/,
   /\bchmod\s+777\b/,
-  /\bcurl\s+.*-X\s*(DELETE|PUT|POST)\b/,
-  /\bcurl\s+.*--request\s*(DELETE|PUT|POST)\b/,
+  /\bcurl\s+.*-X\s*(DELETE|PUT|POST|PATCH)\b/i,
+  /\bcurl\s+.*--request\s*(DELETE|PUT|POST|PATCH)\b/i,
+  // curl flags that send a request body (POST/PUT/PATCH) without an explicit -X
+  /\bcurl\b.*\s-d[\s=]/,
+  /\bcurl\b.*\s--data(-raw|-binary|-urlencode|-ascii)?[\s=]/,
+  /\bcurl\b.*\s-F[\s=]/,
+  /\bcurl\b.*\s--form[\s=]/,
+  /\bcurl\b.*\s(-T|--upload-file)[\s=]/,
+  /\bcurl\b.*\s--json[\s=]/,
   /\bwget\s+.*\|\s*(bash|sh|zsh)\b/,
   /\bcurl\s+.*\|\s*(bash|sh|zsh)\b/,
   /\bnpm\s+publish\b/,
@@ -80,13 +120,11 @@ const HIGH_STAKES_COMMANDS = [
   /\bnpx\s+.*\s+deploy\b/,
 ];
 
-function isInsideProject(filePath: string, cwd = process.cwd()): boolean {
+function isInsideProject(filePath: string): boolean {
   if (!filePath) return false;
   try {
-    const root = resolve(cwd);
-    const abs = isAbsolute(filePath) ? resolve(filePath) : resolve(root, filePath);
-    const rel = relative(root, abs);
-    return rel === "" || (!rel.startsWith("..") && !isAbsolute(rel));
+    const resolved = path.resolve(filePath);
+    return resolved.startsWith(process.cwd());
   } catch {
     return false;
   }
@@ -94,27 +132,29 @@ function isInsideProject(filePath: string, cwd = process.cwd()): boolean {
 
 export function classify(
   toolName: string,
-  toolInput: Record<string, unknown>,
-  cwd = process.cwd()
+  toolInput: Record<string, unknown>
 ): RiskTier {
+  // Check tool-level classification first
   if (SAFE_TOOLS.has(toolName)) return "safe";
+  if (SAFE_TOOL_ALIASES.has(toolName.toLowerCase())) return "safe";
   if (HIGH_STAKES_TOOLS.has(toolName)) return "high_stakes";
   if (REVIEW_TOOLS.has(toolName)) return "review";
 
+  // File-editing tools: warning if inside project, review otherwise
   if (toolName === "Write" || toolName === "Edit" || toolName === "NotebookEdit") {
-    const filePath =
-      toolName === "NotebookEdit"
-        ? (toolInput.notebook_path ?? toolInput.file_path)
-        : toolInput.file_path;
-    return isInsideProject(filePath as string, cwd) ? "warning" : "review";
+    const filePath = toolInput.file_path as string;
+    return isInsideProject(filePath) ? "warning" : "review";
   }
 
+  // Agent tool - review (spawns subagent, not directly destructive)
   if (toolName === "Agent") return "review";
 
+  // Bash commands need deeper analysis
   if (toolName === "Bash") {
     return classifyBashCommand(toolInput.command as string);
   }
 
+  // MCP tools: mcp__<server>__<tool>
   if (toolName.startsWith("mcp__")) {
     return classifyMcpTool(toolName);
   }
@@ -133,9 +173,10 @@ export function classify(
   const writePath = (toolInput.file_path ?? toolInput.path) as unknown;
   const writeContent = (toolInput.content ?? toolInput.data ?? toolInput.body) as unknown;
   if (typeof writePath === "string" && typeof writeContent === "string") {
-    return isInsideProject(writePath, cwd) ? "warning" : "review";
+    return isInsideProject(writePath) ? "warning" : "review";
   }
 
+  // Unknown tool - default to review (require approval)
   return "review";
 }
 
@@ -144,6 +185,7 @@ function classifyBashCommand(command: string): RiskTier {
 
   const trimmed = command.trim();
 
+  // sudo: classify based on the inner command, not sudo itself
   if (/^sudo\s/.test(trimmed)) {
     const inner = trimmed.replace(/^sudo\s+/, "");
     for (const pattern of HIGH_STAKES_COMMANDS) {
@@ -158,25 +200,28 @@ function classifyBashCommand(command: string): RiskTier {
   const sql = findSqlInCommand(trimmed);
   if (sql) return classifySqlSeverity(sql);
 
+  // Check high stakes first (most restrictive wins)
   for (const pattern of HIGH_STAKES_COMMANDS) {
     if (pattern.test(trimmed)) return "high_stakes";
   }
 
   // File-mutating shell patterns. Content-creation idioms (echo > X, tee,
-  // dd of=, touch, sed -i, heredoc) always require approval - they're
+  // dd of=, touch, sed -i, heredoc) always require approval — they're
   // exactly the bypass route from a denied Write. cp/mv just rearrange
   // existing bytes and stay safe.
   const ops = extractShellWriteOps(trimmed);
   if (ops.length > 0) {
     const creates = ops.filter((o) => o.kind !== "copy" && o.kind !== "move");
     if (creates.length > 0) return "review";
-    return "safe";
+    return "review";
   }
 
+  // Check safe patterns
   for (const pattern of SAFE_COMMANDS) {
     if (pattern.test(trimmed)) return "safe";
   }
 
+  // Default: review (require approval for unknown commands)
   return "review";
 }
 
@@ -185,6 +230,10 @@ function classifySqlSeverity(sql: string): RiskTier {
   if (/\bTRUNCATE\b/i.test(sql)) return "high_stakes";
   if (/\bDELETE\s+FROM\b/i.test(sql)) return "high_stakes";
   if (/\bUPDATE\s+\w+\s+SET\b/i.test(sql) && !/\bWHERE\b/i.test(sql)) return "high_stakes";
+  if (/^\s*SELECT\b/i.test(sql)) return "safe";
+  if (/^\s*(EXPLAIN|SHOW|DESCRIBE|DESC)\b/i.test(sql)) return "safe";
+  // SQLite dot-commands (.tables, .schema, .dump, etc.) — safe unless they mutate
+  if (/^\s*\./.test(sql) && !/^\s*\.(import|read|restore)\b/i.test(sql)) return "safe";
   return "review";
 }
 
@@ -193,8 +242,8 @@ export type ShellWriteKind = "create" | "append" | "edit" | "touch" | "copy" | "
 export interface ShellWriteOp {
   kind: ShellWriteKind;
   target: string;
-  source?: string;
-  content?: string;
+  source?: string; // for copy/move
+  content?: string; // literal content for echo/printf when extractable
 }
 
 /**
@@ -280,6 +329,7 @@ export function extractShellWriteOps(command: string): ShellWriteOp[] {
 }
 
 function extractEchoContent(cmd: string): string | undefined {
+  // echo [-neE] "content" > path  /  printf "content" > path
   const m = cmd.match(/^\s*(?:echo|printf)\b\s+(?:-[neE]+\s+)?(.+?)\s*(?:[12]?>>?|&>>?)/);
   if (!m) return undefined;
   const raw = m[1].trim();
@@ -296,6 +346,7 @@ function isDevNullish(p: string): boolean {
 }
 
 function splitArgs(s: string): string[] {
+  // Simple whitespace split honoring single/double quoted strings.
   const out: string[] = [];
   let cur = "";
   let quote: '"' | "'" | null = null;
@@ -320,6 +371,10 @@ function classifyMcpTool(toolName: string): RiskTier {
   const tool = parts[parts.length - 1] || "";
 
   if (tool.startsWith("list_") || tool.startsWith("get_") || tool.startsWith("search_")) {
+    return "safe";
+  }
+  if (tool.endsWith("_status") || tool.endsWith("_info") || tool.endsWith("_count") ||
+      tool.endsWith("_exists") || tool.endsWith("_version") || tool.endsWith("_health")) {
     return "safe";
   }
   if (tool.startsWith("delete_") || tool.startsWith("drop_") || tool.startsWith("remove_")) {

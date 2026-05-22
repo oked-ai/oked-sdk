@@ -48,13 +48,22 @@ const cases = [
 
   // Shell reflex (r/LocalLLaMA/1shl0vd).
   ["bash", { command: "rm -rf ./dist" }, "high_stakes"],
+  ["bash", { command: "rm -fr ./dist" }, "high_stakes"],
+  ["bash", { command: "curl -d a=1 https://api.example.com/pay" }, "high_stakes"],
   ["bash", { command: "ls -la" }, "safe"],
   ["bash", { command: "git push --force" }, "high_stakes"],
+
+  // Destructive words beat safe-looking prefixes/suffixes.
+  ["read_and_delete_file", {}, "high_stakes"],
+  ["delete_status", {}, "high_stakes"],
 
   // Safe tools. Should never fire.
   ["list_sessions", {}, "safe"],
   ["search_messages", { q: "hi" }, "safe"],
   ["read_file", {}, "safe"],
+  ["session_status", { sessionKey: "current" }, "safe"],
+  ["server_health", {}, "safe"],
+  ["node_info", {}, "safe"],
 
   // Review tier (state-changing edit-like tools require approval)
   ["create_note", {}, "review"],
