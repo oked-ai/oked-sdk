@@ -55,6 +55,9 @@ const cases = [
   ["list_sessions", {}, "safe"],
   ["search_messages", { q: "hi" }, "safe"],
   ["read_file", {}, "safe"],
+  ["session_status", { sessionKey: "current" }, "safe"],
+  ["server_health", {}, "safe"],
+  ["node_info", {}, "safe"],
 
   // Review tier (state-changing edit-like tools require approval)
   ["create_note", {}, "review"],

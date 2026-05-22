@@ -27,6 +27,12 @@ const SAFE_PATTERNS = [
   /^view_/,
   /^describe_/,
   /^inspect_/,
+  /_status$/,
+  /_info$/,
+  /_count$/,
+  /_exists$/,
+  /_version$/,
+  /_health$/,
 ];
 
 const HIGH_STAKES_PATTERNS = [
