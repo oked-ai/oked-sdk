@@ -17,22 +17,26 @@ const DIFF_HUNK_MAX_LINES = 10;
 import type { OperationKind } from "./kinds.js";
 
 export interface Rendered {
-  title: string;
-  target?: string;
-  annotation?: string;
+  title: string;        // operation label, e.g. "Create file", "Drop table"
+  target?: string;      // primary target rendered on its own line in mono
+  annotation?: string;  // small italic suffix to the target line, e.g. "(11 B)"
   subline?: string;
   body?: string;
   footnote?: string;
-  kind: OperationKind;
+  kind: OperationKind;  // stable analytics category
 }
 
 export function describe(
   toolName: string,
   toolInput: Record<string, unknown>
 ): string {
+  // Single-line consumers (audit logs, SMS) get title + target inlined.
   const r = summarize(toolName, toolInput);
   if (r.target) {
+    // Reorder phrasing for "Delete X recursively" / "Force push branch to remote"
     if (r.title === "Delete file recursively") return `Delete ${r.target} recursively`;
+    if (/^Delete \d+ files/.test(r.title)) return r.title;
+    if (/^(Drop|Truncate|Delete .* from) \d+/.test(r.title)) return r.title;
     if (r.title === "Push" || r.title === "Force push") return `${r.title} ${r.target}`;
     return `${r.title} ${r.target}`;
   }
@@ -53,9 +57,9 @@ export function describeFields(
   return out;
 }
 
-// -----------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────
 // Top-level dispatch
-// -----------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────
 
 function summarize(toolName: string, toolInput: Record<string, unknown>): Rendered {
   const fileSizeBytes = typeof toolInput._file_size_bytes === "number" ? toolInput._file_size_bytes : undefined;
@@ -76,6 +80,7 @@ function summarize(toolName: string, toolInput: Record<string, unknown>): Render
     return summarizeMcp(toolName, toolInput);
   }
 
+  // send_email tool name without mcp__ prefix
   if (toolName === "send_email") {
     return summarizeEmail(toolInput);
   }
@@ -96,9 +101,9 @@ function summarize(toolName: string, toolInput: Record<string, unknown>): Render
   return summarizeFallback(toolName, toolInput);
 }
 
-// -----------------------------------------------------------------------
-// Bash / shell - semantic rerendering
-// -----------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────
+// Bash / shell — semantic rerendering
+// ───────────────────────────────────────────────────────────────────────
 
 function summarizeBash(command: string, sizeBytes?: number): Rendered {
   const cmd = (command || "").trim();
@@ -114,16 +119,28 @@ function summarizeBash(command: string, sizeBytes?: number): Rendered {
   const shellWrite = summarizeShellWrite(cmd);
   if (shellWrite) return shellWrite;
 
-  // rm / trash - file deletion
+  // rm / trash — file deletion
   const rmMatch = cmd.match(/\b(?:rm|trash|trash-put|rmdir)\s+(?:(-rf?|-fr|--recursive|-r)\s+)?(.+)$/);
   if (rmMatch) {
     const recursive = !!rmMatch[1] || /^rm\s+-/.test(cmd);
-    const target = rmMatch[2].trim().split(/\s+/)[0] || "files";
-    const sqlExt = !recursive && /\.sql$/i.test(target);
+    const targets = parseRmTargets(rmMatch[2]);
+
+    if (targets.length <= 1) {
+      const target = targets[0] || "files";
+      const sqlExt = !recursive && /\.sql$/i.test(target);
+      return {
+        title: recursive ? "Delete file recursively" : sqlExt ? "Delete SQL file" : "Delete file",
+        target: shortenPath(stripQuotes(target)),
+        annotation: sizeBytes !== undefined ? `(${formatByteCount(sizeBytes)})` : undefined,
+        kind: "file_delete",
+      };
+    }
+
     return {
-      title: recursive ? "Delete file recursively" : sqlExt ? "Delete SQL file" : "Delete file",
-      target: shortenPath(stripQuotes(target)),
-      annotation: sizeBytes !== undefined ? `(${formatByteCount(sizeBytes)})` : undefined,
+      title: recursive
+        ? `Delete ${targets.length} files recursively`
+        : `Delete ${targets.length} files`,
+      target: targets.map(t => shortenPath(stripQuotes(t))).join("\n"),
       kind: "file_delete",
     };
   }
@@ -131,13 +148,13 @@ function summarizeBash(command: string, sizeBytes?: number): Rendered {
   // git
   if (/\bgit\s+push\s+(?:--force|-f)\b/.test(cmd)) {
     const m = cmd.match(/git\s+push\s+(?:--force|-f)\s+(\S+)\s+(\S+)/);
-    return { title: "Force push", target: m ? `${m[2]} -> ${m[1]}` : "current branch", kind: "git_force_push" };
+    return { title: "Force push", target: m ? `${m[2]} → ${m[1]}` : "current branch", kind: "git_force_push" };
   }
   if (/\bgit\s+push\b/.test(cmd)) {
     const m = cmd.match(/git\s+push\s+(\S+)\s+(\S+)/);
-    return { title: "Push", target: m ? `${m[2]} -> ${m[1]}` : "current branch", kind: "git_push" };
+    return { title: "Push", target: m ? `${m[2]} → ${m[1]}` : "current branch", kind: "git_push" };
   }
-  if (/\bgit\s+reset\s+--hard\b/.test(cmd)) return { title: "Hard reset - discard all local changes", kind: "git_reset_hard" };
+  if (/\bgit\s+reset\s+--hard\b/.test(cmd)) return { title: "Hard reset — discard all local changes", kind: "git_reset_hard" };
   if (/\bgit\s+clean\s+-f/.test(cmd)) return { title: "Remove all untracked files", kind: "git_clean" };
   if (/\bgit\s+checkout\s+--\s+\./.test(cmd)) return { title: "Discard all unstaged changes", kind: "git_checkout" };
   if (/\bgit\s+restore\s+--staged\s+\./.test(cmd)) return { title: "Unstage all staged changes", kind: "git_restore" };
@@ -155,7 +172,7 @@ function summarizeBash(command: string, sizeBytes?: number): Rendered {
     const kind: OperationKind = method === "DELETE" ? "http_delete" : method === "POST" ? "http_post" : method === "PUT" ? "http_put" : "http_post";
     return {
       title: `${method} request to ${host}`,
-      body: cmd.length > COMMAND_INLINE_MAX ? cmd : undefined,
+      body: cmd.length > COMMAND_INLINE_MAX ? truncateBody(cmd) : undefined,
       kind,
     };
   }
@@ -163,13 +180,13 @@ function summarizeBash(command: string, sizeBytes?: number): Rendered {
     const url = cmd.match(/https?:\/\/[^\s|'"]+/)?.[0];
     return {
       title: `Download and execute script${url ? ` from ${extractHost(url)}` : ""}`,
-      body: cmd,
+      body: truncateBody(cmd),
       kind: "http_pipe_to_shell",
     };
   }
 
   // Multi-step pipeline
-  if (/&&|\|\||;/.test(cmd)) return { title: "Run command", body: cmd, kind: "shell_pipeline" };
+  if (/&&|\|\||;/.test(cmd)) return { title: "Run command", body: truncateBody(cmd), kind: "shell_pipeline" };
 
   // docker
   if (/\bdocker\s+compose\s+down\b/.test(cmd)) return { title: "Stop and remove Docker containers", kind: "docker_down" };
@@ -187,21 +204,22 @@ function summarizeBash(command: string, sizeBytes?: number): Rendered {
   if (/\bnpm\s+test\b/.test(cmd)) return { title: "Run npm tests", kind: "npm_test" };
   if (/\bnpm\s+publish\b/.test(cmd)) return { title: "Publish package to npm", kind: "npm_publish" };
   if (/\bnpm\s+unpublish\b/.test(cmd)) return { title: "Unpublish package from npm", kind: "npm_unpublish" };
-  if (/\bnpx\s+.*\s+deploy\b/.test(cmd)) return { title: "Deploy via npx", body: cmd, kind: "npx_deploy" };
+  if (/\bnpx\s+.*\s+deploy\b/.test(cmd)) return { title: "Deploy via npx", body: truncateBody(cmd), kind: "npx_deploy" };
 
   // kill / sudo / chmod
-  if (/\bkillall\b|\bpkill\b/.test(cmd)) return { title: "Kill processes", body: cmd, kind: "kill_process" };
-  if (/\bkill\b/.test(cmd)) return { title: "Kill process", body: cmd, kind: "kill_process" };
+  if (/\bkillall\b|\bpkill\b/.test(cmd)) return { title: "Kill processes", body: truncateBody(cmd), kind: "kill_process" };
+  if (/\bkill\b/.test(cmd)) return { title: "Kill process", body: truncateBody(cmd), kind: "kill_process" };
   if (/\bsudo\b/.test(cmd)) {
     const inner = cmd.replace(/^sudo\s+/, "");
-    return { title: `Run as root: ${truncate(inner, COMMAND_INLINE_MAX)}`, body: cmd, kind: "sudo" };
+    return { title: `Run as root: ${truncate(inner, COMMAND_INLINE_MAX)}`, body: truncateBody(cmd), kind: "sudo" };
   }
   if (/\bchmod\s+777\b/.test(cmd)) {
     const target = cmd.match(/chmod\s+777\s+(\S+)/)?.[1] || "file";
     return { title: `Make ${target} world-writable (chmod 777)`, kind: "chmod_777" };
   }
 
-  if (cmd.length > COMMAND_INLINE_MAX) return { title: "Run command", body: cmd, kind: "unknown_bash" };
+  // Long or short — generic command
+  if (cmd.length > COMMAND_INLINE_MAX) return { title: "Run command", body: truncateBody(cmd), kind: "unknown_bash" };
   return { title: cmd, kind: "unknown_bash" };
 }
 
@@ -223,13 +241,13 @@ function summarizeShellWrite(cmd: string): Rendered | null {
     case "copy":
       return {
         title: "Copy file",
-        target: op.source ? `${shortenPath(op.source)} -> ${path}` : path,
+        target: op.source ? `${shortenPath(op.source)} → ${path}` : path,
         kind: "file_copy",
       };
     case "move":
       return {
         title: "Move file",
-        target: op.source ? `${shortenPath(op.source)} -> ${path}` : path,
+        target: op.source ? `${shortenPath(op.source)} → ${path}` : path,
         kind: "file_move",
       };
   }
@@ -237,6 +255,9 @@ function summarizeShellWrite(cmd: string): Rendered | null {
 
 export const SQL_KEYWORDS_RE = /\b(DROP\s+(TABLE|DATABASE|INDEX|VIEW)|TRUNCATE|DELETE\s+FROM|UPDATE\s+\w+\s+SET|INSERT\s+(?:OR\s+\w+\s+)?INTO|CREATE\s+(?:TABLE|INDEX|VIEW)|ALTER\s+TABLE)\b/i;
 
+// Extract SQL statements from Python/Ruby/JS script bodies — pulls out the
+// string arguments to .execute(), .query(), .run() etc. rather than
+// returning the whole script as the "sql" body.
 function extractSqlFromScriptBody(body: string): string | null {
   const sqls: string[] = [];
   const re = /\.(?:execute|executemany|query|run|exec)\s*\(\s*(?:["'`])([\s\S]+?)(?:["'`])\s*[,)]/gi;
@@ -248,7 +269,10 @@ function extractSqlFromScriptBody(body: string): string | null {
 }
 
 export function findSqlInCommand(cmd: string): string | null {
-  // Inline interpreter flags: node -e, python -c, ruby -e, perl -e.
+  // Inline interpreter flags: node -e, python -c, ruby -e, perl -e. Checked
+  // before the SQL-CLI prefix matchers below because those prefixes (e.g.
+  // `sqlite3`) can appear as substrings inside the interpreter body (e.g.
+  // `require('better-sqlite3')`) and would extract the wrong fragment.
   const inline = cmd.match(/\b(?:node|python\d?|ruby|perl|deno|bun)\s+-[ec]\s+(?:"([\s\S]+?)"|'([\s\S]+?)')\s*$/);
   if (inline) {
     const body = inline[1] ?? inline[2];
@@ -257,13 +281,15 @@ export function findSqlInCommand(cmd: string): string | null {
     }
   }
 
-  // psql -c "..." / mysql -e "..." / sqlite3 db "..."
+  // psql -c "..." / mysql -e "..." / sqlite3 db "..." — outer-quoted statement.
   const dq = cmd.match(/(?:psql|mysql|sqlite3?|mariadb)\b[^"]*"([\s\S]+?)"\s*$/i);
   if (dq) return dq[1];
   const sq = cmd.match(/(?:psql|mysql|sqlite3?|mariadb)\b[^']*'([\s\S]+?)'\s*$/i);
   if (sq) return sq[1];
 
-  // Heredoc-piped script
+  // Heredoc-piped script: <<EOF / <<'EOF' / <<"EOF" / <<-EOF.
+  // Single capture for the delimiter (quote-stripped) lets the closing
+  // anchor reference it without going through alternation.
   const hd = cmd.match(/<<-?\s*['"]?(\w+)['"]?[ \t]*\r?\n([\s\S]*?)\r?\n[ \t]*\1\b/);
   if (hd) {
     const body = hd[2];
@@ -281,36 +307,75 @@ export function findSqlInCommand(cmd: string): string | null {
 
 function summarizeSql(sql: string, originalCommand: string): Rendered {
   const trimmed = sql.replace(/\s+/g, " ").trim();
-  const dropM = trimmed.match(/\bDROP\s+(TABLE|DATABASE|INDEX|VIEW)\s+(?:IF\s+EXISTS\s+)?["`]?([\w.]+)["`]?/i);
-  if (dropM) {
+
+  // DROP — collect all targets for compound statements
+  const dropMatches = [...trimmed.matchAll(/\bDROP\s+(TABLE|DATABASE|INDEX|VIEW)\s+(?:IF\s+EXISTS\s+)?["`]?([\w.]+)["`]?/gi)];
+  if (dropMatches.length === 1) {
     return {
-      title: `Drop ${dropM[1].toLowerCase()}`,
-      target: dropM[2],
-      body: sql.length > COMMAND_INLINE_MAX ? sql : undefined,
+      title: `Drop ${dropMatches[0][1].toLowerCase()}`,
+      target: dropMatches[0][2],
+      body: sql.length > COMMAND_INLINE_MAX ? truncateBody(sql) : undefined,
       kind: "sql_drop",
     };
   }
-  const truncateM = trimmed.match(/\bTRUNCATE\s+(?:TABLE\s+)?["`]?([\w.]+)["`]?/i);
-  if (truncateM) {
-    return { title: "Truncate table", target: truncateM[1], annotation: "(delete all rows)", body: sql, kind: "sql_truncate" };
+  if (dropMatches.length > 1) {
+    const names = dropMatches.map(m => m[2]);
+    const types = new Set(dropMatches.map(m => m[1].toLowerCase()));
+    const typeLabel = types.size === 1 ? `${[...types][0]}s` : "objects";
+    return {
+      title: `Drop ${dropMatches.length} ${typeLabel}`,
+      target: names.join("\n"),
+      kind: "sql_drop",
+    };
   }
+
+  // TRUNCATE — collect all targets
+  const truncMatches = [...trimmed.matchAll(/\bTRUNCATE\s+(?:TABLE\s+)?["`]?([\w.]+)["`]?/gi)];
+  if (truncMatches.length === 1) {
+    return { title: "Truncate table", target: truncMatches[0][1], annotation: "(delete all rows)", body: truncateBody(sql), kind: "sql_truncate" };
+  }
+  if (truncMatches.length > 1) {
+    return {
+      title: `Truncate ${truncMatches.length} tables`,
+      target: truncMatches.map(m => m[1]).join("\n"),
+      annotation: "(delete all rows)",
+      kind: "sql_truncate",
+    };
+  }
+
   const alterM = trimmed.match(/\bALTER\s+TABLE\s+["`]?([\w.]+)["`]?/i);
   if (alterM) {
-    return { title: "Alter table", target: alterM[1], body: sql, kind: "sql_alter" };
+    return { title: "Alter table", target: alterM[1], body: truncateBody(sql), kind: "sql_alter" };
   }
   const createM = trimmed.match(/\bCREATE\s+(TABLE|INDEX|VIEW)\s+(?:IF\s+NOT\s+EXISTS\s+)?["`]?([\w.]+)["`]?/i);
   if (createM) {
-    return { title: `Create ${createM[1].toLowerCase()}`, target: createM[2], body: sql, kind: "sql_create" };
+    return { title: `Create SQL ${createM[1].toLowerCase()}`, target: createM[2], body: truncateBody(sql), kind: "sql_create" };
   }
-  const deleteM = trimmed.match(/\bDELETE\s+FROM\s+["`]?([\w.]+)["`]?/i);
-  if (deleteM) {
-    const thisStmt = stmtSlice(trimmed, deleteM.index ?? 0);
+
+  // DELETE FROM — collect all targets
+  const deleteMatches = [...trimmed.matchAll(/\bDELETE\s+FROM\s+["`]?([\w.]+)["`]?/gi)];
+  if (deleteMatches.length === 1) {
+    const thisStmt = stmtSlice(trimmed, deleteMatches[0].index ?? 0);
     const hasWhere = /\bWHERE\b/i.test(thisStmt);
     return {
       title: hasWhere ? "Delete rows from" : "Delete ALL rows from",
-      target: deleteM[1],
-      body: sql,
+      target: deleteMatches[0][1],
+      body: truncateBody(sql),
       kind: hasWhere ? "sql_delete_rows" : "sql_delete_all_rows",
+    };
+  }
+  if (deleteMatches.length > 1) {
+    const anyWithoutWhere = deleteMatches.some(m => {
+      const stmt = stmtSlice(trimmed, m.index ?? 0);
+      return !/\bWHERE\b/i.test(stmt);
+    });
+    return {
+      title: anyWithoutWhere
+        ? `Delete ALL rows from ${deleteMatches.length} tables`
+        : `Delete rows from ${deleteMatches.length} tables`,
+      target: deleteMatches.map(m => m[1]).join("\n"),
+      body: truncateBody(sql),
+      kind: anyWithoutWhere ? "sql_delete_all_rows" : "sql_delete_rows",
     };
   }
   const updateM = trimmed.match(/\bUPDATE\s+["`]?([\w.]+)["`]?\s+SET/i);
@@ -320,20 +385,20 @@ function summarizeSql(sql: string, originalCommand: string): Rendered {
     return {
       title: hasWhere ? "Update rows in" : "Update EVERY row in",
       target: updateM[1],
-      body: sql,
+      body: truncateBody(sql),
       kind: hasWhere ? "sql_update_rows" : "sql_update_every_row",
     };
   }
   const insertM = trimmed.match(/\bINSERT\s+(?:OR\s+\w+\s+)?INTO\s+["`]?([\w.]+)["`]?/i);
   if (insertM) {
-    return { title: "Insert rows into", target: insertM[1], body: sql, kind: "sql_insert" };
+    return { title: "Insert rows into", target: insertM[1], body: truncateBody(sql), kind: "sql_insert" };
   }
-  return { title: "Run SQL statement", body: sql || originalCommand, kind: "sql_query" };
+  return { title: "Run SQL statement", body: truncateBody(sql || originalCommand), kind: "sql_query" };
 }
 
-// -----------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────
 // File operations
-// -----------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────
 
 function summarizeWrite(input: Record<string, unknown>): Rendered {
   const filePath = (input.file_path ?? input.path) as string;
@@ -350,7 +415,7 @@ function summarizeWrite(input: Record<string, unknown>): Rendered {
     annotation = `(${formatByteCount(bytes)})`;
     if (content.trim()) {
       body = content.length > BODY_PREVIEW_MAX
-        ? content.slice(0, BODY_PREVIEW_MAX - 1).trimEnd() + "..."
+        ? content.slice(0, BODY_PREVIEW_MAX - 1).trimEnd() + "…"
         : content;
     }
   }
@@ -369,12 +434,12 @@ function summarizeEdit(input: Record<string, unknown>): Rendered {
     let footnote: string | undefined;
     let body = diff.lines.slice(0, DIFF_HUNK_MAX_LINES).join("\n");
     if (diff.lines.length > DIFF_HUNK_MAX_LINES) {
-      footnote = `... and ${diff.lines.length - DIFF_HUNK_MAX_LINES} more lines`;
+      footnote = `… and ${diff.lines.length - DIFF_HUNK_MAX_LINES} more lines`;
     }
     return {
       title: "Edit file",
       target: shortPath,
-      annotation: `+${diff.added} -${diff.removed}`,
+      annotation: `+${diff.added} −${diff.removed}`,
       body,
       footnote,
       kind: "file_edit",
@@ -387,21 +452,23 @@ function miniDiff(oldStr: string, newStr: string): { lines: string[]; added: num
   const oldLines = oldStr.split(/\r?\n/);
   const newLines = newStr.split(/\r?\n/);
   const lines: string[] = [];
+  // Naive diff: emit `- oldLine` then `+ newLine` for the changed block.
+  // Keep up to a couple of unchanged surrounding lines.
   for (const l of oldLines) lines.push(`- ${l}`);
   for (const l of newLines) lines.push(`+ ${l}`);
   return { lines, added: newLines.length, removed: oldLines.length };
 }
 
 function summarizeNotebookEdit(input: Record<string, unknown>): Rendered {
-  const filePath = (input.notebook_path ?? input.file_path) as string | undefined;
+  const filePath = input.file_path as string;
   return filePath
     ? { title: "Edit notebook", target: shortenPath(filePath), kind: "file_edit" }
     : { title: "Edit notebook", kind: "file_edit" };
 }
 
-// -----------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────
 // Agents & MCP
-// -----------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────
 
 function summarizeAgent(input: Record<string, unknown>): Rendered {
   const prompt = input.prompt as string;
@@ -490,9 +557,9 @@ function identifyTarget(input: Record<string, unknown>): string | null {
   return null;
 }
 
-// -----------------------------------------------------------------------
-// Email / payment / chat message
-// -----------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────
+// Email / payment / chat message — sentence-style
+// ───────────────────────────────────────────────────────────────────────
 
 function summarizeEmail(input: Record<string, unknown>): Rendered {
   const join = (v: unknown): string | null => {
@@ -528,13 +595,13 @@ function summarizeEmail(input: Record<string, unknown>): Rendered {
       }
       return String(a);
     });
-    sublineParts.push(`attachment: ${list.join(", ")}`);
+    sublineParts.push(`📎 ${list.join(", ")}`);
   }
 
   let bodyText: string | undefined;
   if (typeof body === "string" && body.trim()) {
     bodyText = body.length > BODY_PREVIEW_MAX
-      ? body.slice(0, BODY_PREVIEW_MAX - 1).trimEnd() + "..."
+      ? body.slice(0, BODY_PREVIEW_MAX - 1).trimEnd() + "…"
       : body;
   }
 
@@ -594,7 +661,7 @@ function summarizeMessage(input: Record<string, unknown>, server: string): Rende
   let body: string | undefined;
   if (typeof text === "string" && text.trim()) {
     body = text.length > BODY_PREVIEW_MAX
-      ? text.slice(0, BODY_PREVIEW_MAX - 1).trimEnd() + "..."
+      ? text.slice(0, BODY_PREVIEW_MAX - 1).trimEnd() + "…"
       : text;
   }
   return { title, body, kind: "chat_message" };
@@ -608,9 +675,9 @@ function prettyServer(server: string): string {
   return server;
 }
 
-// -----------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────
 // Fallback
-// -----------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────
 
 function summarizeFallback(toolName: string, toolInput: Record<string, unknown>): Rendered {
   const keys = Object.keys(toolInput);
@@ -625,16 +692,16 @@ function summarizeFallback(toolName: string, toolInput: Record<string, unknown>)
   return { title: toolName, body: summary, kind: "unknown_tool" };
 }
 
-// -----------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────
 // Helpers
-// -----------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────
 
 function formatMoney(amount: unknown, currency: unknown): string {
   const num = typeof amount === "number" ? amount : parseFloat(String(amount));
   if (isNaN(num)) return String(amount);
   const cur = String(currency || "").toLowerCase();
-  const symbols: Record<string, string> = { usd: "$", eur: "EUR ", gbp: "GBP ", jpy: "JPY ", cad: "CA$", aud: "A$" };
-  const symbol = symbols[cur] || (cur ? `${cur.toUpperCase()} ` : "");
+  const symbols: Record<string, string> = { usd: "$", eur: "€", gbp: "£", jpy: "¥", cad: "CA$", aud: "A$" };
+  const symbol = symbols[cur] || (cur ? cur.toUpperCase() + " " : "");
   const wholeCurrencies = ["jpy", "krw", "vnd", "clp"];
   const isWhole = wholeCurrencies.includes(cur);
   const value = isWhole ? num : num / 100;
@@ -665,16 +732,54 @@ function extractHost(url: string): string {
   }
 }
 
+function parseRmTargets(argsString: string): string[] {
+  const targets: string[] = [];
+  const str = argsString.trim();
+  let i = 0;
+  while (i < str.length) {
+    while (i < str.length && /\s/.test(str[i])) i++;
+    if (i >= str.length) break;
+
+    let token: string;
+    if (str[i] === '"') {
+      const close = str.indexOf('"', i + 1);
+      if (close === -1) { token = str.slice(i + 1); i = str.length; }
+      else { token = str.slice(i + 1, close); i = close + 1; }
+    } else if (str[i] === "'") {
+      const close = str.indexOf("'", i + 1);
+      if (close === -1) { token = str.slice(i + 1); i = str.length; }
+      else { token = str.slice(i + 1, close); i = close + 1; }
+    } else {
+      const start = i;
+      while (i < str.length && !/\s/.test(str[i])) i++;
+      token = str.slice(start, i);
+    }
+
+    if (token && !token.startsWith("-")) {
+      targets.push(token);
+    }
+  }
+  return targets;
+}
+
 function stripQuotes(s: string): string {
   return s.replace(/^['"]|['"]$/g, "");
 }
 
-function truncate(s: string, max: number): string {
-  return s.length > max ? s.slice(0, max - 1).trimEnd() + "..." : s;
+function truncateBody(s: string): string {
+  return s.length > BODY_PREVIEW_MAX ? s.slice(0, BODY_PREVIEW_MAX - 1).trimEnd() + "…" : s;
 }
 
+function truncate(s: string, max: number): string {
+  return s.length > max ? s.slice(0, max - 1).trimEnd() + "…" : s;
+}
+
+// Return the portion of `trimmed` starting at `startIdx` up to (but not
+// including) the next SQL statement keyword, so WHERE-checks don't bleed
+// across statement boundaries when multiple statements are joined.
 function stmtSlice(trimmed: string, startIdx: number): string {
   const after = trimmed.slice(startIdx);
+  // Skip past the first keyword+table-name before looking for the next stmt
   const nextKw = after.slice(10).search(/\b(DELETE|INSERT|UPDATE|DROP|CREATE|ALTER|TRUNCATE)\b/i);
   return nextKw >= 0 ? after.slice(0, nextKw + 10) : after;
 }

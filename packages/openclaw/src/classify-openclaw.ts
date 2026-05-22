@@ -27,6 +27,12 @@ const SAFE_PATTERNS = [
   /^view_/,
   /^describe_/,
   /^inspect_/,
+  /_status$/,
+  /_info$/,
+  /_count$/,
+  /_exists$/,
+  /_version$/,
+  /_health$/,
 ];
 
 const HIGH_STAKES_PATTERNS = [
@@ -80,12 +86,12 @@ export function classifyOpenClawTool(
     );
   }
 
-  for (const re of SAFE_PATTERNS) {
-    if (re.test(lower)) return "safe";
-  }
-
   for (const re of HIGH_STAKES_PATTERNS) {
     if (re.test(lower)) return "high_stakes";
+  }
+
+  for (const re of SAFE_PATTERNS) {
+    if (re.test(lower)) return "safe";
   }
 
   for (const re of REVIEW_PATTERNS) {

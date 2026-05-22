@@ -35,6 +35,29 @@ import {
 } from "@oked/sdk";
 import { classifyOpenClawTool, type ClassifyOptions } from "./classify-openclaw.js";
 
+const MAX_SCRIPT_READ = 4096;
+
+function tryReadScriptFile(command: string): string | undefined {
+  // Match: python3 script.py, node script.js, ruby script.rb, etc.
+  // Skip -c/-e flags (handled by findSqlInCommand inline path).
+  const m = command.trim().match(
+    /\b(?:python\d?(?:\.\d+)?|node|ruby|perl|deno\s+run|bun\s+run)\s+(?:-[^\s]+\s+)*(['"]?)([^\s'"]+\.(?:py|js|mjs|ts|rb|pl))\1/,
+  );
+  if (!m) return undefined;
+  let target = m[2];
+  if (target.startsWith("~/")) target = path.join(os.homedir(), target.slice(2));
+  else if (!path.isAbsolute(target)) target = path.resolve(target);
+  try {
+    const fd = fs.openSync(target, "r");
+    const buf = Buffer.alloc(MAX_SCRIPT_READ);
+    const bytesRead = fs.readSync(fd, buf, 0, MAX_SCRIPT_READ, 0);
+    fs.closeSync(fd);
+    return buf.toString("utf8", 0, bytesRead);
+  } catch {
+    return undefined;
+  }
+}
+
 function tryStatRmTarget(command: string): number | undefined {
   const m = command.trim().match(/\b(?:rm|trash|trash-put|rmdir)\s+(?:-[^\s]+\s+)*(['"]?)([^\s'"]+)\1/);
   if (!m) return undefined;
@@ -208,6 +231,8 @@ const plugin = {
         if (typeof cmd === "string") {
           const sizeBytes = tryStatRmTarget(cmd);
           if (sizeBytes !== undefined) enrichedParams = { ...params, _file_size_bytes: sizeBytes };
+          const scriptBody = tryReadScriptFile(cmd);
+          if (scriptBody !== undefined) enrichedParams = { ...enrichedParams, _script_body: scriptBody };
         }
       }
 

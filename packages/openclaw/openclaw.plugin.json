@@ -20,7 +20,8 @@
       },
       "minTier": {
         "type": "string",
-        "enum": ["safe", "review", "warning", "high_stakes"]
+        "enum": ["safe", "warning", "review", "high_stakes"],
+        "default": "review"
       },
       "alwaysApprove": {
         "type": "array",
