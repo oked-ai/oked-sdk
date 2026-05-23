@@ -230,6 +230,7 @@ function classifySqlSeverity(sql: string): RiskTier {
   if (/\bTRUNCATE\b/i.test(sql)) return "high_stakes";
   if (/\bDELETE\s+FROM\b/i.test(sql)) return "high_stakes";
   if (/\bUPDATE\s+\w+\s+SET\b/i.test(sql) && !/\bWHERE\b/i.test(sql)) return "high_stakes";
+  if (/\bCREATE\s+(TABLE|INDEX|VIEW)\b/i.test(sql)) return "warning";
   if (/^\s*SELECT\b/i.test(sql)) return "safe";
   if (/^\s*(EXPLAIN|SHOW|DESCRIBE|DESC)\b/i.test(sql)) return "safe";
   // SQLite dot-commands (.tables, .schema, .dump, etc.) — safe unless they mutate
