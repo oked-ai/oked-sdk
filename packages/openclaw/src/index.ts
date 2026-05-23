@@ -192,9 +192,27 @@ const plugin = {
     api.on("before_tool_call", async (event, ctx) => {
       const { toolName, params } = event;
 
-      const deny = (reason: string): never => {
+      // Why return `{ block: true, blockReason }` instead of throwing:
+      // OpenClaw's `runBeforeToolCallHook` wraps any thrown error - even our
+      // OkedDeniedError - into a generic `kind: "failure"` outcome and
+      // overwrites the reason with the hardcoded string
+      // "Tool call blocked because before_tool_call hook failed". That generic
+      // string is what reaches the LLM, which reads it as a transient
+      // tool-runtime error and retries the SAME denied action (observed in
+      // production: 17 retries of a denied DELETE).
+      //
+      // Returning `{ block: true, blockReason }` instead routes through the
+      // host's `kind: "veto"` path: the tool is NOT executed, AND our reason
+      // is surfaced verbatim to the agent via `buildBlockedToolResult`. So
+      // the LLM actually reads our "do NOT retry, ask the user" instruction.
+      //
+      // History: an earlier OpenClaw build did not honor a returned veto
+      // (the tool ran anyway), which is why this code originally threw. The
+      // current host (v2026.5.4+) correctly blocks on the return path - it
+      // builds a blocked tool result without ever calling `tool.execute`.
+      const deny = (reason: string): BeforeToolCallResult => {
         log?.info?.(`[oked] X blocking ${toolName}: ${reason}`);
-        throw new OkedDeniedError(reason);
+        return { block: true, blockReason: reason };
       };
 
       let tier: RiskTier;
