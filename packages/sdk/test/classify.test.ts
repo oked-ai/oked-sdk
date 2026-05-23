@@ -65,3 +65,29 @@ describe("git push remains high_stakes after pattern cleanup", () => {
     assert.equal(bash("git push -f"), "high_stakes");
   });
 });
+
+describe("SQL CREATE is warning, DROP is high_stakes", () => {
+  it("CREATE TABLE → warning", () => {
+    assert.equal(bash('psql -c "CREATE TABLE users (id INT)"'), "warning");
+  });
+
+  it("CREATE INDEX → warning", () => {
+    assert.equal(bash('psql -c "CREATE INDEX idx ON users(id)"'), "warning");
+  });
+
+  it("CREATE VIEW → warning", () => {
+    assert.equal(bash('psql -c "CREATE VIEW v AS SELECT 1"'), "warning");
+  });
+
+  it("DROP TABLE → high_stakes", () => {
+    assert.equal(bash('psql -c "DROP TABLE users"'), "high_stakes");
+  });
+
+  it("TRUNCATE → high_stakes", () => {
+    assert.equal(bash('psql -c "TRUNCATE users"'), "high_stakes");
+  });
+
+  it("SELECT → safe", () => {
+    assert.equal(bash('psql -c "SELECT * FROM users"'), "safe");
+  });
+});
