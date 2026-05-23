@@ -256,7 +256,7 @@ const UNREACHABLE = "http://127.0.0.1:1";
       handler,
       { toolName: "bash", params: { command: "rm random_table.sql" } },
       { toolName: "bash", sessionKey: "agent:main:main" },
-      /denied via OKed/i,
+      /USER DENIED.*do NOT retry/i,
     );
     console.log("OK plugin: explicit user DENY aborts the tool (throws)");
   } finally {

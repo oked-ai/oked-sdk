@@ -249,14 +249,27 @@ const plugin = {
           ...(ctx.sessionKey && !ctx.sessionId ? { session_id: ctx.sessionKey } : {}),
           cwd: process.cwd(),
         });
-        outcome = result.approved
-          ? "allow"
-          : `${result.decision} via OKed (approval ${result.approval_id})`;
+        if (result.approved) {
+          outcome = "allow";
+        } else {
+          // Phrase the denial as an explicit instruction to the agent. A terse
+          // "denied via OKed" message gets interpreted as a transient tool
+          // error and the agent retries (observed: 17 retries of the same
+          // DELETE before the agent gave up). Spell out that this is a final
+          // human decision so the LLM stops looping.
+          const verb = result.decision === "timeout" ? "did not respond to" : "DENIED";
+          outcome =
+            `USER ${verb} this action via OKed (approval ${result.approval_id}). ` +
+            `This is a final human decision - do NOT retry the same action. ` +
+            `Stop and ask the user what to do instead.`;
+        }
       } catch (err) {
         if (err instanceof OKedAuthError) {
           // Auth misconfig is not an outage - always deny.
           log?.error?.(`[oked] invalid API key for ${toolName}.`);
-          outcome = "OKed: invalid API key";
+          outcome =
+            "OKed: invalid API key (configuration error, not a transient failure). " +
+            "Do NOT retry. Stop and report this to the user.";
         } else if (err instanceof OKedBackendUnreachableError) {
           const decision = degradedDecision(tier, {
             strictFailClosed: oked.strictFailClosed,
@@ -272,12 +285,16 @@ const plugin = {
             log?.error?.(
               `[oked] backend unreachable - ${toolName} (${tier}) denied (${why}, fail-safe)`,
             );
-            outcome = `OKed backend unreachable - ${why} denied (fail-safe)`;
+            outcome =
+              `OKed backend unreachable - this ${tier} action is denied (${why}, fail-safe). ` +
+              `Do NOT retry. Stop and ask the user how to proceed.`;
           }
         } else {
           const msg = err instanceof Error ? err.message : String(err);
           log?.error?.(`[oked] approval request failed for ${toolName}: ${msg}.`);
-          outcome = `OKed backend error, fail-safe deny: ${msg}`;
+          outcome =
+            `OKed backend error, fail-safe deny: ${msg}. ` +
+            `Do NOT retry. Stop and ask the user how to proceed.`;
         }
       }
 
