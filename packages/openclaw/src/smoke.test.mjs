@@ -9,25 +9,29 @@
 
 import { strict as assert } from "node:assert";
 import { classifyOpenClawTool } from "../dist/classify-openclaw.js";
-import plugin, { OkedDeniedError } from "../dist/index.js";
+import plugin from "../dist/index.js";
 
-// A denied tool call must ABORT by throwing OkedDeniedError, not merely
-// return { block: true } (a returned shape OpenClaw was observed to ignore,
-// failing open). Asserts the throw + that the error carries the block info.
+// A denied tool call must return { block: true, blockReason } from the
+// before_tool_call hook. Why return instead of throw: OpenClaw's hook runner
+// catches any thrown error and replaces our message with a hardcoded generic
+// "Tool call blocked because before_tool_call hook failed", which the LLM
+// reads as a transient error and retries. The return-based veto path
+// surfaces our blockReason verbatim to the agent.
 async function assertDenied(handler, event, ctx, reMsg) {
   let threw;
+  let result;
   try {
-    await handler(event, ctx);
+    result = await handler(event, ctx);
   } catch (e) {
     threw = e;
   }
-  assert.ok(threw, `expected ${event.toolName} to be DENIED (throw), but it did not`);
   assert.ok(
-    threw instanceof OkedDeniedError,
-    `expected OkedDeniedError, got ${threw?.name}: ${threw?.message}`,
+    !threw,
+    `expected ${event.toolName} to be DENIED via return, but it threw: ${threw?.name}: ${threw?.message}`,
   );
-  assert.equal(threw.okedBlock, true);
-  if (reMsg) assert.match(threw.blockReason ?? "", reMsg);
+  assert.ok(result, `expected ${event.toolName} to be DENIED, but handler returned void (= allow)`);
+  assert.equal(result.block, true, `expected block: true, got ${JSON.stringify(result)}`);
+  if (reMsg) assert.match(result.blockReason ?? "", reMsg);
 }
 
 // --- classifier ---
@@ -124,7 +128,7 @@ function makeStubApi(pluginConfig) {
     logs.some(([lvl, m]) => lvl === "warn" && /apiKey/.test(m)),
     "warns about missing apiKey",
   );
-  console.log("OK plugin: fail-safe deny (throws) when no apiKey");
+  console.log("OK plugin: fail-safe deny (returns block) when no apiKey");
 }
 
 // Case 2: safe tool -> passes through without calling backend.
@@ -170,7 +174,7 @@ function makeStubApi(pluginConfig) {
     { toolName: "run_report", params: {} },
     { toolName: "run_report" },
   );
-  console.log("OK plugin: alwaysApprove forces approval (throws)");
+  console.log("OK plugin: alwaysApprove forces approval (returns block)");
 }
 
 // --- degraded mode (backend unreachable) ---
@@ -209,7 +213,7 @@ const UNREACHABLE = "http://127.0.0.1:1";
     { toolName: "deploy_site" },
     /high-stakes denied|fail-safe/i,
   );
-  console.log("OK degraded: high_stakes denied (throws) when backend unreachable");
+  console.log("OK degraded: high_stakes denied (returns block) when backend unreachable");
 }
 
 // Case 7: strictFailClosed restores deny-everything on outage.
@@ -228,7 +232,7 @@ const UNREACHABLE = "http://127.0.0.1:1";
     { toolName: "create_note" },
     /strict fail-closed|fail-safe/i,
   );
-  console.log("OK degraded: strictFailClosed denies review (throws) when unreachable");
+  console.log("OK degraded: strictFailClosed denies review (returns block) when unreachable");
 }
 
 // Case 8: THE production bug. Backend reachable, user explicitly DENIES.
@@ -258,7 +262,7 @@ const UNREACHABLE = "http://127.0.0.1:1";
       { toolName: "bash", sessionKey: "agent:main:main" },
       /USER DENIED.*do NOT retry/i,
     );
-    console.log("OK plugin: explicit user DENY aborts the tool (throws)");
+    console.log("OK plugin: explicit user DENY aborts the tool (returns block)");
   } finally {
     server.close();
   }
