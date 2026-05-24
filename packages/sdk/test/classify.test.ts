@@ -66,6 +66,56 @@ describe("git push remains high_stakes after pattern cleanup", () => {
   });
 });
 
+describe("himalaya email CLI - read ops safe, send review, delete high_stakes", () => {
+  it("envelope list -> safe", () => {
+    assert.equal(bash("himalaya envelope list"), "safe");
+  });
+
+  it("folder list -> safe", () => {
+    assert.equal(bash("himalaya folder list"), "safe");
+  });
+
+  it("message read 42 -> safe", () => {
+    assert.equal(bash("himalaya message read 42"), "safe");
+  });
+
+  it("message send (piped draft) -> review", () => {
+    assert.equal(bash("cat /tmp/draft.eml | himalaya message send"), "review");
+  });
+
+  it("message delete -> high_stakes", () => {
+    assert.equal(bash("himalaya message delete 42"), "high_stakes");
+  });
+
+  it("folder purge -> high_stakes", () => {
+    assert.equal(bash("himalaya folder purge INBOX"), "high_stakes");
+  });
+});
+
+describe("Ephemeral temp-dir writes -> warning (so multi-step skills don't double-prompt)", () => {
+  const write = (file_path: string) => classify("write", { file_path, content: "x" });
+
+  it("write to /tmp/foo.eml -> warning", () => {
+    assert.equal(write("/tmp/oked-draft-123.eml"), "warning");
+  });
+
+  it("write to /var/tmp/x -> warning", () => {
+    assert.equal(write("/var/tmp/x"), "warning");
+  });
+
+  it("write to /home/ubuntu/important.txt -> review (NOT ephemeral, NOT in cwd)", () => {
+    assert.equal(write("/home/ubuntu/important.txt"), "review");
+  });
+
+  it("shell: echo body > /tmp/draft.eml -> warning", () => {
+    assert.equal(bash("echo 'hello' > /tmp/draft.eml"), "warning");
+  });
+
+  it("shell: echo > /home/ubuntu/permanent.txt -> review", () => {
+    assert.equal(bash("echo 'hello' > /home/ubuntu/permanent.txt"), "review");
+  });
+});
+
 describe("SQL CREATE is warning, DROP is high_stakes", () => {
   it("CREATE TABLE → warning", () => {
     assert.equal(bash('psql -c "CREATE TABLE users (id INT)"'), "warning");
