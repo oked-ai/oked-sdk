@@ -32,7 +32,8 @@ export type OperationKind =
   // System / privilege
   | "kill_process" | "sudo" | "chmod_777"
   // Communication / commerce
-  | "email_send" | "payment_charge" | "payment_create" | "chat_message"
+  | "email_send" | "email_delete" | "email_purge"
+  | "payment_charge" | "payment_create" | "chat_message"
   // MCP categories
   | "mcp_delete" | "mcp_update" | "mcp_create"
   | "mcp_post" | "mcp_publish"
