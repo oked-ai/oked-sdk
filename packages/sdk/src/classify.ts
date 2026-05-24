@@ -1,6 +1,7 @@
 import path from "path";
 import type { RiskTier } from "./types.js";
 import { findSqlInCommand } from "./describe.js";
+import { TIER_ORDER } from "./degraded.js";
 
 // Tier 1 - safe: auto-allow, no notification (Read, Glob, ls, git status, etc.)
 // Tier 2 - warning: terminal log only, no push (Write/Edit inside project dir)
@@ -79,6 +80,11 @@ const SAFE_COMMANDS = [
   /^jq\b/,
   /^curl\s+-s.*\|\s*(jq|python|node)/,  // curl piped to parser (usually read-only)
   /^curl\b/,  // curl without -X defaults to GET (high-stakes patterns checked first)
+  // himalaya (email CLI) read-only ops. Listing/reading mail or folder state
+  // never mutates anything remotely. Only `message send|reply|forward` and
+  // `message delete` / `folder delete|expunge|purge` matter; those land in
+  // the review/high-stakes paths.
+  /^himalaya\s+(account|folder|envelope|message\s+(?:read|export|search|copy|move)|attachment\s+(?:download|list)|template|search)\b/,
 ];
 
 // Bash commands classified as high stakes (destructive, irreversible, external)
@@ -118,7 +124,24 @@ const HIGH_STAKES_COMMANDS = [
   /\bnpm\s+publish\b/,
   /\bnpm\s+unpublish\b/,
   /\bnpx\s+.*\s+deploy\b/,
+  // himalaya destructive ops. message delete + folder delete/expunge/purge
+  // wipe mail from the server irreversibly; account delete wipes local config.
+  /\bhimalaya\s+message\s+delete\b/,
+  /\bhimalaya\s+folder\s+(delete|expunge|purge)\b/,
+  /\bhimalaya\s+account\s+delete\b/,
 ];
+
+// Ephemeral filesystem locations. Writes here have no lasting effect on
+// their own — what matters is whatever subsequent command CONSUMES the file
+// (e.g. `himalaya message send < /tmp/draft.eml`). Without this carve-out,
+// every multi-step skill that drafts a temp file generates two approval
+// prompts (the temp write + the real send) instead of one.
+const EPHEMERAL_PATH_RE = /^(?:\/tmp\/|\/var\/tmp\/|\/private\/tmp\/|[A-Za-z]:[\\/](?:Windows[\\/]Temp|Users[\\/][^\\/]+[\\/]AppData[\\/]Local[\\/]Temp)[\\/])/i;
+
+function isEphemeralPath(filePath: string): boolean {
+  if (!filePath) return false;
+  return EPHEMERAL_PATH_RE.test(filePath);
+}
 
 function isInsideProject(filePath: string): boolean {
   if (!filePath) return false;
@@ -140,10 +163,13 @@ export function classify(
   if (HIGH_STAKES_TOOLS.has(toolName)) return "high_stakes";
   if (REVIEW_TOOLS.has(toolName)) return "review";
 
-  // File-editing tools: warning if inside project, review otherwise
+  // File-editing tools: warning if inside project or an ephemeral temp dir,
+  // review otherwise. Temp-dir writes are "warning" because the file itself
+  // can't do harm — only what consumes it can.
   if (toolName === "Write" || toolName === "Edit" || toolName === "NotebookEdit") {
     const filePath = toolInput.file_path as string;
-    return isInsideProject(filePath) ? "warning" : "review";
+    if (isEphemeralPath(filePath) || isInsideProject(filePath)) return "warning";
+    return "review";
   }
 
   // Agent tool - review (spawns subagent, not directly destructive)
@@ -173,17 +199,59 @@ export function classify(
   const writePath = (toolInput.file_path ?? toolInput.path) as unknown;
   const writeContent = (toolInput.content ?? toolInput.data ?? toolInput.body) as unknown;
   if (typeof writePath === "string" && typeof writeContent === "string") {
-    return isInsideProject(writePath) ? "warning" : "review";
+    if (isEphemeralPath(writePath) || isInsideProject(writePath)) return "warning";
+    return "review";
   }
 
   // Unknown tool - default to review (require approval)
   return "review";
 }
 
+function maxTier(a: RiskTier, b: RiskTier): RiskTier {
+  return TIER_ORDER[a] >= TIER_ORDER[b] ? a : b;
+}
+
+/** Split a shell command on top-level pipe characters, ignoring `||` and
+ * pipes inside quoted strings. Returns trimmed segments. */
+function splitOnPipe(cmd: string): string[] {
+  const out: string[] = [];
+  let cur = "";
+  let quote: '"' | "'" | null = null;
+  for (let i = 0; i < cmd.length; i++) {
+    const ch = cmd[i];
+    if (quote) {
+      cur += ch;
+      if (ch === quote) quote = null;
+    } else if (ch === '"' || ch === "'") {
+      cur += ch;
+      quote = ch;
+    } else if (ch === "|" && cmd[i + 1] !== "|" && cmd[i - 1] !== "|") {
+      out.push(cur.trim());
+      cur = "";
+    } else {
+      cur += ch;
+    }
+  }
+  if (cur.trim()) out.push(cur.trim());
+  return out;
+}
+
 function classifyBashCommand(command: string): RiskTier {
   if (!command) return "safe";
 
   const trimmed = command.trim();
+
+  // Pipelines: classify each stage and take the highest tier. Without this,
+  // `cat /tmp/draft.eml | himalaya message send` would match `^cat\b` first
+  // and silently allow the email send. The right-hand stage is what matters.
+  // Only split when there are 2+ stages so single commands don't recurse.
+  const stages = splitOnPipe(trimmed);
+  if (stages.length > 1) {
+    return stages.reduce<RiskTier>(
+      (worst, stage) => maxTier(worst, classifyBashCommand(stage)),
+      "safe",
+    );
+  }
 
   // sudo: classify based on the inner command, not sudo itself
   if (/^sudo\s/.test(trimmed)) {
@@ -206,13 +274,17 @@ function classifyBashCommand(command: string): RiskTier {
   }
 
   // File-mutating shell patterns. Content-creation idioms (echo > X, tee,
-  // dd of=, touch, sed -i, heredoc) always require approval — they're
-  // exactly the bypass route from a denied Write. cp/mv just rearrange
-  // existing bytes and stay safe.
+  // dd of=, touch, sed -i, heredoc) require approval — they're exactly the
+  // bypass route from a denied Write. cp/mv just rearrange existing bytes
+  // and stay safe. Writes to ephemeral temp dirs (/tmp, %TEMP%) downgrade
+  // to warning: the temp file alone can't do harm, only what consumes it.
   const ops = extractShellWriteOps(trimmed);
   if (ops.length > 0) {
     const creates = ops.filter((o) => o.kind !== "copy" && o.kind !== "move");
-    if (creates.length > 0) return "review";
+    if (creates.length > 0) {
+      if (creates.every((o) => isEphemeralPath(o.target))) return "warning";
+      return "review";
+    }
     return "review";
   }
 
