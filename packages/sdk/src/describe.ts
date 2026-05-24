@@ -185,6 +185,15 @@ function summarizeBash(command: string, sizeBytes?: number): Rendered {
     };
   }
 
+  // himalaya — email CLI (run BEFORE the pipeline catch-all so
+  // `printf ... | himalaya message send` renders as "Send email", not
+  // "Run command"). Parses From/To/Subject from the piped headers so
+  // the approval card shows recipient + subject, not a raw shell line.
+  if (/\bhimalaya\b/.test(cmd)) {
+    const h = summarizeHimalaya(cmd);
+    if (h) return h;
+  }
+
   // Multi-step pipeline
   if (/&&|\|\||;/.test(cmd)) return { title: "Run command", body: truncateBody(cmd), kind: "shell_pipeline" };
 
@@ -394,6 +403,117 @@ function summarizeSql(sql: string, originalCommand: string): Rendered {
     return { title: "Insert rows into", target: insertM[1], body: truncateBody(sql), kind: "sql_insert" };
   }
   return { title: "Run SQL statement", body: truncateBody(sql || originalCommand), kind: "sql_query" };
+}
+
+// ───────────────────────────────────────────────────────────────────────
+// himalaya — email CLI
+// ───────────────────────────────────────────────────────────────────────
+
+/**
+ * Render a himalaya invocation as a proper email-domain action ("Send email
+ * to X", "Delete email N", "Purge folder Y") instead of a raw shell line.
+ *
+ * Used for both the approval-card display (so the user sees "Send email to
+ * orendor@gmail.com" with the subject + sender, not a printf|himalaya
+ * pipeline) and the analytics `operation_kind`.
+ *
+ * Returns null if the command mentions himalaya but doesn't match a known
+ * subcommand pattern — caller falls back to the generic pipeline/unknown
+ * renderers.
+ */
+function summarizeHimalaya(cmd: string): Rendered | null {
+  // message send — the only path that prompts approval today. Parse the
+  // headers from the piped payload so the user sees recipient + subject.
+  if (/\bhimalaya\s+(?:\S+\s+)*message\s+send\b/.test(cmd)) {
+    const headers = extractEmailHeaders(cmd);
+    const to = headers.to;
+    const subject = headers.subject;
+    const from = headers.from;
+
+    const bodyLines: string[] = [];
+    if (from) bodyLines.push(`From: ${from}`);
+    if (subject) bodyLines.push(`Subject: ${subject}`);
+    const previewBody = headers.body ? truncate(headers.body, 200) : undefined;
+    if (previewBody) bodyLines.push("", previewBody);
+
+    return {
+      title: to ? `Send email to ${to}` : "Send email",
+      target: to,
+      body: bodyLines.length > 0 ? bodyLines.join("\n") : truncateBody(cmd),
+      kind: "email_send",
+    };
+  }
+
+  // message delete <id...> — irreversible (Gmail moves to trash; other
+  // servers may hard-delete).
+  const delM = cmd.match(/\bhimalaya\s+(?:\S+\s+)*message\s+delete\s+([\d\s,]+)/);
+  if (delM) {
+    const ids = delM[1].trim();
+    const count = ids.split(/[\s,]+/).filter(Boolean).length;
+    return {
+      title: count > 1 ? `Delete ${count} emails` : "Delete email",
+      target: ids,
+      annotation: "(irreversible)",
+      kind: "email_delete",
+    };
+  }
+
+  // folder delete / expunge / purge — wipes a mail folder.
+  const folderM = cmd.match(/\bhimalaya\s+(?:\S+\s+)*folder\s+(delete|expunge|purge)\s+(\S+)/);
+  if (folderM) {
+    const verb = folderM[1].toLowerCase();
+    const folder = stripQuotes(folderM[2]);
+    const verbLabel = verb === "purge" ? "Purge" : verb === "expunge" ? "Expunge" : "Delete";
+    return {
+      title: `${verbLabel} folder ${folder}`,
+      target: folder,
+      annotation: "(irreversible)",
+      kind: "email_purge",
+    };
+  }
+
+  return null;
+}
+
+/**
+ * Extract email headers (From/To/Subject) and body from a shell command
+ * that pipes a printf/echo/heredoc into `himalaya message send`. Returns
+ * empty strings for anything not found.
+ *
+ * Handles the two common shapes the agent emits:
+ *   printf "From: a\nTo: b\nSubject: c\n\nbody" | himalaya message send
+ *   printf %s "From: a\nTo: b\n..." | himalaya message send
+ *   cat <<'EOF' | himalaya message send  (heredoc body, headers inline)
+ */
+function extractEmailHeaders(cmd: string): {
+  from?: string;
+  to?: string;
+  subject?: string;
+  body?: string;
+} {
+  // Pull the quoted payload from printf/echo if present.
+  const quoted = cmd.match(/(?:printf|echo)\s+(?:%s\s+|-[neE]+\s+)*(['"])([\s\S]*?)\1/);
+  // Also support heredoc body (cat <<EOF ... EOF).
+  const heredoc = cmd.match(/<<\s*['"]?(\w+)['"]?\s*\n([\s\S]*?)\n\1\b/);
+
+  let payload = quoted?.[2] ?? heredoc?.[2] ?? cmd;
+  // Unescape \n / \r / \t to real characters so header regexes work.
+  payload = payload.replace(/\\n/g, "\n").replace(/\\r/g, "\r").replace(/\\t/g, "\t");
+
+  const grab = (name: string): string | undefined => {
+    const m = payload.match(new RegExp(`(?:^|\\n)\\s*${name}:\\s*([^\\n]+)`, "i"));
+    return m ? m[1].trim() : undefined;
+  };
+
+  const from = grab("From");
+  const to = grab("To");
+  const subject = grab("Subject");
+
+  // Body is everything after the first blank line (RFC 822 separator).
+  const blank = payload.search(/\n\s*\n/);
+  const body = blank >= 0 ? payload.slice(blank).replace(/^\s+/, "") : undefined;
+
+  return { from, to, subject, body };
 }
 
 // ───────────────────────────────────────────────────────────────────────
