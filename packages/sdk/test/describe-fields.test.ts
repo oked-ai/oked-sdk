@@ -451,8 +451,13 @@ describe("classify — shell write tier rules", () => {
     assert.equal(tier, "high_stakes");
   });
 
-  it("touch is review (creates new file)", () => {
+  it("touch in /tmp is warning (ephemeral path, see PR #22)", () => {
     const tier = classify("Bash", { command: "touch /tmp/marker" });
+    assert.equal(tier, "warning");
+  });
+
+  it("touch outside ephemeral paths stays review", () => {
+    const tier = classify("Bash", { command: "touch /var/lib/marker" });
     assert.equal(tier, "review");
   });
 
@@ -466,8 +471,13 @@ describe("classify — shell write tier rules", () => {
     assert.equal(tier, "review");
   });
 
-  it("dd of= is review", () => {
+  it("dd of= in /tmp is warning (ephemeral path, see PR #22)", () => {
     const tier = classify("Bash", { command: "dd if=/dev/zero of=/tmp/zeros bs=1M count=10" });
+    assert.equal(tier, "warning");
+  });
+
+  it("dd of= outside ephemeral paths stays review", () => {
+    const tier = classify("Bash", { command: "dd if=/dev/zero of=/var/lib/zeros bs=1M count=10" });
     assert.equal(tier, "review");
   });
 
@@ -558,11 +568,11 @@ describe("classify — SQL inside wrappers", () => {
     assert.equal(tier, "review");
   });
 
-  it("python3 -c with CREATE TABLE → review (reported case)", () => {
+  it("python3 -c with CREATE TABLE → warning (see PR #19)", () => {
     const tier = classify("Bash", {
       command: `python3 -c "import sqlite3; sqlite3.connect('demo.db').execute('CREATE TABLE products (id INTEGER)')"`,
     });
-    assert.equal(tier, "review");
+    assert.equal(tier, "warning");
   });
 
   it("python3 -c with INSERT INTO → review", () => {
@@ -584,9 +594,9 @@ describe("classify — SQL inside wrappers", () => {
     assert.equal(tier, "high_stakes");
   });
 
-  it("psql -c with CREATE TABLE → review", () => {
+  it("psql -c with CREATE TABLE → warning (see PR #19)", () => {
     const tier = classify("Bash", { command: `psql -c "CREATE TABLE t (id int)"` });
-    assert.equal(tier, "review");
+    assert.equal(tier, "warning");
   });
 
   it("node heredoc with DROP TABLE → high_stakes", () => {
@@ -617,5 +627,43 @@ describe("Unknown tool fallback", () => {
     const f = describeFields("weirdtool", { foo: "bar", n: 42 });
     assert.equal(f!.Title, "weirdtool");
     assert.ok(f!.Body && f!.Body.includes("foo: bar"));
+  });
+});
+
+describe("himalaya email CLI — approval card rendering", () => {
+  it("printf | himalaya message send → 'Send email to <recipient>' with subject in body", () => {
+    const cmd =
+      'printf "From: okedtester@gmail.com\\nTo: orendor@gmail.com\\nSubject: Test\\n\\nhi" | /home/ubuntu/bin/himalaya message send';
+    const f = describeFields("exec", { command: cmd });
+    assert.equal(f!.Title, "Send email to orendor@gmail.com");
+    assert.equal(f!.Target, "orendor@gmail.com");
+    assert.ok(f!.Body && f!.Body.includes("Subject: Test"));
+    assert.ok(f!.Body && f!.Body.includes("From: okedtester@gmail.com"));
+  });
+
+  it("printf %s form is also parsed", () => {
+    const cmd =
+      'printf %s "From: a@b.com\\nTo: c@d.com\\nSubject: hello\\n\\nbody text" | himalaya message send';
+    const f = describeFields("exec", { command: cmd });
+    assert.equal(f!.Title, "Send email to c@d.com");
+  });
+
+  it("heredoc body is parsed", () => {
+    const cmd = "cat <<'EOF' | himalaya message send\nTo: x@y.com\nSubject: hd\n\nbody\nEOF";
+    const f = describeFields("exec", { command: cmd });
+    assert.equal(f!.Title, "Send email to x@y.com");
+  });
+
+  it("himalaya message delete → 'Delete email' with id as target", () => {
+    const cmd = "himalaya message delete 42";
+    const f = describeFields("exec", { command: cmd });
+    assert.equal(f!.Title, "Delete email");
+    assert.equal(f!.Target, "42");
+  });
+
+  it("himalaya folder purge → 'Purge folder X'", () => {
+    const cmd = "himalaya folder purge INBOX";
+    const f = describeFields("exec", { command: cmd });
+    assert.equal(f!.Title, "Purge folder INBOX");
   });
 });
