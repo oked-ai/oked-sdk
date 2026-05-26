@@ -5,6 +5,7 @@ import {
   describe,
   describeFields,
   degradedDecision,
+  triggerBackgroundUpdate,
   OKedAuthError,
   OKedBackendUnreachableError,
 } from "@oked/sdk";
@@ -147,11 +148,21 @@ async function main(): Promise<void> {
   }
 }
 
-main().catch((err) => {
-  process.stderr.write(`[OKed] Fatal: ${err}\n`);
-  // Fail-safe: deny
-  process.stdout.write(
-    JSON.stringify(makeOutput("deny", "OKed: internal error (fail-safe)"))
-  );
-  process.exit(0); // exit 0 so Claude reads our JSON, not a crash
-});
+main()
+  .catch((err) => {
+    process.stderr.write(`[OKed] Fatal: ${err}\n`);
+    // Fail-safe: deny
+    process.stdout.write(
+      JSON.stringify(makeOutput("deny", "OKed: internal error (fail-safe)"))
+    );
+    process.exit(0); // exit 0 so Claude reads our JSON, not a crash
+  })
+  .finally(() => {
+    // After the decision has been written, kick off a detached update check.
+    // The worker outlives this process; we never wait on it.
+    try {
+      triggerBackgroundUpdate();
+    } catch {
+      /* never let update plumbing affect the hot path */
+    }
+  });

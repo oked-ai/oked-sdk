@@ -10,7 +10,11 @@
     "build": "npm run build --workspaces --if-present",
     "test": "npm test --workspaces --if-present",
     "dev": "npm run dev --workspace @oked/sdk",
-    "publish:all": "npm publish --workspaces --access public"
+    "publish:all": "npm publish --workspaces --access public",
+    "build:release": "npm run build && node scripts/build-release.mjs"
+  },
+  "devDependencies": {
+    "esbuild": "^0.24.0"
   },
   "repository": {
     "type": "git",
