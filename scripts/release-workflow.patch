@@ -1,0 +1,44 @@
+# Manual workflow update for self-update support.
+#
+# The OAuth scope this session has cannot modify .github/workflows/*. Apply
+# this diff yourself (e.g. `git apply scripts/release-workflow.patch`) so
+# release tags also produce a GitHub Release with the self-update bundles.
+
+diff --git a/.github/workflows/publish.yml b/.github/workflows/publish.yml
+--- a/.github/workflows/publish.yml
++++ b/.github/workflows/publish.yml
+@@ -9,7 +9,7 @@ on:
+ jobs:
+   publish:
+     runs-on: ubuntu-latest
+     permissions:
+-      contents: read
++      contents: write   # for creating the GitHub Release with self-update assets
+       id-token: write
+
+     steps:
+@@ -23,3 +23,24 @@ jobs:
+       - run: npm publish --access public
+         env:
+           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
++
++      # --- Self-update artifacts -------------------------------------------
++      # Build single-file ESM bundles of each CLI bin and a manifest.json, then
++      # attach them to a GitHub Release for this tag so the OKed updater can
++      # fetch them via the manifest URL.
++      - name: Build self-update bundles
++        run: node scripts/build-release.mjs "${GITHUB_REF_NAME}"
++
++      - name: Upload bundles to GitHub Release
++        uses: softprops/action-gh-release@v2
++        with:
++          tag_name: ${{ github.ref_name }}
++          files: |
++            release/oked-cli.js
++            release/oked-hook.js
++            release/oked-openclaw.mjs
++            release/oked-update-worker.js
++            release/manifest.json
++          fail_on_unmatched_files: true
++        env:
++          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

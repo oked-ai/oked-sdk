@@ -1,6 +1,23 @@
 import type { ApprovalRequest, ApprovalResponse, OKedConfig } from "./types.js";
 import { loadOKedConfig } from "./config.js";
 import { OKedAuthError, OKedBackendUnreachableError } from "./errors.js";
+import { staleVersionNag, triggerBackgroundUpdate } from "./update.js";
+
+let nagPrinted = false;
+function maybePrintStaleNag(): void {
+  if (nagPrinted) return;
+  if (process.env.OKED_NO_UPDATE_NAG === "1") return;
+  if (process.env.OKED_UPDATE_WORKER === "1") return;
+  const msg = staleVersionNag();
+  if (msg) {
+    nagPrinted = true;
+    try {
+      process.stderr.write(msg + "\n");
+    } catch {
+      /* ignore */
+    }
+  }
+}
 
 function envStrictFailClosed(): boolean | undefined {
   const raw = process.env.OKED_STRICT_FAIL_CLOSED;
@@ -28,6 +45,10 @@ export class OKedClient {
         persisted.strictFailClosed ??
         false,
     };
+    maybePrintStaleNag();
+    if (process.env.OKED_NO_UPDATE_CHECK !== "1") {
+      triggerBackgroundUpdate();
+    }
   }
 
   get strictFailClosed(): boolean {
@@ -145,6 +166,22 @@ export { CLASSIFIER_VERSION } from "./kinds.js";
 export type { OperationKind } from "./kinds.js";
 export { loadOKedConfig, OKED_CONFIG_PATH } from "./config.js";
 export type { PersistedConfig } from "./config.js";
+export { SDK_VERSION } from "./version.js";
+export {
+  runUpdate,
+  rollback,
+  fetchManifest,
+  triggerBackgroundUpdate,
+  staleVersionNag,
+  getRunningVersion,
+  getCurrentManagedVersion,
+  getCurrentManagedDir,
+  readUpdateState,
+  writeUpdateState,
+  isNewerVersion,
+  getOkedHome,
+} from "./update.js";
+export type { Manifest, ReleaseFile, UpdateState, UpdateResult } from "./update.js";
 export type {
   RiskTier,
   ApprovalRequest,

@@ -3,7 +3,17 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync, chmodSync } from "f
 import { homedir, hostname } from "os";
 import { join, dirname } from "path";
 import { spawn } from "child_process";
-import { OKedClient, loadOKedConfig, OKED_CONFIG_PATH } from "@oked/sdk";
+import {
+  OKedClient,
+  loadOKedConfig,
+  OKED_CONFIG_PATH,
+  SDK_VERSION,
+  runUpdate,
+  rollback,
+  getRunningVersion,
+  readUpdateState,
+  writeUpdateState,
+} from "@oked/sdk";
 
 const HOOK_CONFIG = {
   matcher: "Bash|Write|Edit|Agent",
@@ -18,7 +28,7 @@ const HOOK_CONFIG = {
 
 const DEFAULT_BACKEND_URL =
   process.env.OKED_BACKEND_URL || "https://api.oked.ai";
-const CLIENT_VERSION = "0.1.0";
+const CLIENT_VERSION = getRunningVersion();
 
 function getSettingsPath(): string {
   return join(process.cwd(), ".claude", "settings.json");
@@ -253,6 +263,81 @@ function uninstall(): void {
   console.log("OKed hooks removed from this project.");
 }
 
+async function update(args: string[]): Promise<void> {
+  if (args.includes("--rollback")) {
+    const { from, to } = rollback();
+    if (!to) {
+      console.log("No prior version available to roll back to.");
+      return;
+    }
+    console.log(`Rolled back: ${from ?? "(bundled)"} -> ${to}`);
+    return;
+  }
+  if (args.includes("--pin")) {
+    const idx = args.indexOf("--pin");
+    const target = args[idx + 1];
+    if (!target) {
+      console.error("Usage: oked update --pin <version>");
+      process.exit(1);
+    }
+    writeUpdateState({ pinnedVersion: target });
+    console.log(`Pinned to ${target}. Auto-update is now disabled until you run \`oked update --unpin\`.`);
+    return;
+  }
+  if (args.includes("--unpin")) {
+    writeUpdateState({ pinnedVersion: undefined });
+    console.log("Unpinned. Auto-update re-enabled.");
+    return;
+  }
+  if (args.includes("--check")) {
+    const result = await runUpdate({ force: true });
+    console.log(`Installed: ${result.installedVersion}`);
+    if (result.manifestVersion) console.log(`Latest:    ${result.manifestVersion}`);
+    if (result.status === "error") console.log(`Error:     ${result.error}`);
+    console.log(`Status:    ${result.status}`);
+    return;
+  }
+
+  console.log(`Checking for updates...`);
+  const result = await runUpdate({ force: true });
+  switch (result.status) {
+    case "updated":
+      console.log(`OK Updated ${result.installedVersion} -> ${result.manifestVersion}`);
+      break;
+    case "up-to-date":
+      console.log(`OK Already on the latest version (${result.installedVersion}).`);
+      break;
+    case "disabled":
+      console.log(`Auto-update is disabled (latest known: ${result.manifestVersion ?? "?"}).`);
+      break;
+    case "pinned":
+      console.log(`Pinned to ${result.manifestVersion ?? "?"} — skipping. Run \`oked update --unpin\` to re-enable.`);
+      break;
+    case "locked":
+      console.log(`Another update is already in progress.`);
+      break;
+    case "error":
+      console.error(`Update failed: ${result.error}`);
+      process.exit(1);
+      break;
+    default:
+      console.log(`Status: ${result.status}`);
+  }
+}
+
+function versionCmd(): void {
+  const running = getRunningVersion();
+  const state = readUpdateState();
+  console.log(`oked ${running}`);
+  if (running !== SDK_VERSION) {
+    console.log(`  bundled:    ${SDK_VERSION}`);
+    console.log(`  managed:    ${running}`);
+  }
+  if (state.latestKnownVersion && state.latestKnownVersion !== running) {
+    console.log(`  available:  ${state.latestKnownVersion}  (run 'oked update')`);
+  }
+}
+
 // CLI entry point
 const command = process.argv[2];
 
@@ -266,6 +351,17 @@ switch (command) {
   case "uninstall":
     uninstall();
     break;
+  case "update":
+    update(process.argv.slice(3)).catch((err) => {
+      console.error(err);
+      process.exit(1);
+    });
+    break;
+  case "--version":
+  case "-v":
+  case "version":
+    versionCmd();
+    break;
   default:
     console.log("Usage: oked <command>");
     console.log("");
@@ -273,5 +369,13 @@ switch (command) {
     console.log("  init        Install OKed hooks in current project and pair this device");
     console.log("  status      Show current config and connection status");
     console.log("  uninstall   Remove OKed hooks from current project");
+    console.log("  update      Check for and install the latest OKed CLI");
+    console.log("  version     Print the installed version");
+    console.log("");
+    console.log("Update flags:");
+    console.log("  oked update --check         Force a check (verbose) without prompting");
+    console.log("  oked update --rollback      Revert to the previously-installed version");
+    console.log("  oked update --pin <ver>     Pin to a version and disable auto-update");
+    console.log("  oked update --unpin         Re-enable auto-update");
     break;
 }

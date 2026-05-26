@@ -8,10 +8,11 @@
   },
   "files": [
     "bin",
+    "lib",
     "README.md"
   ],
   "scripts": {
-    "test": "node --check bin/oked-openclaw.mjs"
+    "test": "node --check bin/oked-openclaw.mjs && node --check lib/oked-openclaw.mjs"
   },
   "dependencies": {
     "@oked/sdk": "^0.1.0"
