@@ -124,6 +124,10 @@ const HIGH_STAKES_COMMANDS = [
   /\bnpm\s+publish\b/,
   /\bnpm\s+unpublish\b/,
   /\bnpx\s+.*\s+deploy\b/,
+  // ssh to a remote host. Effects on the remote side cannot be undone from
+  // here, so treat every interactive/remote-exec ssh as high_stakes. Matches
+  // `ssh user@host ...` and `ssh -i key.pem ubuntu@1.2.3.4 ...`.
+  /\bssh\s+(?:-\S+\s+)*\S+@\S+/,
   // himalaya destructive ops. message delete + folder delete/expunge/purge
   // wipe mail from the server irreversibly; account delete wipes local config.
   /\bhimalaya\s+message\s+delete\b/,
