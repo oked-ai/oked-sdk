@@ -667,3 +667,42 @@ describe("himalaya email CLI — approval card rendering", () => {
     assert.equal(f!.Title, "Purge folder INBOX");
   });
 });
+
+describe("ssh and gh pr create — labels + kinds", () => {
+  it("ssh user@host \"cmd\" → 'SSH to ...' with remote command as body", () => {
+    const f = describeFields("Bash", { command: 'ssh user@example.com "ls /"' });
+    assert.equal(f!.Title, "SSH to user@example.com");
+    assert.equal(f!.Target, "user@example.com");
+    assert.equal(f!.Kind, "ssh_remote");
+    assert.equal(f!.Body, '"ls /"');
+  });
+
+  it("ssh -i key.pem ubuntu@ip systemctl restart nginx → ssh_remote with body", () => {
+    const f = describeFields("Bash", {
+      command: "ssh -i key.pem ubuntu@1.2.3.4 systemctl restart nginx",
+    });
+    assert.equal(f!.Title, "SSH to ubuntu@1.2.3.4");
+    assert.equal(f!.Target, "ubuntu@1.2.3.4");
+    assert.equal(f!.Kind, "ssh_remote");
+    assert.equal(f!.Body, "systemctl restart nginx");
+  });
+
+  it("ssh user@host (no remote command) → ssh_remote, no body", () => {
+    const f = describeFields("Bash", { command: "ssh user@example.com" });
+    assert.equal(f!.Title, "SSH to user@example.com");
+    assert.equal(f!.Kind, "ssh_remote");
+    assert.equal(f!.Body, undefined);
+  });
+
+  it("gh pr create --title \"Fix bug\" → 'Create PR \"Fix bug\"'", () => {
+    const f = describeFields("Bash", { command: 'gh pr create --title "Fix bug"' });
+    assert.equal(f!.Title, 'Create PR "Fix bug"');
+    assert.equal(f!.Kind, "git_pr_create");
+  });
+
+  it("gh pr create (no flags) → 'Create pull request'", () => {
+    const f = describeFields("Bash", { command: "gh pr create" });
+    assert.equal(f!.Title, "Create pull request");
+    assert.equal(f!.Kind, "git_pr_create");
+  });
+});
