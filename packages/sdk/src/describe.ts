@@ -163,6 +163,32 @@ function summarizeBash(command: string, sizeBytes?: number): Rendered {
     return m ? { title: `Git commit "${m[1]}"`, kind: "git_commit" } : { title: "Git commit", kind: "git_commit" };
   }
 
+  // gh pr create — reversible (PRs can be closed). Extract --title when present.
+  if (/\bgh\s+pr\s+create\b/.test(cmd)) {
+    const m = cmd.match(/--title\s+["']([^"']+)["']/);
+    return m
+      ? { title: `Create PR "${truncate(m[1], 60)}"`, kind: "git_pr_create" }
+      : { title: "Create pull request", kind: "git_pr_create" };
+  }
+
+  // ssh to a remote host — remote side effects can't be undone from here.
+  // Skip ssh subcommands that aren't remote-exec (`ssh-keygen`, `ssh-add`,
+  // `ssh-keyscan`) by requiring a `user@host` token. Pull the remote command
+  // (anything after the host) so the approval card shows what will run there.
+  if (/^ssh\b/.test(cmd)) {
+    const hostM = cmd.match(/(\S+@\S+)(?:\s+(.+))?$/);
+    if (hostM) {
+      const target = hostM[1];
+      const remoteCmd = hostM[2]?.trim();
+      return {
+        title: `SSH to ${target}`,
+        target,
+        body: remoteCmd ? truncateBody(remoteCmd) : undefined,
+        kind: "ssh_remote",
+      };
+    }
+  }
+
   // curl with method
   const curlMethod = cmd.match(/curl\s+[^|]*-X\s*(DELETE|POST|PUT|PATCH)/i);
   if (curlMethod) {

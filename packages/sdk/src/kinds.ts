@@ -7,7 +7,7 @@
  * classifier that produced them.
  */
 
-export const CLASSIFIER_VERSION = "v1";
+export const CLASSIFIER_VERSION = "v2";
 
 export type OperationKind =
   // File operations
@@ -21,6 +21,9 @@ export type OperationKind =
   // Git
   | "git_push" | "git_force_push" | "git_reset_hard"
   | "git_clean" | "git_checkout" | "git_restore" | "git_commit"
+  | "git_pr_create"
+  // Network / remote
+  | "ssh_remote"
   // HTTP via shell
   | "http_get" | "http_post" | "http_put" | "http_delete"
   | "http_pipe_to_shell"

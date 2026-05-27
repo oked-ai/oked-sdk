@@ -116,6 +116,38 @@ describe("Ephemeral temp-dir writes -> warning (so multi-step skills don't doubl
   });
 });
 
+describe("ssh remote exec — high_stakes (irreversible remote effects)", () => {
+  it("ssh user@host with remote command → high_stakes", () => {
+    assert.equal(bash('ssh user@example.com "ls /"'), "high_stakes");
+  });
+
+  it("ssh -i key.pem ubuntu@ip with remote command → high_stakes", () => {
+    assert.equal(
+      bash("ssh -i key.pem ubuntu@1.2.3.4 systemctl restart nginx"),
+      "high_stakes",
+    );
+  });
+
+  it("ssh user@host with no command (interactive shell) → high_stakes", () => {
+    assert.equal(bash("ssh user@example.com"), "high_stakes");
+  });
+
+  it("ssh-keygen (no user@host) stays out of high_stakes", () => {
+    // ssh-keygen is local and reversible; should fall through, not match.
+    assert.notEqual(bash("ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519"), "high_stakes");
+  });
+});
+
+describe("gh pr create — review tier, reversible", () => {
+  it("gh pr create → review (default unknown-bash path)", () => {
+    assert.equal(bash("gh pr create"), "review");
+  });
+
+  it("gh pr create --title \"Fix bug\" → review", () => {
+    assert.equal(bash('gh pr create --title "Fix bug"'), "review");
+  });
+});
+
 describe("SQL CREATE is warning, DROP is high_stakes", () => {
   it("CREATE TABLE → warning", () => {
     assert.equal(bash('psql -c "CREATE TABLE users (id INT)"'), "warning");
