@@ -140,6 +140,14 @@ export { OKedAuthError, OKedBackendUnreachableError } from "./errors.js";
 export { TIER_ORDER, degradedDecision } from "./degraded.js";
 export { classify } from "./classify.js";
 export { describe, describeFields } from "./describe.js";
+export { applyRules } from "./rules.js";
+export type {
+  Rule,
+  RuleMatch,
+  RuleAction,
+  RuleDecision,
+  FieldOp,
+} from "./rules.js";
 export type { Rendered } from "./describe.js";
 export { CLASSIFIER_VERSION } from "./kinds.js";
 export type { OperationKind } from "./kinds.js";
