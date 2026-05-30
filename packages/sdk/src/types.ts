@@ -28,6 +28,13 @@ export interface OKedConfig {
    * outage regardless of this flag. See degradedDecision().
    */
   strictFailClosed: boolean;
+  /**
+   * TTL (ms) for the on-disk cache of user rules used by the hook's local
+   * escalation check. The Claude Code hook is a fresh process per tool call,
+   * so the cache lives on disk; a longer TTL means fewer fetches at the cost
+   * of slower rule propagation. Default 300_000 (5 min).
+   */
+  rulesCacheTtlMs: number;
 }
 
 export interface HookInput {
