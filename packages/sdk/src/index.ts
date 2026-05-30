@@ -1,11 +1,54 @@
+import { readFileSync, writeFileSync, mkdirSync } from "fs";
+import { dirname } from "path";
 import type { ApprovalRequest, ApprovalResponse, OKedConfig } from "./types.js";
-import { loadOKedConfig } from "./config.js";
+import type { Rule } from "./rules.js";
+import { loadOKedConfig, OKED_RULES_CACHE_PATH } from "./config.js";
 import { OKedAuthError, OKedBackendUnreachableError } from "./errors.js";
 
 function envStrictFailClosed(): boolean | undefined {
   const raw = process.env.OKED_STRICT_FAIL_CLOSED;
   if (raw === undefined) return undefined;
   return raw === "1" || raw.toLowerCase() === "true";
+}
+
+function envRulesCacheTtlMs(): number | undefined {
+  const raw = process.env.OKED_RULES_CACHE_TTL; // seconds
+  if (raw === undefined) return undefined;
+  const n = Number(raw);
+  return Number.isFinite(n) && n >= 0 ? n * 1000 : undefined;
+}
+
+interface RulesCacheEntry {
+  at: number;
+  rules: Rule[];
+}
+type RulesCacheFile = Record<string, RulesCacheEntry>;
+
+// Small stable key so different keys/backends don't collide in the shared
+// cache file, without storing the API key itself.
+function rulesCacheKey(backendUrl: string, apiKey: string): string {
+  const s = `${backendUrl}|${apiKey}`;
+  let h = 5381;
+  for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) >>> 0;
+  return h.toString(36);
+}
+
+function readRulesCache(): RulesCacheFile {
+  try {
+    const parsed = JSON.parse(readFileSync(OKED_RULES_CACHE_PATH, "utf-8"));
+    return parsed && typeof parsed === "object" ? (parsed as RulesCacheFile) : {};
+  } catch {
+    return {};
+  }
+}
+
+function writeRulesCache(cache: RulesCacheFile): void {
+  try {
+    mkdirSync(dirname(OKED_RULES_CACHE_PATH), { recursive: true });
+    writeFileSync(OKED_RULES_CACHE_PATH, JSON.stringify(cache));
+  } catch {
+    // Best-effort; a non-writable home dir just means no cross-call caching.
+  }
 }
 
 export class OKedClient {
@@ -27,6 +70,13 @@ export class OKedClient {
         envStrictFailClosed() ??
         persisted.strictFailClosed ??
         false,
+      rulesCacheTtlMs:
+        config?.rulesCacheTtlMs ??
+        envRulesCacheTtlMs() ??
+        (typeof persisted.rulesCacheTtlSeconds === "number"
+          ? persisted.rulesCacheTtlSeconds * 1000
+          : undefined) ??
+        300_000,
     };
   }
 
@@ -109,6 +159,35 @@ export class OKedClient {
       approval_id: result.approval_id,
       decision: result.decision as ApprovalResponse["decision"],
     };
+  }
+
+  /**
+   * User rules for local escalation checks, cached on disk (TTL
+   * `rulesCacheTtlMs`, default 5 min). The Claude Code hook is a fresh
+   * process per call, so caching must be on disk. Never throws: a failed
+   * fetch falls back to the last cached value (even if stale), else `[]`.
+   */
+  async getRules(): Promise<Rule[]> {
+    if (!this.config.apiKey) return [];
+    const key = rulesCacheKey(this.config.backendUrl, this.config.apiKey);
+    const cache = readRulesCache();
+    const entry = cache[key];
+    if (entry && Date.now() - entry.at < this.config.rulesCacheTtlMs) {
+      return entry.rules;
+    }
+    try {
+      const res = await fetch(`${this.config.backendUrl}/api/v1/rules`, {
+        headers: { Authorization: `Bearer ${this.config.apiKey}` },
+        signal: AbortSignal.timeout(5000),
+      });
+      if (!res.ok) return entry?.rules ?? [];
+      const rules = (await res.json()) as Rule[];
+      if (!Array.isArray(rules)) return entry?.rules ?? [];
+      writeRulesCache({ ...cache, [key]: { at: Date.now(), rules } });
+      return rules;
+    } catch {
+      return entry?.rules ?? [];
+    }
   }
 
   async ping(): Promise<boolean> {

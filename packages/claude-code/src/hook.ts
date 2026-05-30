@@ -4,6 +4,7 @@ import {
   classify,
   describe,
   describeFields,
+  applyRules,
   degradedDecision,
   OKedAuthError,
   OKedBackendUnreachableError,
@@ -48,22 +49,40 @@ async function main(): Promise<void> {
   // Classify risk
   const tier = classify(toolName, toolInput);
 
-  // Safe tools - allow immediately, no network call
-  if (tier === "safe") {
-    process.stdout.write(JSON.stringify(makeOutput("allow")));
-    return;
-  }
+  const client = new OKedClient();
+  const fields = describeFields(toolName, toolInput) ?? undefined;
 
-  // Warning - allow through, log to terminal only, no network call
-  if (tier === "warning") {
-    const summary = (toolInput.file_path ?? toolInput.command ?? toolName) as string;
-    process.stderr.write(`WARNING  OKed: ${toolName} ${summary} - allowed (inside project)\n`);
-    process.stdout.write(JSON.stringify(makeOutput("allow")));
-    return;
+  // safe/warning normally short-circuit locally with no network call. But a
+  // user rule can escalate (or auto-decide) such an action, and rules live
+  // server-side. Consult the locally-cached rules: if one matches this action,
+  // route it to the backend so the rule is applied authoritatively. With no
+  // matching rule (the common case) we keep the cheap local fast-path.
+  if (tier === "safe" || tier === "warning") {
+    let ruleMatches = false;
+    if (client.apiKey) {
+      try {
+        const rules = await client.getRules();
+        if (rules.length > 0) {
+          const decision = applyRules({ tier, fields: fields ?? {} }, rules, { cwd: input.cwd });
+          ruleMatches = Boolean(decision.appliedRuleId);
+        }
+      } catch {
+        // Advisory: a failed rules lookup must never block the action.
+      }
+    }
+    if (!ruleMatches) {
+      if (tier === "warning") {
+        const summary = (toolInput.file_path ?? toolInput.command ?? toolName) as string;
+        process.stderr.write(`WARNING  OKed: ${toolName} ${summary} - allowed (inside project)\n`);
+      }
+      process.stdout.write(JSON.stringify(makeOutput("allow")));
+      return;
+    }
+    // A rule matched a normally-silent action — fall through to the backend,
+    // which applies the rule authoritatively (escalate / auto-decide + audit).
   }
 
   // Check if API key is configured
-  const client = new OKedClient();
   if (!client.apiKey) {
     log("not paired - run `oked init` to pair this device. Falling back to Claude's built-in prompt.");
     process.stdout.write(JSON.stringify(makeOutput("ask")));
@@ -72,7 +91,6 @@ async function main(): Promise<void> {
 
   // Generate human-readable description
   const description = describe(toolName, toolInput);
-  const fields = describeFields(toolName, toolInput) ?? undefined;
   log(`${toolName}: "${description}" - ${tier}`);
   log("Requesting approval... (check your phone)");
 
