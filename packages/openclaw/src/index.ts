@@ -192,6 +192,12 @@ const plugin = {
     api.on("before_tool_call", async (event, ctx) => {
       const { toolName, params } = event;
 
+      // Presence ping (throttled to once/day on disk, never throws). Fired for
+      // every tool call, before the allow-fast-path below, so installs that
+      // only run low-tier tools still register for retention. Fire-and-forget:
+      // this is a long-lived process, so we never add latency to the call.
+      if (oked.apiKey) void oked.heartbeat().catch(() => {});
+
       // Why return `{ block: true, blockReason }` instead of throwing:
       // OpenClaw's `runBeforeToolCallHook` wraps any thrown error - even our
       // OkedDeniedError - into a generic `kind: "failure"` outcome and

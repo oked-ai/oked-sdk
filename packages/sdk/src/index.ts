@@ -2,8 +2,9 @@ import { readFileSync, writeFileSync, mkdirSync } from "fs";
 import { dirname } from "path";
 import type { ApprovalRequest, ApprovalResponse, OKedConfig } from "./types.js";
 import type { Rule } from "./rules.js";
-import { loadOKedConfig, OKED_RULES_CACHE_PATH } from "./config.js";
+import { loadOKedConfig, OKED_RULES_CACHE_PATH, OKED_HEARTBEAT_PATH } from "./config.js";
 import { OKedAuthError, OKedBackendUnreachableError } from "./errors.js";
+import { hostname } from "os";
 
 function envStrictFailClosed(): boolean | undefined {
   const raw = process.env.OKED_STRICT_FAIL_CLOSED;
@@ -13,6 +14,13 @@ function envStrictFailClosed(): boolean | undefined {
 
 function envRulesCacheTtlMs(): number | undefined {
   const raw = process.env.OKED_RULES_CACHE_TTL; // seconds
+  if (raw === undefined) return undefined;
+  const n = Number(raw);
+  return Number.isFinite(n) && n >= 0 ? n * 1000 : undefined;
+}
+
+function envHeartbeatIntervalMs(): number | undefined {
+  const raw = process.env.OKED_HEARTBEAT_INTERVAL; // seconds
   if (raw === undefined) return undefined;
   const n = Number(raw);
   return Number.isFinite(n) && n >= 0 ? n * 1000 : undefined;
@@ -51,6 +59,29 @@ function writeRulesCache(cache: RulesCacheFile): void {
   }
 }
 
+// Last-heartbeat timestamps, keyed like the rules cache so different
+// keys/backends don't collide. The Claude Code hook is a fresh process per
+// call, so the throttle must live on disk.
+type HeartbeatStampFile = Record<string, number>;
+
+function readHeartbeatStamps(): HeartbeatStampFile {
+  try {
+    const parsed = JSON.parse(readFileSync(OKED_HEARTBEAT_PATH, "utf-8"));
+    return parsed && typeof parsed === "object" ? (parsed as HeartbeatStampFile) : {};
+  } catch {
+    return {};
+  }
+}
+
+function writeHeartbeatStamps(stamps: HeartbeatStampFile): void {
+  try {
+    mkdirSync(dirname(OKED_HEARTBEAT_PATH), { recursive: true });
+    writeFileSync(OKED_HEARTBEAT_PATH, JSON.stringify(stamps));
+  } catch {
+    // Best-effort; a non-writable home dir just means we re-ping next call.
+  }
+}
+
 export class OKedClient {
   private config: OKedConfig;
 
@@ -77,6 +108,13 @@ export class OKedClient {
           ? persisted.rulesCacheTtlSeconds * 1000
           : undefined) ??
         300_000,
+      heartbeatIntervalMs:
+        config?.heartbeatIntervalMs ??
+        envHeartbeatIntervalMs() ??
+        (typeof persisted.heartbeatIntervalSeconds === "number"
+          ? persisted.heartbeatIntervalSeconds * 1000
+          : undefined) ??
+        86_400_000,
     };
   }
 
@@ -198,6 +236,42 @@ export class OKedClient {
       return res.ok;
     } catch {
       return false;
+    }
+  }
+
+  /**
+   * Presence ping so the backend knows this install is still alive — feeds
+   * retention analytics, including users who only ever run safe/warning
+   * actions (which otherwise never reach the backend). Throttled on disk to
+   * `heartbeatIntervalMs` (default once/day), keyed per backend+key. Never
+   * throws: a missing key, a throttled call, or a failed request are all
+   * silent no-ops, so it is safe to await on the hook's hot path. The stamp is
+   * only advanced on a successful send, so a transient outage just re-pings
+   * next call.
+   */
+  async heartbeat(): Promise<void> {
+    if (!this.config.apiKey) return;
+    const key = rulesCacheKey(this.config.backendUrl, this.config.apiKey);
+    const stamps = readHeartbeatStamps();
+    const last = stamps[key];
+    if (typeof last === "number" && Date.now() - last < this.config.heartbeatIntervalMs) {
+      return;
+    }
+    try {
+      const res = await fetch(`${this.config.backendUrl}/api/v1/heartbeat`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${this.config.apiKey}`,
+        },
+        body: JSON.stringify({ hostname: hostname() }),
+        signal: AbortSignal.timeout(3000),
+      });
+      if (res.ok) {
+        writeHeartbeatStamps({ ...stamps, [key]: Date.now() });
+      }
+    } catch {
+      // Best-effort presence signal; never block or break the agent.
     }
   }
 }
