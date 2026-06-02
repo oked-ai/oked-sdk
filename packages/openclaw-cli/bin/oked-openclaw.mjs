@@ -28,6 +28,10 @@ const OKED_CONFIG = path.join(OKED_DIR, 'config.json');
 const DEFAULT_BACKEND_URL = process.env.OKED_BACKEND_URL || 'https://api.oked.ai';
 const CLIENT_VERSION = '0.1.0';
 
+async function chmodOwnerOnly(file) {
+  try { await chmod(file, 0o600); } catch { /* Windows */ }
+}
+
 async function writeOkedConfig(apiKey, backendUrl) {
   await mkdir(OKED_DIR, { recursive: true });
   let existing = {};
@@ -39,7 +43,7 @@ async function writeOkedConfig(apiKey, backendUrl) {
   }
   const payload = { ...existing, apiKey, backendUrl };
   await writeFile(OKED_CONFIG, JSON.stringify(payload, null, 2) + '\n', 'utf8');
-  try { await chmod(OKED_CONFIG, 0o600); } catch { /* Windows */ }
+  await chmodOwnerOnly(OKED_CONFIG);
 }
 
 function openBrowser(url) {
@@ -145,6 +149,7 @@ async function readConfig() {
 async function writeConfig(cfg) {
   await mkdir(OPENCLAW_DIR, { recursive: true });
   await writeFile(OPENCLAW_CONFIG, JSON.stringify(cfg, null, 2) + '\n', 'utf8');
+  await chmodOwnerOnly(OPENCLAW_CONFIG);
 }
 
 async function prompt(question) {
