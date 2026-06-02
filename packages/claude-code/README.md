@@ -14,16 +14,15 @@ npm install -g @oked/claude-code
 oked init
 ```
 
-`oked init` prompts for an `OKED_API_KEY` and writes a `PreToolUse` hook entry into `~/.claude/settings.json`. Open a new Claude Code session to activate.
+`oked init` writes a `PreToolUse` hook entry into the current project's `.claude/settings.json`, opens OKed's device-pairing flow in your browser, and stores the paired API key in `~/.oked/config.json`. Open a new Claude Code session in that project to activate the hook.
 
 ## Commands
 
 | Command | What it does |
 |---|---|
-| `oked init` | Install the hook and store the API key. |
-| `oked test` | Send a test approval request to verify your setup end-to-end. |
+| `oked init` | Install or update the project hook and pair this device. |
 | `oked status` | Show install state and ping the backend. |
-| `oked uninstall` | Remove the hook entry (other hooks are preserved). |
+| `oked uninstall` | Remove the project hook entry (other hooks are preserved). |
 
 ## What gets intercepted
 
@@ -50,7 +49,7 @@ Everything not matched by the classifier defaults to `review`.
 
 | Var | Required | Description |
 |---|---|---|
-| `OKED_API_KEY` | yes | Stored under `env.OKED_API_KEY` in `~/.claude/settings.json` by `oked init`. |
+| `OKED_API_KEY` | no, after pairing | Optional override. `oked init` normally stores the paired key in `~/.oked/config.json`. |
 | `OKED_BACKEND_URL` | no | Override the hosted backend URL. |
 | `OKED_STRICT_FAIL_CLOSED` | no | Set to `1` or `true` to deny every sensitive action when the backend is unreachable. |
 
