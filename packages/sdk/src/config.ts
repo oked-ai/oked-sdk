@@ -8,10 +8,13 @@ export interface PersistedConfig {
   strictFailClosed?: boolean;
   /** TTL (seconds) for the on-disk rules cache. See OKedConfig.rulesCacheTtlMs. */
   rulesCacheTtlSeconds?: number;
+  /** Min interval (seconds) between heartbeats. See OKedConfig.heartbeatIntervalMs. */
+  heartbeatIntervalSeconds?: number;
 }
 
 export const OKED_CONFIG_PATH = join(homedir(), ".oked", "config.json");
 export const OKED_RULES_CACHE_PATH = join(homedir(), ".oked", "rules-cache.json");
+export const OKED_HEARTBEAT_PATH = join(homedir(), ".oked", "heartbeat.json");
 
 /**
  * Read ~/.oked/config.json if present. Returns {} on any error (missing file,
@@ -29,6 +32,9 @@ export function loadOKedConfig(): PersistedConfig {
     if (typeof parsed.strictFailClosed === "boolean") out.strictFailClosed = parsed.strictFailClosed;
     if (typeof parsed.rulesCacheTtlSeconds === "number" && parsed.rulesCacheTtlSeconds >= 0) {
       out.rulesCacheTtlSeconds = parsed.rulesCacheTtlSeconds;
+    }
+    if (typeof parsed.heartbeatIntervalSeconds === "number" && parsed.heartbeatIntervalSeconds >= 0) {
+      out.heartbeatIntervalSeconds = parsed.heartbeatIntervalSeconds;
     }
     return out;
   } catch {

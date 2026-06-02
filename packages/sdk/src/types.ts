@@ -35,6 +35,14 @@ export interface OKedConfig {
    * of slower rule propagation. Default 300_000 (5 min).
    */
   rulesCacheTtlMs: number;
+  /**
+   * Min interval (ms) between heartbeats. The hook fires a lightweight ping so
+   * the backend knows the install is still alive (feeds retention analytics)
+   * even for users who only run safe/warning actions. Throttled on disk
+   * (~/.oked/heartbeat.json) because the hook is a fresh process per call.
+   * Default 86_400_000 (once per day).
+   */
+  heartbeatIntervalMs: number;
 }
 
 export interface HookInput {

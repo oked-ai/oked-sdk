@@ -50,6 +50,13 @@ async function main(): Promise<void> {
   const tier = classify(toolName, toolInput);
 
   const client = new OKedClient();
+
+  // Presence ping (throttled to once/day on disk, never throws). Fired before
+  // the safe/warning fast-path return so installs that only ever run safe
+  // actions still register for retention. Bounded by the 3s internal timeout,
+  // and only the once/day send actually waits.
+  if (client.apiKey) await client.heartbeat();
+
   const fields = describeFields(toolName, toolInput) ?? undefined;
 
   // safe/warning normally short-circuit locally with no network call. But a
