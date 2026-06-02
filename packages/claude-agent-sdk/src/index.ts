@@ -63,6 +63,14 @@ export const okedPreToolUseHook: HookCallback = async (rawInput) => {
 
   const tier = classify(toolName, toolInput);
 
+  const client = new OKedClient();
+
+  // Presence ping (throttled to once/day on disk, never throws). Fired before
+  // the safe/warning return so installs that only run safe actions still
+  // register for retention. Fire-and-forget: this is a long-lived process, so
+  // we never add latency to the tool call.
+  if (client.apiKey) void client.heartbeat().catch(() => {});
+
   // Safe — allow immediately, no network call.
   if (tier === "safe") return ALLOW;
 
@@ -73,7 +81,6 @@ export const okedPreToolUseHook: HookCallback = async (rawInput) => {
     return ALLOW;
   }
 
-  const client = new OKedClient();
   if (!client.apiKey) {
     log("OKED_API_KEY not set - deferring to the agent's built-in permission flow.");
     return ask();
