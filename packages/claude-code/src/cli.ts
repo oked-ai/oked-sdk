@@ -5,8 +5,11 @@ import { join, dirname } from "path";
 import { spawn } from "child_process";
 import { OKedClient, loadOKedConfig, OKED_CONFIG_PATH } from "@oked/sdk";
 
+const MCP_TOOL_MATCHER = "mcp__.*";
+const DEFAULT_TOOL_MATCHER = `Bash|Write|Edit|Agent|${MCP_TOOL_MATCHER}`;
+
 const HOOK_CONFIG = {
-  matcher: "Bash|Write|Edit|Agent",
+  matcher: DEFAULT_TOOL_MATCHER,
   hooks: [
     {
       type: "command",
@@ -53,6 +56,26 @@ function writeOkedConfig(apiKey: string, backendUrl: string): void {
   } catch {
     // Windows doesn't honor chmod; the file lives in the user profile anyway.
   }
+}
+
+function hasOkedCommandHook(entry: { hooks?: unknown[] }): boolean {
+  return Boolean(
+    entry.hooks?.some(
+      (h: unknown) =>
+        typeof h === "object" &&
+        h !== null &&
+        (h as Record<string, unknown>).command === "oked-hook"
+    )
+  );
+}
+
+function ensureMcpMatcher(matcher?: string): string | undefined {
+  if (!matcher) return matcher;
+  const parts = matcher.split("|").map((part) => part.trim());
+  if (parts.some((part) => part === MCP_TOOL_MATCHER || part.startsWith("mcp__"))) {
+    return matcher;
+  }
+  return `${matcher}|${MCP_TOOL_MATCHER}`;
 }
 
 function openBrowser(url: string): void {
@@ -145,15 +168,18 @@ async function init(): Promise<void> {
     hooks?: unknown[];
   }>;
 
-  // Check if OKed hook already exists
-  const hasOked = preToolUse.some((entry) =>
-    entry.hooks?.some(
-      (h: unknown) =>
-        typeof h === "object" &&
-        h !== null &&
-        (h as Record<string, unknown>).command === "oked-hook"
-    )
-  );
+  // Check if OKed hook already exists and upgrade older matchers to cover MCP
+  // tools (`mcp__<server>__<tool>`) as regular PreToolUse events.
+  let updatedOkedMatcher = false;
+  const hasOked = preToolUse.some((entry) => {
+    if (!hasOkedCommandHook(entry)) return false;
+    const nextMatcher = ensureMcpMatcher(entry.matcher);
+    if (nextMatcher !== entry.matcher) {
+      entry.matcher = nextMatcher;
+      updatedOkedMatcher = true;
+    }
+    return true;
+  });
 
   if (!hasOked) {
     preToolUse.push(HOOK_CONFIG);
@@ -161,6 +187,12 @@ async function init(): Promise<void> {
     settings.hooks = hooks;
     writeSettings(settingsPath, settings);
     console.log("OKed hook installed.");
+    console.log(`  Config: ${settingsPath}`);
+  } else if (updatedOkedMatcher) {
+    hooks.PreToolUse = preToolUse;
+    settings.hooks = hooks;
+    writeSettings(settingsPath, settings);
+    console.log("OKed hook updated.");
     console.log(`  Config: ${settingsPath}`);
   } else {
     console.log("OKed hook already configured.");
@@ -199,14 +231,7 @@ async function status(): Promise<void> {
     matcher?: string;
     hooks?: unknown[];
   }>;
-  const hasOked = preToolUse.some((entry) =>
-    entry.hooks?.some(
-      (h: unknown) =>
-        typeof h === "object" &&
-        h !== null &&
-        (h as Record<string, unknown>).command === "oked-hook"
-    )
-  );
+  const hasOked = preToolUse.some(hasOkedCommandHook);
 
   const client = new OKedClient();
   console.log(`OKed status:`);
@@ -233,13 +258,7 @@ function uninstall(): void {
 
   // Remove OKed hook entries
   hooks.PreToolUse = preToolUse.filter(
-    (entry) =>
-      !entry.hooks?.some(
-        (h: unknown) =>
-          typeof h === "object" &&
-          h !== null &&
-          (h as Record<string, unknown>).command === "oked-hook"
-      )
+    (entry) => !hasOkedCommandHook(entry)
   );
 
   if ((hooks.PreToolUse as unknown[]).length === 0) {

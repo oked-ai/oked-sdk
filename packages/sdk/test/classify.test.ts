@@ -148,6 +148,21 @@ describe("gh pr create — review tier, reversible", () => {
   });
 });
 
+describe("MCP tools", () => {
+  it("read-style MCP tools are safe", () => {
+    assert.equal(classify("mcp__github__get_issue", {}), "safe");
+  });
+
+  it("send/create/update MCP tools require review", () => {
+    assert.equal(classify("mcp__gmail__send_email", {}), "review");
+    assert.equal(classify("mcp__linear__update_issue", {}), "review");
+  });
+
+  it("delete/drop/remove MCP tools are high_stakes", () => {
+    assert.equal(classify("mcp__github__delete_repository", {}), "high_stakes");
+  });
+});
+
 describe("SQL CREATE is warning, DROP is high_stakes", () => {
   it("CREATE TABLE → warning", () => {
     assert.equal(bash('psql -c "CREATE TABLE users (id INT)"'), "warning");
