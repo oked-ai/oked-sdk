@@ -53,9 +53,9 @@ Agent: Read ./src/app.ts             ->  OK allowed (safe)
 3. **Push to your phone.** Approval lands in Telegram or as a Web Push notification with full context: what the agent wants to do and why it was flagged.
 4. **Every decision logged.** Each request, classification, and decision is persisted with a timestamp. Full audit trail, exportable any time.
 
-### Fail-safe by default
+### Degraded-mode behavior
 
-If the OKed backend is unreachable, if the request times out, or if anything parses wrong -> the agent is **denied**. The only exception is a missing API key, which falls back to the agent's native permission prompt.
+Explicit denials are always honored. Invalid API keys and unexpected hook errors deny the action. If the OKed backend is unreachable, OKed denies `high_stakes` actions and, by default, allows lower tiers so a temporary outage does not stop every agent workflow. Set `OKED_STRICT_FAIL_CLOSED=1` or `strictFailClosed: true` to deny every sensitive action during backend outages.
 
 ## SDK example
 

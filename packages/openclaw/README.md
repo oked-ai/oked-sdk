@@ -70,9 +70,9 @@ The classifier matches OpenClaw skill naming conventions:
 
 For tool names the classifier doesn't recognize, the default tier is `review`, so they are gated by the default configuration.
 
-## Fail-safe behavior
+## Degraded-mode behavior
 
-If the backend is unreachable, the request times out, or the API key is missing, the action is **denied**, not allowed. OKed never lets an agent proceed when in doubt.
+Explicit denials, invalid API keys, missing API keys, and unexpected plugin errors deny sensitive tool calls. If the backend is unreachable, OKed denies `high_stakes` actions and, by default, allows lower tiers so a temporary outage does not stop every OpenClaw workflow. Set `OKED_STRICT_FAIL_CLOSED=1` to deny every sensitive action during backend outages.
 
 ## Comparison to OpenClaw built-in approvals
 
