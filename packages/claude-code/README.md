@@ -52,10 +52,11 @@ Everything not matched by the classifier defaults to `review`.
 |---|---|---|
 | `OKED_API_KEY` | yes | Stored under `env.OKED_API_KEY` in `~/.claude/settings.json` by `oked init`. |
 | `OKED_BACKEND_URL` | no | Override the hosted backend URL. |
+| `OKED_STRICT_FAIL_CLOSED` | no | Set to `1` or `true` to deny every sensitive action when the backend is unreachable. |
 
-## Fail-safe behavior
+## Degraded-mode behavior
 
-If the backend is unreachable, the request times out, or the API key is missing, the action is **denied**, not allowed. OKed never lets an agent proceed when in doubt.
+Explicit denials and invalid API keys deny the action. If the backend is unreachable, OKed denies `high_stakes` actions and, by default, allows lower tiers so a temporary outage does not stop every Claude Code workflow. If no API key is configured, the hook returns `ask` so Claude Code's native permission flow can handle the decision. Set `OKED_STRICT_FAIL_CLOSED=1` to deny every sensitive action during backend outages.
 
 ## License
 
