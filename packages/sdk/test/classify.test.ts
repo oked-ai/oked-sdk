@@ -107,6 +107,14 @@ describe("Ephemeral temp-dir writes -> warning (so multi-step skills don't doubl
     assert.equal(write("/home/ubuntu/important.txt"), "review");
   });
 
+  it("write inside cwd -> warning", () => {
+    assert.equal(write(`${process.cwd()}/src/generated.txt`), "warning");
+  });
+
+  it("write to a sibling path with the same prefix -> review", () => {
+    assert.equal(write(`${process.cwd()}-sibling/generated.txt`), "review");
+  });
+
   it("shell: echo body > /tmp/draft.eml -> warning", () => {
     assert.equal(bash("echo 'hello' > /tmp/draft.eml"), "warning");
   });
