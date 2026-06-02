@@ -45,6 +45,7 @@ Pass to `new OKedClient(config)`:
 | `apiKey` | `string` | `OKED_API_KEY` env | Your OKed API key. Required. |
 | `backendUrl` | `string` | `https://api.oked.ai` | Override the OKed backend URL. |
 | `timeout` | `number` | `300000` | Per-approval timeout in ms. |
+| `strictFailClosed` | `boolean` | `false` | When true, backend outages deny every tier. When false, outages deny only `high_stakes` and allow lower tiers. |
 
 ## API
 
@@ -88,10 +89,11 @@ Full type definitions ship with the package (`dist/index.d.ts`).
 |---|---|---|
 | `OKED_API_KEY` | yes, unless passed in code | Your OKed API key. |
 | `OKED_BACKEND_URL` | no | Override the hosted backend URL. |
+| `OKED_STRICT_FAIL_CLOSED` | no | Set to `1` or `true` to deny every sensitive action when the backend is unreachable. |
 
-## Fail-safe behavior
+## Degraded-mode behavior
 
-If the backend is unreachable, the request times out, or the API key is missing, the action is **denied**, not allowed. OKed never lets an agent proceed when in doubt.
+Explicit user denials return `{ approved: false }` and should always be treated as final. Invalid API keys throw `OKedAuthError` and should deny. If the backend is unreachable, `OKedBackendUnreachableError` lets integrations apply degraded mode: `high_stakes` denies, while lower tiers may proceed unless `strictFailClosed` is enabled. Unexpected errors should be treated as deny.
 
 ## Development
 

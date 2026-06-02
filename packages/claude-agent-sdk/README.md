@@ -74,7 +74,8 @@ Same tier model and fail-safe semantics as the other OKed integrations:
 Failure handling: missing API key → defer to the agent's built-in
 permission flow (`ask`); invalid key → deny; backend unreachable → degrade
 per tier (`degradedDecision` — high-stakes / strict fail-closed deny, others
-may proceed); any unexpected error → deny. Never proceeds when in doubt.
+may proceed); any unexpected error → deny. Set `OKED_STRICT_FAIL_CLOSED=1`
+to deny every sensitive action during backend outages.
 
 ## Attribution
 
