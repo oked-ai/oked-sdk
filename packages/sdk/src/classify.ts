@@ -152,8 +152,10 @@ function isEphemeralPath(filePath: string): boolean {
 function isInsideProject(filePath: string): boolean {
   if (!filePath) return false;
   try {
+    const projectRoot = path.resolve(process.cwd());
     const resolved = path.resolve(filePath);
-    return resolved.startsWith(process.cwd());
+    const relative = path.relative(projectRoot, resolved);
+    return relative === "" || (!!relative && !relative.startsWith("..") && !path.isAbsolute(relative));
   } catch {
     return false;
   }
