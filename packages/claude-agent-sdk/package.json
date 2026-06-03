@@ -60,6 +60,9 @@
   },
   "homepage": "https://github.com/oked-ai/oked-sdk/tree/main/packages/claude-agent-sdk#readme",
   "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  },
   "publishConfig": {
     "access": "public"
   }

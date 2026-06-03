@@ -1,0 +1,6 @@
+# Default owner for everything in the repo.
+*                   @OrenDor
+
+# Release-critical surfaces — always require owner review.
+/packages/**        @OrenDor
+/.github/workflows/ @OrenDor

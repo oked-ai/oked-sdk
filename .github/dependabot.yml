@@ -1,0 +1,17 @@
+version: 2
+updates:
+  # npm dependencies across the workspace (root lockfile + all packages/*).
+  - package-ecosystem: npm
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 10
+    groups:
+      dev-dependencies:
+        dependency-type: development
+
+  # GitHub Actions used by ci.yml / publish.yml.
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly

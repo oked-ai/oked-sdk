@@ -14,6 +14,14 @@
 </p>
 
 <p align="center">
+  <a href="https://www.npmjs.com/package/@oked/sdk"><img src="https://img.shields.io/npm/v/@oked/sdk?label=%40oked%2Fsdk" alt="@oked/sdk on npm"></a>
+  <a href="https://www.npmjs.com/package/@oked/claude-code"><img src="https://img.shields.io/npm/v/@oked/claude-code?label=%40oked%2Fclaude-code" alt="@oked/claude-code on npm"></a>
+  <a href="https://www.npmjs.com/package/@oked/claude-agent-sdk"><img src="https://img.shields.io/npm/v/@oked/claude-agent-sdk?label=%40oked%2Fclaude-agent-sdk" alt="@oked/claude-agent-sdk on npm"></a>
+  <a href="https://www.npmjs.com/package/@oked/openclaw"><img src="https://img.shields.io/npm/v/@oked/openclaw?label=%40oked%2Fopenclaw" alt="@oked/openclaw on npm"></a>
+  <img src="https://img.shields.io/npm/l/@oked/sdk" alt="MIT license">
+</p>
+
+<p align="center">
   <img src="assets/hero.svg" alt="OKed approval card" width="320">
 </p>
 
@@ -87,6 +95,7 @@ The call returns `{ approved, approval_id, decision }`, where `decision` is `"ap
 | [`@oked/claude-code`](./packages/claude-code) | Zero-code integration for Claude Code. `oked init` writes a PreToolUse hook into your project's `.claude/settings.json`. |
 | [`@oked/claude-agent-sdk`](./packages/claude-agent-sdk) | Ready-made `PreToolUse` hook callback for the Claude Agent SDK. Wire into `options.hooks`. |
 | [`@oked/openclaw`](./packages/openclaw) | Zero-code integration for OpenClaw via the `before_tool_call` plugin. |
+| [`@oked/openclaw-cli`](./packages/openclaw-cli) | Installer CLI (`oked-openclaw`) that wraps `openclaw plugins install` and wires the plugin into `openclaw.json`. |
 
 ## Develop
 
@@ -100,11 +109,15 @@ Runs the build for every workspace that defines one.
 
 ## Publish
 
-```bash
-npm publish --workspaces --access public
-```
+All `@oked/*` packages are released **in lockstep** (shared version) via a **git tag**. Pushing
+a `vX.Y.Z` tag triggers the `Publish` workflow, which publishes every package to npm with
+provenance over OIDC trusted publishing (no stored token). See [RELEASING.md](./RELEASING.md)
+for the full checklist.
 
-Each package carries its own version; bump the version in its `packages/*/package.json` before publishing.
+```bash
+npm run version:all -- patch   # bump all packages in lockstep
+git commit -am "Release vX.Y.Z" && git tag vX.Y.Z && git push origin main --tags
+```
 
 ## License
 
