@@ -25,6 +25,11 @@ jobs:
       # OIDC trusted publishing + provenance requires npm >= 11.5.1.
       # Node 22 ships npm 10.x, so upgrade before publishing.
       - run: npm install -g npm@latest
+      - name: Show tool versions
+        run: |
+          node -v
+          npm -v
+          echo "id-token request url present: ${ACTIONS_ID_TOKEN_REQUEST_URL:+yes}"
       - run: npm ci
       - run: npm run build
       # Authenticates via OIDC trusted publishing (configured per-package on npmjs).
