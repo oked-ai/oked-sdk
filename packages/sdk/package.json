@@ -29,13 +29,17 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/oked-ai/oked-sdk.git"
+    "url": "git+https://github.com/oked-ai/oked-sdk.git",
+    "directory": "packages/sdk"
   },
   "bugs": {
     "url": "https://github.com/oked-ai/oked-sdk/issues"
   },
   "homepage": "https://github.com/oked-ai/oked-sdk#readme",
   "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  },
   "publishConfig": {
     "access": "public"
   },

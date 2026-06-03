@@ -19,8 +19,11 @@ jobs:
         with:
           node-version: 22
           registry-url: https://registry.npmjs.org
+      # OIDC trusted publishing + provenance requires npm >= 11.5.1.
+      # Node 22 ships npm 10.x, so upgrade before publishing.
+      - run: npm install -g npm@latest
       - run: npm ci
       - run: npm run build
+      # Authenticates via OIDC trusted publishing (configured per-package on npmjs).
+      # No NPM_TOKEN secret is used. publish:all passes --provenance.
       - run: npm run publish:all
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
