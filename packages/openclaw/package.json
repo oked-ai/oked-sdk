@@ -1,6 +1,6 @@
 {
   "name": "@oked/openclaw",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "OKed plugin for OpenClaw. Gates skill and tool calls behind a human approval push to your phone.",
   "type": "module",
   "main": "dist/index.js",
