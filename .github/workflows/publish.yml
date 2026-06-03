@@ -32,6 +32,16 @@ jobs:
           echo "id-token request url present: ${ACTIONS_ID_TOKEN_REQUEST_URL:+yes}"
       - run: npm ci
       - run: npm run build
-      # Authenticates via OIDC trusted publishing (configured per-package on npmjs).
-      # No NPM_TOKEN secret is used. publish:all passes --provenance.
-      - run: npm run publish:all
+      # Publish each package individually. `npm publish --workspaces` does NOT
+      # engage npm's OIDC trusted-publishing code path (it errors ENEEDAUTH),
+      # so we loop and run a plain single-package publish from each dir, which
+      # does perform the OIDC credential exchange. dist is already built above,
+      # so --ignore-scripts skips the redundant prepublishOnly rebuild (whose
+      # prebuild step uses --workspace=@oked/sdk and only works from the root).
+      - name: Publish packages (OIDC trusted publishing, per-package)
+        run: |
+          for dir in packages/sdk packages/claude-code packages/claude-agent-sdk packages/openclaw packages/openclaw-cli; do
+            echo "::group::publish $dir"
+            ( cd "$dir" && npm publish --access public --provenance --ignore-scripts )
+            echo "::endgroup::"
+          done
