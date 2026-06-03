@@ -15,10 +15,13 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+      # NOTE: do NOT set registry-url here. It makes setup-node write an
+      # .npmrc with `_authToken=${NODE_AUTH_TOKEN}` + always-auth, which makes
+      # npm attempt (empty) token auth instead of falling back to OIDC trusted
+      # publishing. With no token .npmrc present, npm performs the OIDC exchange.
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          registry-url: https://registry.npmjs.org
       # OIDC trusted publishing + provenance requires npm >= 11.5.1.
       # Node 22 ships npm 10.x, so upgrade before publishing.
       - run: npm install -g npm@latest
