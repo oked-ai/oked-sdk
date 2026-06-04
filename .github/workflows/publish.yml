@@ -28,12 +28,12 @@ jobs:
           - openclaw
           - openclaw-cli
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       # Do NOT set registry-url here: it makes setup-node write an .npmrc with
       # `_authToken=${NODE_AUTH_TOKEN}` + always-auth, so npm attempts (empty)
       # token auth instead of OIDC trusted publishing. With no token .npmrc,
       # npm performs the OIDC credential exchange.
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: 22
       # OIDC trusted publishing + provenance requires npm >= 11.5.1.
