@@ -12,36 +12,37 @@ jobs:
     permissions:
       contents: read
       id-token: write
-
+    strategy:
+      # One package per job. npm's OIDC trusted-publishing flow only engages
+      # for the FIRST publish in a job; a second `npm publish` in the same job
+      # fails with ENEEDAUTH (OIDC is never re-attempted). Giving each package
+      # its own job makes every publish a clean single publish, the case that
+      # works. All jobs run the same workflow file (publish.yml), which is what
+      # each package's Trusted Publisher on npmjs is configured against.
+      fail-fast: false
+      matrix:
+        package:
+          - sdk
+          - claude-code
+          - claude-agent-sdk
+          - openclaw
+          - openclaw-cli
     steps:
       - uses: actions/checkout@v4
-      # NOTE: do NOT set registry-url here. It makes setup-node write an
-      # .npmrc with `_authToken=${NODE_AUTH_TOKEN}` + always-auth, which makes
-      # npm attempt (empty) token auth instead of falling back to OIDC trusted
-      # publishing. With no token .npmrc present, npm performs the OIDC exchange.
+      # Do NOT set registry-url here: it makes setup-node write an .npmrc with
+      # `_authToken=${NODE_AUTH_TOKEN}` + always-auth, so npm attempts (empty)
+      # token auth instead of OIDC trusted publishing. With no token .npmrc,
+      # npm performs the OIDC credential exchange.
       - uses: actions/setup-node@v4
         with:
           node-version: 22
       # OIDC trusted publishing + provenance requires npm >= 11.5.1.
       # Node 22 ships npm 10.x, so upgrade before publishing.
       - run: npm install -g npm@latest
-      - name: Show tool versions
-        run: |
-          node -v
-          npm -v
-          echo "id-token request url present: ${ACTIONS_ID_TOKEN_REQUEST_URL:+yes}"
       - run: npm ci
       - run: npm run build
-      # Publish each package individually. `npm publish --workspaces` does NOT
-      # engage npm's OIDC trusted-publishing code path (it errors ENEEDAUTH),
-      # so we loop and run a plain single-package publish from each dir, which
-      # does perform the OIDC credential exchange. dist is already built above,
+      # Plain single-package publish from the package dir engages OIDC and
+      # signs provenance (requires a public repo). dist is already built above,
       # so --ignore-scripts skips the redundant prepublishOnly rebuild (whose
-      # prebuild step uses --workspace=@oked/sdk and only works from the root).
-      - name: Publish packages (OIDC trusted publishing, per-package)
-        run: |
-          for dir in packages/sdk packages/claude-code packages/claude-agent-sdk packages/openclaw packages/openclaw-cli; do
-            echo "::group::publish $dir"
-            ( cd "$dir" && npm publish --access public --provenance --ignore-scripts )
-            echo "::endgroup::"
-          done
+      # prebuild uses --workspace=@oked/sdk and only works from the repo root).
+      - run: cd packages/${{ matrix.package }} && npm publish --access public --provenance --ignore-scripts

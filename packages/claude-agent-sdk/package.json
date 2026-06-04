@@ -1,6 +1,6 @@
 {
   "name": "@oked/claude-agent-sdk",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "OKed for the Claude Agent SDK. A ready-made PreToolUse hook that gates sensitive tool calls behind a human approval push to your phone.",
   "type": "module",
   "main": "dist/index.js",
