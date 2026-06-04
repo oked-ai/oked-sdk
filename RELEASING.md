@@ -5,11 +5,26 @@ number and are published together. We use **manual git tags**; pushing a `vX.Y.Z
 `.github/workflows/publish.yml`, which publishes every package with npm provenance via OIDC
 trusted publishing (no stored token).
 
-## One-time setup (already done once the org exists)
+## One-time setup (already done — keep for reference)
 
 - An npm account with 2FA and a free `oked` organization (backs the `@oked` scope).
-- A **Trusted Publisher** configured on npmjs for **each** of the 5 packages, pointing at the
-  `oked-ai/oked-sdk` repo and the `publish.yml` workflow.
+- The **GitHub repo must be public** — npm provenance (sigstore) refuses private source repos
+  (`422 ... Unsupported GitHub Actions source repository visibility: "private"`).
+- A **Trusted Publisher** configured on npmjs for **each** of the 5 packages. Every field must
+  match the workflow exactly:
+  - Organization or user: `oked-ai`
+  - **Repository: `oked-sdk`** — the monorepo, NOT the package name. All 5 use `oked-sdk`.
+    A wrong repo here surfaces as a misleading `ENEEDAUTH` at publish (npm/cli#9088), not a
+    clear mismatch error.
+  - Workflow filename: `publish.yml`; Environment name: blank; Allowed action: `npm publish`.
+
+### Why the workflow publishes one package per job
+
+`npm publish --workspaces` does NOT engage npm's OIDC code path (fails `ENEEDAUTH`), so
+`publish.yml` uses a `matrix` with one package per job and runs a plain single-package
+`npm publish` from each package dir. `dist` is built first, so `--ignore-scripts` skips the
+redundant `prepublishOnly` rebuild (whose `prebuild` needs the repo root). Requires npm
+>= 11.5.1 (the workflow upgrades npm; Node 22 ships 10.x).
 
 ## Cutting a release
 
