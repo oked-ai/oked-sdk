@@ -31,24 +31,45 @@ redundant `prepublishOnly` rebuild (whose `prebuild` needs the repo root). Requi
 1. Make sure `main` is green (the `ci.yml` gate passed).
 2. Bump every package to the new version in lockstep:
    ```bash
-   npm run version:all -- <patch|minor|major>   # e.g. npm run version:all -- patch
+   npm run bump -- <patch|minor|major>   # e.g. npm run bump -- patch
+   # or an explicit version, including a prerelease:
+   npm run bump -- 0.2.0-beta.1
    ```
-   This rewrites `version` in all 5 `packages/*/package.json`.
-3. **Bump the pinned dependency by hand.** `@oked/claude-code` pins `@oked/sdk` at an **exact**
-   version (not a caret range) on purpose, so the hook always runs against the SDK it was
-   tested with. `npm version` does **not** rewrite that pin — update
-   `packages/claude-code/package.json` `dependencies["@oked/sdk"]` to the new version manually.
+   `scripts/bump-version.mjs` rewrites `version` in all 5 `packages/*/package.json` **and**
+   rewrites every internal `@oked/*` dependency pin to that exact version. All internal pins
+   are exact (not caret) on purpose, so each package always runs against the SDK it was tested
+   with. There is no longer a by-hand pin step.
+3. Refresh the lockfile so `package-lock.json` records the new versions:
+   ```bash
+   npm install
+   ```
 4. Commit the version bumps:
    ```bash
    git commit -am "Release vX.Y.Z"
    ```
-5. Tag and push:
+5. Tag and push. **The tag must match the version** (`vX.Y.Z` for version `X.Y.Z`); the
+   workflow fails the publish if they differ:
    ```bash
    git tag vX.Y.Z
    git push origin main --tags
    ```
 6. Watch the `Publish` workflow. When green, each package page on npmjs shows the
    green provenance panel ("Built and signed on GitHub Actions").
+
+### Release channels (dist-tags)
+
+The workflow picks the npm dist-tag from the version string:
+
+- **Stable** `X.Y.Z` -> `latest` (what `npm install @oked/...` resolves to).
+- **Prerelease** `X.Y.Z-beta.N` -> `next` (opt-in via `npm install @oked/sdk@next`); a
+  prerelease never becomes `latest`.
+
+Promote a prerelease to stable by cutting the matching stable version (re-run `npm run bump`),
+or move the dist-tag pointer without republishing:
+
+```bash
+npm dist-tag add @oked/sdk@0.2.0 latest   # repeat per package
+```
 
 ## Verifying a release
 
