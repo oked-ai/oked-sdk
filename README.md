@@ -110,12 +110,14 @@ Runs the build for every workspace that defines one.
 ## Publish
 
 All `@oked/*` packages are released **in lockstep** (shared version) via a **git tag**. Pushing
-a `vX.Y.Z` tag triggers the `Publish` workflow, which publishes every package to npm with
-provenance over OIDC trusted publishing (no stored token). See [RELEASING.md](./RELEASING.md)
-for the full checklist.
+a `vX.Y.Z` tag triggers the `Publish` workflow, which verifies the tag matches `package.json`,
+then publishes every package to npm with provenance over OIDC trusted publishing (no stored
+token). Stable versions land on the `latest` dist-tag; prerelease versions (`vX.Y.Z-beta.1`)
+land on `next`. See [RELEASING.md](./RELEASING.md) for the full checklist.
 
 ```bash
-npm run version:all -- patch   # bump all packages in lockstep
+npm run bump -- patch          # bump all versions + rewrite internal @oked/* pins, in lockstep
+npm install                    # refresh package-lock.json
 git commit -am "Release vX.Y.Z" && git tag vX.Y.Z && git push origin main --tags
 ```
 

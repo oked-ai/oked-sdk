@@ -36,6 +36,26 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: 22
+      # Fail fast (before npm ci/build) if a tag push doesn't match the version
+      # in package.json, and decide which dist-tag this publish lands on:
+      #   stable X.Y.Z          -> latest
+      #   prerelease X.Y.Z-...  -> next  (so a beta never becomes `latest`)
+      # On workflow_dispatch (no git tag) the match check is skipped; it's the
+      # break-glass path.
+      - name: Verify tag and resolve dist-tag
+        id: ver
+        run: |
+          PKG_VERSION=$(node -p "require('./packages/${{ matrix.package }}/package.json').version")
+          if [[ "$PKG_VERSION" == *-* ]]; then DIST_TAG=next; else DIST_TAG=latest; fi
+          echo "dist_tag=$DIST_TAG" >> "$GITHUB_OUTPUT"
+          if [[ "${{ github.ref_type }}" == "tag" ]]; then
+            TAG_VERSION="${GITHUB_REF_NAME#v}"
+            if [[ "$TAG_VERSION" != "$PKG_VERSION" ]]; then
+              echo "::error::git tag $GITHUB_REF_NAME ($TAG_VERSION) != ${{ matrix.package }} package.json version $PKG_VERSION"
+              exit 1
+            fi
+          fi
+          echo "publishing ${{ matrix.package }}@$PKG_VERSION under dist-tag $DIST_TAG"
       # OIDC trusted publishing + provenance requires npm >= 11.5.1.
       # Node 22 ships npm 10.x, so upgrade before publishing.
       - run: npm install -g npm@latest
@@ -45,4 +65,4 @@ jobs:
       # signs provenance (requires a public repo). dist is already built above,
       # so --ignore-scripts skips the redundant prepublishOnly rebuild (whose
       # prebuild uses --workspace=@oked/sdk and only works from the repo root).
-      - run: cd packages/${{ matrix.package }} && npm publish --access public --provenance --ignore-scripts
+      - run: cd packages/${{ matrix.package }} && npm publish --access public --provenance --ignore-scripts --tag ${{ steps.ver.outputs.dist_tag }}
