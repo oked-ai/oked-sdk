@@ -2,6 +2,7 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync, chmodSync } from "fs";
 import { homedir, hostname } from "os";
 import { join, dirname } from "path";
+import { fileURLToPath } from "url";
 import { spawn } from "child_process";
 import { OKedClient, loadOKedConfig, OKED_CONFIG_PATH } from "@oked/sdk";
 
@@ -21,7 +22,17 @@ const HOOK_CONFIG = {
 
 const DEFAULT_BACKEND_URL =
   process.env.OKED_BACKEND_URL || "https://api.oked.ai";
-const CLIENT_VERSION = "0.1.0";
+// Derived from this package's package.json at runtime so the version the
+// backend sees (client_version) can never drift from what's actually shipped.
+// From dist/cli.js, package.json sits one dir up at the package root.
+const CLIENT_VERSION: string = (() => {
+  try {
+    const pkgPath = join(dirname(fileURLToPath(import.meta.url)), "..", "package.json");
+    return JSON.parse(readFileSync(pkgPath, "utf-8")).version ?? "0.0.0";
+  } catch {
+    return "0.0.0";
+  }
+})();
 
 function getSettingsPath(): string {
   return join(process.cwd(), ".claude", "settings.json");
