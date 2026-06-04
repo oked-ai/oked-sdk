@@ -10,8 +10,7 @@
     "build": "npm run build --workspaces --if-present",
     "test": "npm test --workspaces --if-present",
     "dev": "npm run dev --workspace @oked/sdk",
-    "version:all": "npm version --workspaces --include-workspace-root=false",
-    "publish:all": "npm publish --workspaces --access public --provenance"
+    "version:all": "npm version --workspaces --include-workspace-root=false"
   },
   "repository": {
     "type": "git",
