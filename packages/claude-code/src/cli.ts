@@ -4,6 +4,7 @@ import { homedir, hostname } from "os";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 import { spawn } from "child_process";
+import { createInterface } from "readline";
 import { OKedClient, loadOKedConfig, OKED_CONFIG_PATH } from "@oked/sdk";
 
 const MCP_TOOL_MATCHER = "mcp__.*";
@@ -89,7 +90,7 @@ function ensureMcpMatcher(matcher?: string): string | undefined {
   return `${matcher}|${MCP_TOOL_MATCHER}`;
 }
 
-function openBrowser(url: string): void {
+function openBrowser(url: string): boolean {
   const platform = process.platform;
   let cmd: string;
   let args: string[];
@@ -104,10 +105,72 @@ function openBrowser(url: string): void {
     args = [url];
   }
   try {
-    spawn(cmd, args, { detached: true, stdio: "ignore" }).unref();
+    const child = spawn(cmd, args, { detached: true, stdio: "ignore" });
+    // The launcher may fail asynchronously (e.g. xdg-open missing). Swallow it
+    // so it can't crash the process; the URL is always printed as a fallback.
+    child.on("error", () => {});
+    child.unref();
+    return true;
   } catch {
     // Best effort. The user has the URL on screen anyway.
+    return false;
   }
+}
+
+/**
+ * Best-effort copy to the OS clipboard. Resolves true only if a clipboard tool
+ * actually accepted the text, so the "(copied to clipboard)" line never lies on
+ * a headless box. Linux is tried via wl-copy (Wayland), then xclip, then xsel.
+ * The code is always printed, so a failure here is purely cosmetic.
+ */
+function copyToClipboard(text: string): Promise<boolean> {
+  const candidates: Array<{ cmd: string; args: string[] }> =
+    process.platform === "darwin"
+      ? [{ cmd: "pbcopy", args: [] }]
+      : process.platform === "win32"
+        ? [{ cmd: "clip", args: [] }]
+        : [
+            { cmd: "wl-copy", args: [] },
+            { cmd: "xclip", args: ["-selection", "clipboard"] },
+            { cmd: "xsel", args: ["--clipboard", "--input"] },
+          ];
+
+  const tryCopy = ({ cmd, args }: { cmd: string; args: string[] }): Promise<boolean> =>
+    new Promise((resolve) => {
+      let settled = false;
+      const done = (ok: boolean): void => {
+        if (!settled) {
+          settled = true;
+          resolve(ok);
+        }
+      };
+      try {
+        const child = spawn(cmd, args, { stdio: ["pipe", "ignore", "ignore"] });
+        child.on("error", () => done(false)); // tool missing / not spawnable
+        child.on("close", (code) => done(code === 0));
+        child.stdin?.on("error", () => {}); // ignore EPIPE if the tool died early
+        child.stdin?.end(text);
+      } catch {
+        done(false);
+      }
+    });
+
+  // Try each candidate in order; stop at the first that succeeds.
+  return candidates.reduce<Promise<boolean>>(
+    (acc, cand) => acc.then((ok) => (ok ? true : tryCopy(cand))),
+    Promise.resolve(false)
+  );
+}
+
+/** Wait for the user to press Enter. Resolves immediately if stdin is closed. */
+function waitForEnter(message: string): Promise<void> {
+  return new Promise((resolve) => {
+    const rl = createInterface({ input: process.stdin, output: process.stdout });
+    rl.question(message, () => {
+      rl.close();
+      resolve();
+    });
+  });
 }
 
 async function pair(clientType: "claude-code" | "openclaw" | "sdk"): Promise<string | null> {
@@ -134,15 +197,38 @@ async function pair(clientType: "claude-code" | "openclaw" | "sdk"): Promise<str
   };
 
   console.log("");
-  console.log("  To pair this device, open:");
+  console.log("  Pair this device with your OKed account.");
+  console.log("");
+  console.log("  Your pairing code:");
+  console.log(`    ${code.user_code}`);
+  if (await copyToClipboard(code.user_code)) {
+    console.log("    (copied to clipboard)");
+  }
+  console.log("");
+
+  // Let the user read the code and initiate the browser launch themselves, so
+  // the popup isn't a surprise. Skip the prompt when non-interactive (no TTY,
+  // or `--yes`/`-y`) so CI and scripted installs still work.
+  const interactive =
+    Boolean(process.stdin.isTTY) &&
+    !process.argv.includes("--yes") &&
+    !process.argv.includes("-y");
+  if (interactive) {
+    await waitForEnter("  Press Enter to open your browser (Ctrl+C to cancel)... ");
+  }
+
+  const opened = openBrowser(code.verification_uri_complete);
+  console.log("");
+  if (opened) {
+    console.log("  Opened your browser to:");
+  } else {
+    console.log("  Couldn't open your browser automatically. Open this link:");
+  }
   console.log(`    ${code.verification_uri_complete}`);
   console.log("");
-  console.log("  Or visit " + code.verification_uri + " and enter the code:");
-  console.log(`    ${code.user_code}`);
+  console.log(`  (Or visit ${code.verification_uri} and enter the code above.)`);
   console.log("");
-  console.log("  Waiting for confirmation in your browser...");
-
-  openBrowser(code.verification_uri_complete);
+  console.log("  Waiting for confirmation...");
 
   const deadline = Date.now() + code.expires_in * 1000;
   const intervalMs = Math.max(1, code.interval) * 1000;
@@ -228,9 +314,10 @@ async function init(): Promise<void> {
 
   writeOkedConfig(apiKey, DEFAULT_BACKEND_URL);
   console.log("");
-  console.log(`  Paired. Key saved to ${OKED_CONFIG_PATH}`);
+  console.log(`  Paired ✓  Key saved to ${OKED_CONFIG_PATH}`);
   console.log("");
   console.log("Every Claude Code session in this project is now protected.");
+  console.log("Open a new Claude Code session to activate the hook.");
 }
 
 async function status(): Promise<void> {

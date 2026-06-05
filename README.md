@@ -39,7 +39,7 @@ Pick the path that matches your agent:
 
 | I'm using... | Install |
 |---|---|
-| **Claude Code** | `npm install -g @oked/claude-code && oked init` |
+| **Claude Code** | `npm install -g @oked/claude-code`<br>`oked init` |
 | **Claude Agent SDK** | `npm install @oked/claude-agent-sdk` (wire into `options.hooks`, see [package README](./packages/claude-agent-sdk)) |
 | **OpenClaw** | `npm install @oked/openclaw` (then enable in `~/.openclaw/openclaw.json`, see [package README](./packages/openclaw)) |
 | **Node.js SDK** (OpenAI / Anthropic / LangChain / custom) | `npm install @oked/sdk` |
@@ -118,7 +118,9 @@ land on `next`. See [RELEASING.md](./RELEASING.md) for the full checklist.
 ```bash
 npm run bump -- patch          # bump all versions + rewrite internal @oked/* pins, in lockstep
 npm install                    # refresh package-lock.json
-git commit -am "Release vX.Y.Z" && git tag vX.Y.Z && git push origin main --tags
+git commit -am "Release vX.Y.Z"   # one command per line: && is not portable to PowerShell
+git tag vX.Y.Z
+git push origin main --tags
 ```
 
 ## License
