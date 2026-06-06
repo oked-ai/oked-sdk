@@ -279,8 +279,12 @@ describe("pipe-to-shell — high_stakes across the pipe", () => {
 });
 
 describe("compound commands — worst tier wins", () => {
-  it("ls && rm -rf → high_stakes", () => {
-    assert.equal(bash("ls && rm -rf /tmp/foo"), "high_stakes");
+  it("ls && rm -rf <non-temp> → high_stakes", () => {
+    assert.equal(bash("ls && rm -rf /important/data"), "high_stakes");
+  });
+
+  it("ls && rm -rf /tmp/foo → warning (ephemeral delete)", () => {
+    assert.equal(bash("ls && rm -rf /tmp/foo"), "warning");
   });
 
   it("safe && safe → safe", () => {
@@ -505,5 +509,61 @@ describe("writes outside repo → warning, sensitive paths → review", () => {
   });
   it("Write ~/.zshrc → review (shell startup persistence)", () => {
     assert.equal(classify("Write", { file_path: `${home}/.zshrc`, content: "x" }), "review");
+  });
+});
+
+describe("diagnostic shell shapes → safe (round 3)", () => {
+  it("variable assignment (literal) → safe", () => {
+    assert.equal(bash("TARGET=5a28208abc"), "safe");
+  });
+
+  it("assignment capturing a read command → safe", () => {
+    assert.equal(bash("PREFIX=$(npm prefix -g)"), "safe");
+  });
+
+  it("env-prefixed command classifies the command → safe", () => {
+    assert.equal(bash("FOO=bar npm test"), "safe");
+  });
+
+  it("assignment capturing a dangerous command → high_stakes", () => {
+    assert.equal(bash("V=$(rm -rf /)"), "high_stakes");
+  });
+
+  it("sleep / exit / seq / test → safe", () => {
+    assert.equal(bash("sleep 15"), "safe");
+    assert.equal(bash("exit 1"), "safe");
+    assert.equal(bash("seq 1 40"), "safe");
+    assert.equal(bash('[ -f "$X" ] && grep y z'), "safe");
+  });
+
+  it("<cmd> --help → safe", () => {
+    assert.equal(bash("oked --help"), "safe");
+  });
+
+  it("npm prefix/root → safe", () => {
+    assert.equal(bash("npm prefix -g"), "safe");
+    assert.equal(bash("npm root -g"), "safe");
+  });
+
+  it("a poll loop (curl/sed/if/sleep/exit) → safe", () => {
+    const cmd = [
+      `TARGET=abc`,
+      `for i in $(seq 1 40); do`,
+      `  V=$(curl -s https://x/health | sed -n 's/a/b/p')`,
+      `  if [ "$V" = "$TARGET" ]; then echo done; exit 0; fi`,
+      `  echo "poll $i"; sleep 15`,
+      `done`,
+    ].join("\n");
+    assert.equal(bash(cmd), "safe");
+  });
+});
+
+describe("ephemeral rm inside a compound → warning (round 3)", () => {
+  it("npx tsx ...; rm -f /tmp/x → warning (delete is per-stage)", () => {
+    assert.equal(bash("npx tsx /tmp/probe.mjs 2>&1; rm -f /tmp/probe.mjs"), "warning");
+  });
+
+  it("echo done; rm /etc/x → high_stakes (non-temp delete in a stage)", () => {
+    assert.equal(bash("echo done; rm /etc/important"), "high_stakes");
   });
 });
