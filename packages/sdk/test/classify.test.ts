@@ -92,7 +92,7 @@ describe("himalaya email CLI - read ops safe, send review, delete high_stakes", 
   });
 });
 
-describe("Ephemeral temp-dir writes -> warning (so multi-step skills don't double-prompt)", () => {
+describe("file writes -> warning everywhere except sensitive paths", () => {
   const write = (file_path: string) => classify("write", { file_path, content: "x" });
 
   it("write to /tmp/foo.eml -> warning", () => {
@@ -103,24 +103,32 @@ describe("Ephemeral temp-dir writes -> warning (so multi-step skills don't doubl
     assert.equal(write("/var/tmp/x"), "warning");
   });
 
-  it("write to /home/ubuntu/important.txt -> review (NOT ephemeral, NOT in cwd)", () => {
-    assert.equal(write("/home/ubuntu/important.txt"), "review");
-  });
-
   it("write inside cwd -> warning", () => {
     assert.equal(write(`${process.cwd()}/src/generated.txt`), "warning");
   });
 
-  it("write to a sibling path with the same prefix -> review", () => {
-    assert.equal(write(`${process.cwd()}-sibling/generated.txt`), "review");
+  it("write to a sibling repo -> warning (a write can't act on its own)", () => {
+    assert.equal(write(`${process.cwd()}-sibling/generated.txt`), "warning");
+  });
+
+  it("write to an arbitrary home path -> warning", () => {
+    assert.equal(write("/home/ubuntu/important.txt"), "warning");
+  });
+
+  it("write to /etc -> review (system dir)", () => {
+    assert.equal(write("/etc/hosts"), "review");
   });
 
   it("shell: echo body > /tmp/draft.eml -> warning", () => {
     assert.equal(bash("echo 'hello' > /tmp/draft.eml"), "warning");
   });
 
-  it("shell: echo > /home/ubuntu/permanent.txt -> review", () => {
-    assert.equal(bash("echo 'hello' > /home/ubuntu/permanent.txt"), "review");
+  it("shell: echo > /home/ubuntu/permanent.txt -> warning (not sensitive)", () => {
+    assert.equal(bash("echo 'hello' > /home/ubuntu/permanent.txt"), "warning");
+  });
+
+  it("shell: echo > /etc/conf -> review (system dir)", () => {
+    assert.equal(bash("echo 'hello' > /etc/conf"), "review");
   });
 });
 
@@ -413,5 +421,89 @@ describe("rm of ephemeral temp files → warning", () => {
 
   it("rm mixing temp and non-temp stays high_stakes", () => {
     assert.equal(bash("rm /tmp/a && rm ./important.txt"), "high_stakes");
+  });
+});
+
+describe("heredoc consumer awareness (data vs interpreter)", () => {
+  it("gh pr create body mentioning SQL words → warning, not SQL", () => {
+    const cmd = [
+      `gh pr create --title "x" --body "$(cat <<'BODY'`,
+      `Smoke: grep truncate -> safe, psql DROP -> high_stakes.`,
+      `BODY`,
+      `)"`,
+    ].join("\n");
+    assert.equal(bash(cmd), "warning");
+  });
+
+  it("git commit -F - heredoc (message with -> and 'rm') → warning", () => {
+    const cmd = [
+      `git add a && git commit -F - <<'MSG'`,
+      `bump 0.1.3 -> 0.1.6`,
+      `ephemeral rm carve-out`,
+      `MSG`,
+    ].join("\n");
+    assert.equal(bash(cmd), "warning");
+  });
+
+  it("psql heredoc DROP is still high_stakes (real SQL consumer)", () => {
+    assert.equal(bash("psql <<'SQL'\nDROP TABLE users;\nSQL"), "high_stakes");
+  });
+
+  it("cat <<EOF | bash with rm is still high_stakes (shell consumer)", () => {
+    assert.equal(bash("cat <<'EOF' | bash\nrm -rf /important\nEOF"), "high_stakes");
+  });
+});
+
+describe("rm of temp via env var / macOS folders → warning", () => {
+  it("rm -rf $TMP → warning", () => {
+    assert.equal(bash("rm -rf $TMP"), "warning");
+  });
+
+  it("rm -rf ${TMPDIR}/build → warning", () => {
+    assert.equal(bash("rm -rf ${TMPDIR}/build"), "warning");
+  });
+
+  it("rm -rf /var/folders/.../T/tmp.X → warning", () => {
+    assert.equal(bash("rm -rf /var/folders/xx/yy/T/tmp.AAA"), "warning");
+  });
+
+  it("rm -rf /tmp (the root) stays high_stakes", () => {
+    assert.equal(bash("rm -rf /tmp"), "high_stakes");
+  });
+});
+
+describe("npm install → warning (postinstall runs scripts)", () => {
+  it("npm install → warning", () => {
+    assert.equal(bash("npm install"), "warning");
+  });
+  it("npm ci → warning", () => {
+    assert.equal(bash("npm ci"), "warning");
+  });
+});
+
+describe("read-only git subcommands → safe", () => {
+  for (const sub of ["ls-files x", "check-ignore x", "rev-parse HEAD", "config --get user.email", "show-ref", "blame x"]) {
+    it(`git ${sub} → safe`, () => {
+      assert.equal(bash(`git ${sub}`), "safe");
+    });
+  }
+});
+
+describe("writes outside repo → warning, sensitive paths → review", () => {
+  const home = process.env.HOME;
+  it("Edit a sibling repo file → warning", () => {
+    assert.equal(classify("Edit", { file_path: `${home}/Dev/Other/pkg/file.ts` }), "warning");
+  });
+  it("Write ~/.ssh/config → review", () => {
+    assert.equal(classify("Write", { file_path: `${home}/.ssh/config`, content: "x" }), "review");
+  });
+  it("Write ~/.claude/settings.json → review (OKed self-config)", () => {
+    assert.equal(classify("Write", { file_path: `${home}/.claude/settings.json`, content: "{}" }), "review");
+  });
+  it("Write ~/.claude/plans/x.md → warning (scratch)", () => {
+    assert.equal(classify("Write", { file_path: `${home}/.claude/plans/x.md`, content: "x" }), "warning");
+  });
+  it("Write ~/.zshrc → review (shell startup persistence)", () => {
+    assert.equal(classify("Write", { file_path: `${home}/.zshrc`, content: "x" }), "review");
   });
 });

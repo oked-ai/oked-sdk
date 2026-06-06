@@ -70,7 +70,8 @@ const SAFE_COMMANDS = [
   /^node\s+(-v|--version)/,
   /^npm\s+(list|ls|--version|-v|view|info|outdated|audit)\b/,
   /^npx\s+-v/,
-  /^git\s+(status|log|diff|branch|remote|show|tag|stash list)\b/,
+  /^git\s+(status|log|diff|branch|remote|show|tag|stash\s+list|ls-files|ls-tree|ls-remote|check-ignore|check-attr|rev-parse|rev-list|describe|cat-file|blame|shortlog|reflog|name-rev|whatchanged|for-each-ref|symbolic-ref|merge-base|var|grep|count-objects|show-ref|cherry|verify-commit|fsck)\b/,
+  /^git\s+config\s+(--get|--get-all|--get-regexp|--list|-l)\b/,
   /^docker\s+(ps|images|inspect|logs)\b/,
   /^docker\s+compose\s+(ps|logs)\b/,
   /^tree\b/,
@@ -187,6 +188,11 @@ const WARNING_COMMANDS = [
   /^npm\s+run\b/,
   /^bun\b/,
   /^deno\b/,
+  // Package installs run dependency postinstall scripts (code execution), so
+  // they're not "safe" — but they're a constant part of the dev loop, so log
+  // (warning) rather than prompt.
+  /^npm\s+(install|ci|i|update|upgrade|rebuild|prune|dedupe)\b/,
+  /^(pnpm|yarn)\s+(install|add|ci|up|upgrade)\b/,
 ];
 
 // Ephemeral filesystem locations. Writes here have no lasting effect on
@@ -194,49 +200,56 @@ const WARNING_COMMANDS = [
 // (e.g. `himalaya message send < /tmp/draft.eml`). Without this carve-out,
 // every multi-step skill that drafts a temp file generates two approval
 // prompts (the temp write + the real send) instead of one.
-const EPHEMERAL_PATH_RE = /^(?:\/tmp\/|\/var\/tmp\/|\/private\/tmp\/|[A-Za-z]:[\\/](?:Windows[\\/]Temp|Users[\\/][^\\/]+[\\/]AppData[\\/]Local[\\/]Temp)[\\/])/i;
+const EPHEMERAL_PATH_RE = /^(?:\/tmp\/|\/var\/tmp\/|\/var\/folders\/|\/private\/tmp\/|\/private\/var\/folders\/|[A-Za-z]:[\\/](?:Windows[\\/]Temp|Users[\\/][^\\/]+[\\/]AppData[\\/]Local[\\/]Temp)[\\/])/i;
+
+// A temp-dir env var (the conventional output of `mktemp -d` etc.): $TMPDIR,
+// $TMP, $TEMP, ${TMPDIR}, and paths beneath them. Treated as ephemeral since
+// we can't resolve the value but the intent is unambiguous.
+const TEMP_VAR_RE = /^\$\{?(?:TMPDIR|TMP|TEMP)\}?(?:\/|$)/;
 
 function isEphemeralPath(filePath: string): boolean {
   if (!filePath) return false;
-  return EPHEMERAL_PATH_RE.test(filePath);
+  return TEMP_VAR_RE.test(filePath) || EPHEMERAL_PATH_RE.test(filePath);
 }
 
-// Claude Code's own plan-mode and todo scratch files live under
-// ~/.claude/plans and ~/.claude/todos. They're agent bookkeeping, not project
-// changes, and have no side effects of their own. Writes there downgrade to
-// `warning`. This is deliberately narrow: the rest of ~/.claude (notably
-// settings.json, which holds the OKed hook config) is NOT covered, so an agent
-// can't silently rewrite its own guardrails without an approval.
-const AGENT_SCRATCH_DIRS = [
-  path.join(".claude", "plans"),
-  path.join(".claude", "todos"),
-];
-
-function isAgentScratchPath(filePath: string): boolean {
-  if (!filePath) return false;
+// Paths where a write/edit is genuinely dangerous and must stay `review`:
+// system directories, credential/secret stores, shell startup files (a
+// persistence vector), and OKed's own config (so an agent can't disable its
+// guardrails). Everything else — project files, sibling repos, scratch — is
+// treated as `warning` (a file write can't act on its own; whatever later
+// executes it is classified separately).
+function isSensitiveWritePath(filePath: string): boolean {
+  if (!filePath) return true; // unknown target → err toward review
+  let resolved: string;
   try {
-    const resolved = path.resolve(filePath);
-    const home = os.homedir();
-    return AGENT_SCRATCH_DIRS.some((dir) => {
-      const base = path.join(home, dir);
-      const relative = path.relative(base, resolved);
-      return relative !== "" && !relative.startsWith("..") && !path.isAbsolute(relative);
-    });
+    resolved = path.resolve(filePath);
   } catch {
-    return false;
+    return true;
   }
-}
-
-function isInsideProject(filePath: string): boolean {
-  if (!filePath) return false;
-  try {
-    const projectRoot = path.resolve(process.cwd());
-    const resolved = path.resolve(filePath);
-    const relative = path.relative(projectRoot, resolved);
-    return relative === "" || (!!relative && !relative.startsWith("..") && !path.isAbsolute(relative));
-  } catch {
-    return false;
+  const home = os.homedir();
+  const underHome = (rel: string) => {
+    const base = path.join(home, rel);
+    return resolved === base || resolved.startsWith(base + path.sep);
+  };
+  // OKed self-config — never let an agent edit its own hook config silently.
+  if (resolved === path.join(home, ".claude", "settings.json") ||
+      resolved === path.join(home, ".claude", "settings.local.json")) return true;
+  // Credential / secret stores.
+  for (const d of [".ssh", ".aws", ".gnupg", ".kube", ".docker", path.join(".config", "gcloud")]) {
+    if (underHome(d)) return true;
   }
+  // Sensitive dotfiles directly in $HOME (creds + shell startup persistence).
+  const sensitiveHomeFiles = new Set([
+    ".netrc", ".npmrc", ".pypirc", ".git-credentials", ".bash_history", ".zsh_history",
+    ".bashrc", ".zshrc", ".bash_profile", ".zprofile", ".profile", ".zshenv", ".zlogin",
+  ]);
+  if (path.dirname(resolved) === home && sensitiveHomeFiles.has(path.basename(resolved))) return true;
+  // System directories.
+  if (/^\/(etc|usr|bin|sbin|boot|sys|proc|opt|Library|System)(\/|$)/.test(resolved)) return true;
+  if (/^\/private\/etc(\/|$)/.test(resolved)) return true;
+  // /var, except the ephemeral temp subtrees.
+  if (/^\/var(\/|$)/.test(resolved) && !/^\/var\/(tmp|folders)(\/|$)/.test(resolved)) return true;
+  return false;
 }
 
 export function classify(
@@ -249,13 +262,13 @@ export function classify(
   if (HIGH_STAKES_TOOLS.has(toolName)) return "high_stakes";
   if (REVIEW_TOOLS.has(toolName)) return "review";
 
-  // File-editing tools: warning if inside project or an ephemeral temp dir,
-  // review otherwise. Temp-dir writes are "warning" because the file itself
-  // can't do harm — only what consumes it can.
+  // File-editing tools: a write/edit can't act on its own — whatever later
+  // executes it is classified separately — so it's `warning` (logged, no
+  // prompt) everywhere EXCEPT sensitive targets (system dirs, secret stores,
+  // shell startup files, OKed's own config), which stay `review`.
   if (toolName === "Write" || toolName === "Edit" || toolName === "NotebookEdit") {
     const filePath = toolInput.file_path as string;
-    if (isEphemeralPath(filePath) || isInsideProject(filePath) || isAgentScratchPath(filePath)) return "warning";
-    return "review";
+    return isSensitiveWritePath(filePath) ? "review" : "warning";
   }
 
   // Agent tool - safe. Launching a sub-agent is not itself a side effect, and
@@ -289,8 +302,7 @@ export function classify(
   const writePath = (toolInput.file_path ?? toolInput.path) as unknown;
   const writeContent = (toolInput.content ?? toolInput.data ?? toolInput.body) as unknown;
   if (typeof writePath === "string" && typeof writeContent === "string") {
-    if (isEphemeralPath(writePath) || isInsideProject(writePath) || isAgentScratchPath(writePath)) return "warning";
-    return "review";
+    return isSensitiveWritePath(writePath) ? "review" : "warning";
   }
 
   // Unknown tool - default to review (require approval)
@@ -423,18 +435,15 @@ function classifyBashCommand(command: string): RiskTier {
 
   // File-mutating shell patterns. Content-creation idioms (echo > X, tee,
   // dd of=, touch, sed -i) are the bypass route from a denied Write, so they're
-  // classified like the Write/Edit tool: writes inside the project, an
-  // ephemeral temp dir (/tmp, %TEMP%), or an agent scratch dir downgrade to
-  // warning; writes elsewhere stay review. cp/mv (rearranging existing bytes)
-  // stay review.
+  // classified exactly like the Write/Edit tool: `warning` unless a target is a
+  // sensitive path (system dir, secret store, shell rc, OKed config), which
+  // stays `review`. cp/mv (which can clobber/relocate existing files) stay
+  // review.
   const ops = extractShellWriteOps(trimmed);
   if (ops.length > 0) {
     const creates = ops.filter((o) => o.kind !== "copy" && o.kind !== "move");
     if (creates.length > 0) {
-      const allLocal = creates.every(
-        (o) => isEphemeralPath(o.target) || isInsideProject(o.target) || isAgentScratchPath(o.target),
-      );
-      return allLocal ? "warning" : "review";
+      return creates.some((o) => isSensitiveWritePath(o.target)) ? "review" : "warning";
     }
     return "review";
   }
@@ -484,28 +493,26 @@ export interface ShellWriteOp {
  *
  * Skips /dev/null and bare-digit FD duplicates (2>&1).
  */
-// True when the opener line sends the heredoc to a FILE (a `>`/`>>` redirect to
-// a real path, or `tee`). Those bodies are literal data; bodies fed to an
-// interpreter/DB instead (`psql <<EOF`, `node - <<EOF`, `bash <<EOF`) are
-// executed and must NOT be stripped — they still need to be classified.
-function openerWritesToFile(line: string): boolean {
-  if (/\btee\b/.test(line)) return true;
-  for (const m of line.matchAll(/(?:^|[^>])([12]?>>?|&>>?)\s*([^\s>|&;]+)/g)) {
-    const target = unquote(m[2]);
-    if (target && !/^\d+$/.test(target) && !isDevNullish(target)) return true;
-  }
-  return false;
+// Commands that EXECUTE a heredoc body fed to their stdin — a SQL CLI, a code
+// interpreter, or a shell. Their heredoc bodies are code/SQL and must stay
+// scannable. Detected as a command word at the start of the opener line or
+// after a pipe / `&&` / `;` / `$(` / backtick.
+const HEREDOC_INTERPRETER_RE =
+  /(?:^|\||&&|;|\$\(|`)\s*(?:\w+=\S+\s+)*(?:sudo\s+)?(?:psql|mysql|mariadb|sqlite3?|node|python\d?|ruby|perl|deno|bun|bash|sh|zsh|ksh|fish)\b/;
+
+function openerFeedsInterpreter(line: string): boolean {
+  return HEREDOC_INTERPRETER_RE.test(line);
 }
 
 /**
- * Removes heredoc *bodies* that are being written to a file, so their contents
- * aren't parsed as shell. `cat >> file <<'EOF' … EOF` is a common file-writing
- * idiom; the body is literal data, not commands, and must not be scanned for
- * operators, redirects, or risky tokens (a config/test file full of `;`, `&&`,
- * or even the literal text "rm -rf" would otherwise wreck classification). The
- * opener line — with its redirect and target — is preserved; only the body and
- * closing delimiter are dropped. Heredocs fed to an interpreter (no file
- * redirect on the opener line) are left intact so SQL/code detection still runs.
+ * Removes heredoc *bodies* unless they're fed to an interpreter/DB/shell that
+ * executes them. The default is to strip: `cat >> file <<'EOF'`, `git commit -F
+ * - <<'MSG'`, `gh pr create --body "$(cat <<'BODY')"`, `mail <<'EOF'` and the
+ * like all treat the body as literal DATA, which must not be parsed as shell
+ * (a commit message with `->` or a PR body mentioning "TRUNCATE"/"rm -rf" would
+ * otherwise wreck classification). Only heredocs whose opener line invokes an
+ * interpreter (`psql <<EOF`, `node - <<EOF`, `cat <<EOF | bash`) keep their
+ * body, so SQL/code detection still runs. The opener line is always preserved.
  */
 export function stripHeredocBodies(command: string): string {
   const lines = command.split("\n");
@@ -518,7 +525,7 @@ export function stripHeredocBodies(command: string): string {
     // space). Require a word-char delimiter so numeric left-shifts ($((1<<2)))
     // don't match. Use the last opener on the line as the active delimiter.
     const openers = [...line.matchAll(/<<-?\s*(["']?)([A-Za-z_][A-Za-z0-9_]*)\1/g)];
-    if (openers.length > 0 && openerWritesToFile(line)) {
+    if (openers.length > 0 && !openerFeedsInterpreter(line)) {
       const delim = openers[openers.length - 1][2];
       i++;
       while (i < lines.length && lines[i].trim() !== delim) i++; // drop body

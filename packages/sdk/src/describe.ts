@@ -8,7 +8,7 @@
  * backwards-compatible single-line consumers (audit logs, SMS).
  */
 
-import { extractShellWriteOps, stripHeredocBodies } from "./classify.js";
+import { extractShellWriteOps } from "./classify.js";
 
 const BODY_PREVIEW_MAX = 200;
 const COMMAND_INLINE_MAX = 50;
@@ -106,9 +106,7 @@ function summarize(toolName: string, toolInput: Record<string, unknown>): Render
 // ───────────────────────────────────────────────────────────────────────
 
 function summarizeBash(command: string, sizeBytes?: number): Rendered {
-  // Strip heredoc bodies so a file's literal contents aren't parsed as shell
-  // (and don't bloat the card) — the redirect/target on the opener line stays.
-  const cmd = stripHeredocBodies(command || "").trim();
+  const cmd = (command || "").trim();
   if (!cmd) return { title: "Run empty command", kind: "unknown_bash" };
 
   // SQL detection runs before shell-write detection so that inline-interpreter
@@ -148,13 +146,17 @@ function summarizeBash(command: string, sizeBytes?: number): Rendered {
   }
 
   // git
-  if (/\bgit\s+push\s+(?:--force|-f)\b/.test(cmd)) {
-    const m = cmd.match(/git\s+push\s+(?:--force|-f)\s+(\S+)\s+(\S+)/);
-    return { title: "Force push", target: m ? `${m[2]} → ${m[1]}` : "current branch", kind: "git_force_push" };
-  }
   if (/\bgit\s+push\b/.test(cmd)) {
-    const m = cmd.match(/git\s+push\s+(\S+)\s+(\S+)/);
-    return { title: "Push", target: m ? `${m[2]} → ${m[1]}` : "current branch", kind: "git_push" };
+    // Parse the remote + branch ignoring flags (-u, --force, --set-upstream, …)
+    // so `git push -u origin feat` renders "feat → origin", not "origin → -u".
+    const after = cmd.match(/\bgit\s+push\b(.*)$/s)?.[1] ?? "";
+    const args = after.split(/\s+/).filter((a) => a && !a.startsWith("-"));
+    const [remote, branch] = args;
+    const target = remote && branch ? `${branch} → ${remote}` : remote || "current branch";
+    const forced = /\bgit\s+push\b[^\n]*\s(?:--force(?:-with-lease)?|-f)\b/.test(cmd);
+    return forced
+      ? { title: "Force push", target, kind: "git_force_push" }
+      : { title: "Push", target, kind: "git_push" };
   }
   if (/\bgit\s+reset\s+--hard\b/.test(cmd)) return { title: "Hard reset — discard all local changes", kind: "git_reset_hard" };
   if (/\bgit\s+clean\s+-f/.test(cmd)) return { title: "Remove all untracked files", kind: "git_clean" };
@@ -308,12 +310,18 @@ function extractSqlFromScriptBody(body: string): string | null {
   return sqls.length > 0 ? sqls.join("\n") : null;
 }
 
+// A SQL CLI or code interpreter as a command word — at the start of the command
+// (allowing env=val / sudo prefixes) or after a pipe / `&&` / `;` / `$(`. Used
+// to gate SQL extraction so SQL words appearing in *argument data* (a `gh pr
+// create --body` mentioning "TRUNCATE", a path like `better-sqlite3`) don't get
+// misread as a statement to run.
+const SQL_CONSUMER_RE =
+  /(?:^|\||&&|;|\$\(|`)\s*(?:\w+=\S+\s+)*(?:sudo\s+)?(?:psql|mysql|mariadb|sqlite3?|node|python\d?|ruby|perl|deno|bun)\b/;
+
 export function findSqlInCommand(cmd: string): string | null {
-  // Inline interpreter flags: node -e, python -c, ruby -e, perl -e. Checked
-  // before the SQL-CLI prefix matchers below because those prefixes (e.g.
-  // `sqlite3`) can appear as substrings inside the interpreter body (e.g.
-  // `require('better-sqlite3')`) and would extract the wrong fragment.
-  const inline = cmd.match(/\b(?:node|python\d?|ruby|perl|deno|bun)\s+-[ec]\s+(?:"([\s\S]+?)"|'([\s\S]+?)')\s*$/);
+  // Inline interpreter flags: node -e, python -c, ruby -e, perl -e. Anchored to
+  // a command position so a SQL-looking string elsewhere doesn't match.
+  const inline = cmd.match(/(?:^|\||&&|;|\$\()\s*(?:\w+=\S+\s+)*(?:sudo\s+)?(?:node|python\d?|ruby|perl|deno|bun)\s+-[ec]\s+(?:"([\s\S]+?)"|'([\s\S]+?)')\s*$/);
   if (inline) {
     const body = inline[1] ?? inline[2];
     if (body && SQL_KEYWORDS_RE.test(body)) {
@@ -322,18 +330,22 @@ export function findSqlInCommand(cmd: string): string | null {
   }
 
   // psql -c "..." / mysql -e "..." / sqlite3 db "..." — outer-quoted statement.
-  const dq = cmd.match(/(?:psql|mysql|sqlite3?|mariadb)\b[^"]*"([\s\S]+?)"\s*$/i);
+  // Anchored to the start of the command so "psql"/"mysql" appearing inside an
+  // argument (another tool's --body, etc.) can't trigger a false SQL match.
+  const dq = cmd.match(/^(?:\s*\w+=\S+\s+)*(?:sudo\s+)?(?:psql|mysql|sqlite3?|mariadb)\b[^"]*"([\s\S]+?)"\s*$/i);
   if (dq) return dq[1];
-  const sq = cmd.match(/(?:psql|mysql|sqlite3?|mariadb)\b[^']*'([\s\S]+?)'\s*$/i);
+  const sq = cmd.match(/^(?:\s*\w+=\S+\s+)*(?:sudo\s+)?(?:psql|mysql|sqlite3?|mariadb)\b[^']*'([\s\S]+?)'\s*$/i);
   if (sq) return sq[1];
 
-  // Heredoc-piped script: <<EOF / <<'EOF' / <<"EOF" / <<-EOF.
-  // Single capture for the delimiter (quote-stripped) lets the closing
-  // anchor reference it without going through alternation.
+  // Heredoc-piped script: <<EOF / <<'EOF' / <<"EOF" / <<-EOF. Only when the
+  // command (outside the body) actually feeds the heredoc to a SQL CLI or
+  // interpreter — otherwise a `gh`/`cat`/`mail` heredoc whose body merely
+  // mentions SQL words would be misclassified as a statement to run.
   const hd = cmd.match(/<<-?\s*['"]?(\w+)['"]?[ \t]*\r?\n([\s\S]*?)\r?\n[ \t]*\1\b/);
   if (hd) {
     const body = hd[2];
-    if (body && SQL_KEYWORDS_RE.test(body)) {
+    const context = cmd.slice(0, hd.index) + cmd.slice((hd.index ?? 0) + hd[0].length);
+    if (body && SQL_CONSUMER_RE.test(context) && SQL_KEYWORDS_RE.test(body)) {
       return extractSqlFromScriptBody(body) ?? body;
     }
   }
