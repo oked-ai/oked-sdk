@@ -1,4 +1,5 @@
 import path from "path";
+import os from "os";
 import type { RiskTier } from "./types.js";
 import { findSqlInCommand } from "./describe.js";
 import { TIER_ORDER } from "./degraded.js";
@@ -85,6 +86,27 @@ const SAFE_COMMANDS = [
   // `message delete` / `folder delete|expunge|purge` matter; those land in
   // the review/high-stakes paths.
   /^himalaya\s+(account|folder|envelope|message\s+(?:read|export|search|copy|move)|attachment\s+(?:download|list)|template|search)\b/,
+  // cd just changes directory — no side effect of its own. Any dangerous
+  // command chained after it (`cd x && rm -rf`) is caught per-stage.
+  /^cd\b/,
+  // sed without -i / --in-place only prints to stdout (read-only). In-place
+  // edits are detected as a write op (below) before this is reached.
+  /^sed\b/,
+  // gh read-only subcommands — listing/viewing PRs, issues, runs, etc.
+  /^gh\s+(pr|issue|repo|run|workflow|release|api)\s+(list|view|status|diff|checks)\b/,
+  // Test runners — running the project's own tests is part of the dev loop.
+  // (Arbitrary node/npx/python execution is `warning`, see WARNING_COMMANDS.)
+  /^npm\s+(test|t)\b/,
+  /^npx\s+(tsx|ts-node|jest|vitest|mocha|ava|cypress|playwright|tsc)\b/,
+  /^(jest|vitest|mocha|pytest|ava)\b/,
+  /^python3?\s+-m\s+pytest\b/,
+  // Shell control-flow keywords. A compound like `for f in *; do cmd; done`
+  // is split on `;` into stages; these keyword stages carry no risk of their
+  // own, and any real command in the body is classified per-stage. Dangerous
+  // commands hidden in a $(...) on a keyword line are still caught by the
+  // high-stakes scan, which runs on the full command first.
+  /^(for|while|until|do|done|then|else|elif|fi|case|esac|if|select)\b/,
+  /^(done|fi|esac|\}|\{|:|true|false)\s*$/,
 ];
 
 // Bash commands classified as high stakes (destructive, irreversible, external)
@@ -101,9 +123,11 @@ const HIGH_STAKES_COMMANDS = [
   /\bgit\s+clean\s+-f/,
   /\bgit\s+checkout\s+--\s+\./,
   /\bgit\s+restore\s+--staged\s+\./,
-  /\bDROP\s+(TABLE|DATABASE|INDEX|VIEW)\b/i,
-  /\bDELETE\s+FROM\b/i,
-  /\bTRUNCATE\b/i,
+  // NOTE: SQL severity (DROP/DELETE FROM/TRUNCATE/…) is intentionally NOT matched
+  // here. Raw word patterns fire on ordinary text — `grep truncate`, `echo "drop
+  // table"` — producing false high_stakes. SQL is handled by findSqlInCommand,
+  // which only extracts statements from real SQL contexts (psql/mysql/sqlite3
+  // -c/-e, interpreter -e/-c bodies, heredocs), then classifySqlSeverity.
   /\bdocker\s+(rm|rmi|system\s+prune)\b/,
   /\bdocker\s+compose\s+down\b/,
   /\bkill\b/,
@@ -137,6 +161,34 @@ const HIGH_STAKES_COMMANDS = [
   /\bhimalaya\s+account\s+delete\b/,
 ];
 
+// Commands that auto-allow without a phone prompt but are logged (warning):
+// reversible/local actions where an audit line is enough.
+const WARNING_COMMANDS = [
+  // Local, reversible git ops — branch/stage/commit/stash/switch. They touch
+  // only the local repo and can be undone (amend, reset, checkout).
+  // Destructive/remote git (push, reset --hard, clean, checkout -- .) is matched
+  // by HIGH_STAKES_COMMANDS above and wins first. `git stash drop|clear` is
+  // excluded — those discard stashed work — so it stays `review`.
+  /^git\s+add\b/,
+  /^git\s+commit\b/,
+  /^git\s+checkout\s+-b\b/,
+  /^git\s+switch\b/,
+  /^git\s+stash\b(?!\s+(?:drop|clear))/,
+  // PR creation is reversible (a PR can be closed); the underlying branch push
+  // is separately high_stakes.
+  /^gh\s+pr\s+create\b/,
+  // Arbitrary code execution (node/npx/python/npm run/bun/deno). The spawned
+  // process can do anything and its syscalls don't pass back through OKed, so
+  // we don't prompt but keep a local trail. Known test runners and read-only
+  // version flags are handled as `safe` (SAFE_COMMANDS) before reaching here.
+  /^node\b/,
+  /^npx\b/,
+  /^python3?\b/,
+  /^npm\s+run\b/,
+  /^bun\b/,
+  /^deno\b/,
+];
+
 // Ephemeral filesystem locations. Writes here have no lasting effect on
 // their own — what matters is whatever subsequent command CONSUMES the file
 // (e.g. `himalaya message send < /tmp/draft.eml`). Without this carve-out,
@@ -147,6 +199,32 @@ const EPHEMERAL_PATH_RE = /^(?:\/tmp\/|\/var\/tmp\/|\/private\/tmp\/|[A-Za-z]:[\
 function isEphemeralPath(filePath: string): boolean {
   if (!filePath) return false;
   return EPHEMERAL_PATH_RE.test(filePath);
+}
+
+// Claude Code's own plan-mode and todo scratch files live under
+// ~/.claude/plans and ~/.claude/todos. They're agent bookkeeping, not project
+// changes, and have no side effects of their own. Writes there downgrade to
+// `warning`. This is deliberately narrow: the rest of ~/.claude (notably
+// settings.json, which holds the OKed hook config) is NOT covered, so an agent
+// can't silently rewrite its own guardrails without an approval.
+const AGENT_SCRATCH_DIRS = [
+  path.join(".claude", "plans"),
+  path.join(".claude", "todos"),
+];
+
+function isAgentScratchPath(filePath: string): boolean {
+  if (!filePath) return false;
+  try {
+    const resolved = path.resolve(filePath);
+    const home = os.homedir();
+    return AGENT_SCRATCH_DIRS.some((dir) => {
+      const base = path.join(home, dir);
+      const relative = path.relative(base, resolved);
+      return relative !== "" && !relative.startsWith("..") && !path.isAbsolute(relative);
+    });
+  } catch {
+    return false;
+  }
 }
 
 function isInsideProject(filePath: string): boolean {
@@ -176,12 +254,16 @@ export function classify(
   // can't do harm — only what consumes it can.
   if (toolName === "Write" || toolName === "Edit" || toolName === "NotebookEdit") {
     const filePath = toolInput.file_path as string;
-    if (isEphemeralPath(filePath) || isInsideProject(filePath)) return "warning";
+    if (isEphemeralPath(filePath) || isInsideProject(filePath) || isAgentScratchPath(filePath)) return "warning";
     return "review";
   }
 
-  // Agent tool - review (spawns subagent, not directly destructive)
-  if (toolName === "Agent") return "review";
+  // Agent tool - safe. Launching a sub-agent is not itself a side effect, and
+  // the sub-agent's own tool calls (Bash/Write/Edit/MCP) each fire their own
+  // PreToolUse hook and get classified independently. Gating the launch on top
+  // of that just double-prompts — once for the spawn, again for every real
+  // action the sub-agent takes — so the launch auto-allows.
+  if (toolName === "Agent") return "safe";
 
   // Bash commands need deeper analysis
   if (toolName === "Bash") {
@@ -207,7 +289,7 @@ export function classify(
   const writePath = (toolInput.file_path ?? toolInput.path) as unknown;
   const writeContent = (toolInput.content ?? toolInput.data ?? toolInput.body) as unknown;
   if (typeof writePath === "string" && typeof writeContent === "string") {
-    if (isEphemeralPath(writePath) || isInsideProject(writePath)) return "warning";
+    if (isEphemeralPath(writePath) || isInsideProject(writePath) || isAgentScratchPath(writePath)) return "warning";
     return "review";
   }
 
@@ -219,41 +301,107 @@ function maxTier(a: RiskTier, b: RiskTier): RiskTier {
   return TIER_ORDER[a] >= TIER_ORDER[b] ? a : b;
 }
 
-/** Split a shell command on top-level pipe characters, ignoring `||` and
- * pipes inside quoted strings. Returns trimmed segments. */
-function splitOnPipe(cmd: string): string[] {
+/** Split a shell command into top-level segments on the operators that
+ * sequence separate commands: `|`, `||`, `&&`, `;`. Operators inside quoted
+ * strings — including the `"$(cat <<'EOF' … )"` heredoc form used for commit
+ * messages — are kept intact so message text isn't split. Returns trimmed,
+ * non-empty segments. */
+function splitTopLevel(cmd: string): string[] {
   const out: string[] = [];
   let cur = "";
   let quote: '"' | "'" | null = null;
-  for (let i = 0; i < cmd.length; i++) {
+  let i = 0;
+  while (i < cmd.length) {
     const ch = cmd[i];
     if (quote) {
       cur += ch;
       if (ch === quote) quote = null;
-    } else if (ch === '"' || ch === "'") {
+      i++;
+      continue;
+    }
+    if (ch === '"' || ch === "'") {
       cur += ch;
       quote = ch;
-    } else if (ch === "|" && cmd[i + 1] !== "|" && cmd[i - 1] !== "|") {
+      i++;
+      continue;
+    }
+    // Heredoc: consume the opener and the entire body (up to the closing
+    // delimiter line) as part of the current segment, so operators inside a
+    // heredoc fed to an interpreter (psql/node/…) aren't treated as separators.
+    const hd = cmd.slice(i).match(/^<<-?\s*(["']?)([A-Za-z_][A-Za-z0-9_]*)\1/);
+    if (hd) {
+      cur += hd[0];
+      i += hd[0].length;
+      const close = cmd.slice(i).match(new RegExp(`\\n[ \\t]*${hd[2]}\\b`));
+      if (close) {
+        const end = i + (close.index ?? 0) + close[0].length;
+        cur += cmd.slice(i, end);
+        i = end;
+      } else {
+        cur += cmd.slice(i);
+        i = cmd.length;
+      }
+      continue;
+    }
+    const next = cmd[i + 1];
+    if ((ch === "&" && next === "&") || (ch === "|" && next === "|")) {
       out.push(cur.trim());
       cur = "";
-    } else {
-      cur += ch;
+      i += 2; // consume both operator chars
+      continue;
     }
+    if (ch === "|" || ch === ";") {
+      out.push(cur.trim());
+      cur = "";
+      i++;
+      continue;
+    }
+    cur += ch;
+    i++;
   }
   if (cur.trim()) out.push(cur.trim());
-  return out;
+  return out.filter(Boolean);
+}
+
+// rm/rmdir/trash whose every target is an ephemeral temp path (/tmp, %TEMP%,
+// …). Deleting throwaway temp files is low-risk, so it downgrades to warning.
+// Any non-temp target (or deleting a temp ROOT like `/tmp` itself, which isn't
+// an ephemeral *path*) means this returns false and the deletion stays
+// high_stakes.
+function isEphemeralOnlyDeletion(command: string): boolean {
+  const m = command.match(/^(?:sudo\s+)?(?:rm|rmdir|trash|trash-put)\b\s+(.+)$/s);
+  if (!m) return false;
+  const targets = splitArgs(m[1]).filter((a) => !a.startsWith("-"));
+  if (targets.length === 0) return false;
+  return targets.every((a) => isEphemeralPath(unquote(a)));
 }
 
 function classifyBashCommand(command: string): RiskTier {
   if (!command) return "safe";
 
-  const trimmed = command.trim();
+  // Strip heredoc bodies up front: their contents are literal data, not shell,
+  // and must not be scanned for high-stakes tokens, operators, or redirects.
+  const trimmed = stripHeredocBodies(command).trim();
 
-  // Pipelines: classify each stage and take the highest tier. Without this,
-  // `cat /tmp/draft.eml | himalaya message send` would match `^cat\b` first
-  // and silently allow the email send. The right-hand stage is what matters.
-  // Only split when there are 2+ stages so single commands don't recurse.
-  const stages = splitOnPipe(trimmed);
+  // rm/trash of only ephemeral temp files → warning (before the high-stakes
+  // scan, which would otherwise match the bare `rm`).
+  if (isEphemeralOnlyDeletion(trimmed)) return "warning";
+
+  // High-stakes scan on the FULL command, before any splitting. These patterns
+  // use \b and several intentionally span an operator (e.g. `curl … | bash`,
+  // `wget … | sh` — download-and-execute), so they have to be matched against
+  // the whole string. Most-restrictive-wins: a high-stakes match anywhere in a
+  // compound command takes the whole command to high_stakes.
+  for (const pattern of HIGH_STAKES_COMMANDS) {
+    if (pattern.test(trimmed)) return "high_stakes";
+  }
+
+  // Compound commands: split on top-level `|`, `||`, `&&`, `;` and take the
+  // highest tier. Without this, `cat /tmp/draft.eml | himalaya message send`
+  // would match `^cat\b` and silently allow the send, and `git add … && git
+  // commit …` couldn't be recognized as the local git ops they are. Only
+  // recurse when there are 2+ stages so single commands don't loop.
+  const stages = splitTopLevel(trimmed);
   if (stages.length > 1) {
     return stages.reduce<RiskTier>(
       (worst, stage) => maxTier(worst, classifyBashCommand(stage)),
@@ -261,37 +409,32 @@ function classifyBashCommand(command: string): RiskTier {
     );
   }
 
-  // sudo: classify based on the inner command, not sudo itself
-  if (/^sudo\s/.test(trimmed)) {
-    const inner = trimmed.replace(/^sudo\s+/, "");
-    for (const pattern of HIGH_STAKES_COMMANDS) {
-      if (pattern.test(inner)) return "high_stakes";
-    }
-    return "review";
-  }
+  // sudo: privilege escalation. A high-stakes inner command was already caught
+  // by the full-string scan above (\b patterns match through the `sudo` prefix);
+  // anything else still warrants review.
+  if (/^sudo\s/.test(trimmed)) return "review";
 
   // SQL hidden inside an interpreter wrapper (python -c, node -e, heredoc),
   // a DB CLI (psql -c, sqlite3 db "...", mysql -e), or at the top of the
-  // command. Severity comes from the statement, not the wrapper.
+  // command. Severity comes from the statement, not the wrapper. (High-stakes
+  // SQL — DROP/TRUNCATE/DELETE FROM — is already covered by the scan above.)
   const sql = findSqlInCommand(trimmed);
   if (sql) return classifySqlSeverity(sql);
 
-  // Check high stakes first (most restrictive wins)
-  for (const pattern of HIGH_STAKES_COMMANDS) {
-    if (pattern.test(trimmed)) return "high_stakes";
-  }
-
   // File-mutating shell patterns. Content-creation idioms (echo > X, tee,
-  // dd of=, touch, sed -i, heredoc) require approval — they're exactly the
-  // bypass route from a denied Write. cp/mv just rearrange existing bytes
-  // and stay safe. Writes to ephemeral temp dirs (/tmp, %TEMP%) downgrade
-  // to warning: the temp file alone can't do harm, only what consumes it.
+  // dd of=, touch, sed -i) are the bypass route from a denied Write, so they're
+  // classified like the Write/Edit tool: writes inside the project, an
+  // ephemeral temp dir (/tmp, %TEMP%), or an agent scratch dir downgrade to
+  // warning; writes elsewhere stay review. cp/mv (rearranging existing bytes)
+  // stay review.
   const ops = extractShellWriteOps(trimmed);
   if (ops.length > 0) {
     const creates = ops.filter((o) => o.kind !== "copy" && o.kind !== "move");
     if (creates.length > 0) {
-      if (creates.every((o) => isEphemeralPath(o.target))) return "warning";
-      return "review";
+      const allLocal = creates.every(
+        (o) => isEphemeralPath(o.target) || isInsideProject(o.target) || isAgentScratchPath(o.target),
+      );
+      return allLocal ? "warning" : "review";
     }
     return "review";
   }
@@ -299,6 +442,13 @@ function classifyBashCommand(command: string): RiskTier {
   // Check safe patterns
   for (const pattern of SAFE_COMMANDS) {
     if (pattern.test(trimmed)) return "safe";
+  }
+
+  // Reversible/local commands (local git, gh pr create, code execution) →
+  // warning: logged, no phone approval. Checked after SAFE so read-only git
+  // (status/log/`stash list`) and known test runners stay fully silent.
+  for (const pattern of WARNING_COMMANDS) {
+    if (pattern.test(trimmed)) return "warning";
   }
 
   // Default: review (require approval for unknown commands)
@@ -334,20 +484,105 @@ export interface ShellWriteOp {
  *
  * Skips /dev/null and bare-digit FD duplicates (2>&1).
  */
+// True when the opener line sends the heredoc to a FILE (a `>`/`>>` redirect to
+// a real path, or `tee`). Those bodies are literal data; bodies fed to an
+// interpreter/DB instead (`psql <<EOF`, `node - <<EOF`, `bash <<EOF`) are
+// executed and must NOT be stripped — they still need to be classified.
+function openerWritesToFile(line: string): boolean {
+  if (/\btee\b/.test(line)) return true;
+  for (const m of line.matchAll(/(?:^|[^>])([12]?>>?|&>>?)\s*([^\s>|&;]+)/g)) {
+    const target = unquote(m[2]);
+    if (target && !/^\d+$/.test(target) && !isDevNullish(target)) return true;
+  }
+  return false;
+}
+
+/**
+ * Removes heredoc *bodies* that are being written to a file, so their contents
+ * aren't parsed as shell. `cat >> file <<'EOF' … EOF` is a common file-writing
+ * idiom; the body is literal data, not commands, and must not be scanned for
+ * operators, redirects, or risky tokens (a config/test file full of `;`, `&&`,
+ * or even the literal text "rm -rf" would otherwise wreck classification). The
+ * opener line — with its redirect and target — is preserved; only the body and
+ * closing delimiter are dropped. Heredocs fed to an interpreter (no file
+ * redirect on the opener line) are left intact so SQL/code detection still runs.
+ */
+export function stripHeredocBodies(command: string): string {
+  const lines = command.split("\n");
+  const out: string[] = [];
+  let i = 0;
+  while (i < lines.length) {
+    const line = lines[i];
+    out.push(line);
+    // Heredoc openers: <<DELIM, <<'DELIM', <<"DELIM", <<-DELIM (with optional
+    // space). Require a word-char delimiter so numeric left-shifts ($((1<<2)))
+    // don't match. Use the last opener on the line as the active delimiter.
+    const openers = [...line.matchAll(/<<-?\s*(["']?)([A-Za-z_][A-Za-z0-9_]*)\1/g)];
+    if (openers.length > 0 && openerWritesToFile(line)) {
+      const delim = openers[openers.length - 1][2];
+      i++;
+      while (i < lines.length && lines[i].trim() !== delim) i++; // drop body
+      if (i < lines.length) i++; // drop the closing delimiter line
+      continue;
+    }
+    i++;
+  }
+  return out.join("\n");
+}
+
+/** Find output redirects (`>`, `>>`, `&>`, `2>`, …) outside quoted strings.
+ * The target token may itself be quoted. Skips `2>&1`-style FD dups, bare
+ * digits, and /dev/null. Heredoc `<<` is ignored (only `>` is a write). */
+function findRedirects(cmd: string): { append: boolean; target: string }[] {
+  const res: { append: boolean; target: string }[] = [];
+  let quote: '"' | "'" | null = null;
+  let i = 0;
+  while (i < cmd.length) {
+    const ch = cmd[i];
+    if (quote) {
+      if (ch === quote) quote = null;
+      i++;
+      continue;
+    }
+    if (ch === '"' || ch === "'") {
+      quote = ch;
+      i++;
+      continue;
+    }
+    const op = cmd.slice(i).match(/^([12]?>>?|&>>?)/);
+    if (op && cmd[i - 1] !== ">") {
+      let j = i + op[1].length;
+      while (j < cmd.length && /\s/.test(cmd[j])) j++;
+      let target = "";
+      if (cmd[j] === '"' || cmd[j] === "'") {
+        const q = cmd[j];
+        j++;
+        while (j < cmd.length && cmd[j] !== q) target += cmd[j++];
+        if (j < cmd.length) j++; // closing quote
+      } else {
+        while (j < cmd.length && !/[\s>|&;]/.test(cmd[j])) target += cmd[j++];
+      }
+      if (target && !/^\d+$/.test(target) && !isDevNullish(target)) {
+        res.push({ append: op[1] === ">>" || op[1] === "&>>", target });
+      }
+      i = j;
+      continue;
+    }
+    i++;
+  }
+  return res;
+}
+
 export function extractShellWriteOps(command: string): ShellWriteOp[] {
-  const cmd = command.trim();
+  const cmd = stripHeredocBodies(command).trim();
   const ops: ShellWriteOp[] = [];
 
-  // Output redirects: > path, >> path, &> path, 2> path. Try to pull the
-  // literal content when the LHS is echo/printf.
-  const redirRe = /(?:^|[^>])([12]?>>?|&>>?)\s*([^\s>|&;]+)/g;
-  for (const m of cmd.matchAll(redirRe)) {
-    const op = m[1];
-    const target = unquote(m[2]);
-    if (!target || /^\d+$/.test(target) || isDevNullish(target)) continue;
-    const append = op === ">>" || op === "&>>";
+  // Output redirects: > path, >> path, &> path, 2> path. Quote-aware so a `>`
+  // inside a quoted argument (e.g. a grep pattern `"echo > x"`) isn't mistaken
+  // for a redirect. The target token itself may be quoted (`> "my file"`).
+  for (const r of findRedirects(cmd)) {
     const content = extractEchoContent(cmd);
-    ops.push({ kind: append ? "append" : "create", target, content });
+    ops.push({ kind: r.append ? "append" : "create", target: r.target, content });
   }
 
   // tee [-a] path
@@ -377,8 +612,8 @@ export function extractShellWriteOps(command: string): ShellWriteOp[] {
     }
   }
 
-  // sed -i
-  if (/\bsed\b/.test(cmd) && /-i(?:\.\w+)?\b/.test(cmd)) {
+  // sed -i / --in-place
+  if (/\bsed\b/.test(cmd) && (/-i(?:\.\w+)?\b/.test(cmd) || /--in-place\b/.test(cmd))) {
     const sedM = cmd.match(/^\s*sed\b\s+(.+)$/);
     if (sedM) {
       const args = splitArgs(sedM[1]);

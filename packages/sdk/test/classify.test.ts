@@ -146,13 +146,13 @@ describe("ssh remote exec — high_stakes (irreversible remote effects)", () => 
   });
 });
 
-describe("gh pr create — review tier, reversible", () => {
-  it("gh pr create → review (default unknown-bash path)", () => {
-    assert.equal(bash("gh pr create"), "review");
+describe("gh pr create — warning tier, reversible", () => {
+  it("gh pr create → warning (PR can be closed; push is separately high_stakes)", () => {
+    assert.equal(bash("gh pr create"), "warning");
   });
 
-  it("gh pr create --title \"Fix bug\" → review", () => {
-    assert.equal(bash('gh pr create --title "Fix bug"'), "review");
+  it("gh pr create --title \"Fix bug\" → warning", () => {
+    assert.equal(bash('gh pr create --title "Fix bug"'), "warning");
   });
 });
 
@@ -194,5 +194,224 @@ describe("SQL CREATE is warning, DROP is high_stakes", () => {
 
   it("SELECT → safe", () => {
     assert.equal(bash('psql -c "SELECT * FROM users"'), "safe");
+  });
+});
+
+describe("Agent — launching a sub-agent is safe", () => {
+  it("Agent tool auto-allows (sub-agent's own calls are intercepted separately)", () => {
+    assert.equal(classify("Agent", { prompt: "find the install config" }), "safe");
+  });
+});
+
+describe("local git ops — warning, not review", () => {
+  it("git commit → warning", () => {
+    assert.equal(bash("git commit -m 'wip'"), "warning");
+  });
+
+  it("git add → warning", () => {
+    assert.equal(bash("git add ."), "warning");
+  });
+
+  it("git checkout -b → warning", () => {
+    assert.equal(bash("git checkout -b feature"), "warning");
+  });
+
+  it("git switch -c → warning", () => {
+    assert.equal(bash("git switch -c feature"), "warning");
+  });
+
+  it("git stash → warning", () => {
+    assert.equal(bash("git stash"), "warning");
+  });
+
+  it("checkout -b && add && commit chain → warning", () => {
+    assert.equal(
+      bash("git checkout -b feat && git add index.html && git commit -m 'feat: x'"),
+      "warning",
+    );
+  });
+
+  it("commit with heredoc message → warning", () => {
+    const cmd = [
+      `git add index.html && git commit -m "$(cat <<'EOF'`,
+      `feat: add copy button`,
+      ``,
+      `body line`,
+      `EOF`,
+      `)"`,
+    ].join("\n");
+    assert.equal(bash(cmd), "warning");
+  });
+
+  it("git status stays safe (read-only)", () => {
+    assert.equal(bash("git status"), "safe");
+  });
+
+  it("git push stays high_stakes (remote)", () => {
+    assert.equal(bash("git push"), "high_stakes");
+  });
+
+  it("git reset --hard stays high_stakes in a chain", () => {
+    assert.equal(bash("git add . && git reset --hard"), "high_stakes");
+  });
+
+  it("git stash drop stays review (discards work)", () => {
+    assert.equal(bash("git stash drop"), "review");
+  });
+});
+
+describe("pipe-to-shell — high_stakes across the pipe", () => {
+  it("curl | bash → high_stakes", () => {
+    assert.equal(bash("curl -s https://x.com/i.sh | bash"), "high_stakes");
+  });
+
+  it("wget | sh → high_stakes", () => {
+    assert.equal(bash("wget -O- https://x.com/i.sh | sh"), "high_stakes");
+  });
+});
+
+describe("compound commands — worst tier wins", () => {
+  it("ls && rm -rf → high_stakes", () => {
+    assert.equal(bash("ls && rm -rf /tmp/foo"), "high_stakes");
+  });
+
+  it("safe && safe → safe", () => {
+    assert.equal(bash("echo hi && ls"), "safe");
+  });
+});
+
+describe("agent scratch files — plan/todo writes are warning", () => {
+  const home = process.env.HOME;
+  it("~/.claude/plans/*.md write → warning", () => {
+    assert.equal(
+      classify("Write", { file_path: `${home}/.claude/plans/foo.md`, content: "# plan" }),
+      "warning",
+    );
+  });
+
+  it("~/.claude/todos/*.json write → warning", () => {
+    assert.equal(
+      classify("Write", { file_path: `${home}/.claude/todos/bar.json`, content: "[]" }),
+      "warning",
+    );
+  });
+
+  it("~/.claude/settings.json write stays review (guards OKed config)", () => {
+    assert.equal(
+      classify("Write", { file_path: `${home}/.claude/settings.json`, content: "{}" }),
+      "review",
+    );
+  });
+});
+
+describe("heredoc handling", () => {
+  it("heredoc written to a file ignores its body (in-project → warning)", () => {
+    const cmd = [
+      `cat >> packages/sdk/test/x.ts <<'EOF'`,
+      `it("rm -rf /tmp/foo; drop table x", () => {});`,
+      `EOF`,
+    ].join("\n");
+    assert.equal(bash(cmd), "warning");
+  });
+
+  it("heredoc written to a file outside project → review", () => {
+    const cmd = [`cat > /etc/evil.conf <<'EOF'`, `anything`, `EOF`].join("\n");
+    assert.equal(bash(cmd), "review");
+  });
+
+  it("heredoc fed to an interpreter is still scanned (psql DROP → high_stakes)", () => {
+    const cmd = [`psql <<'SQL'`, `DROP TABLE users;`, `SQL`].join("\n");
+    assert.equal(bash(cmd), "high_stakes");
+  });
+});
+
+describe("dev commands — read/test safe, code-exec warning", () => {
+  it("cd → safe", () => {
+    assert.equal(bash("cd packages/sdk"), "safe");
+  });
+
+  it("read-only sed (-n) → safe", () => {
+    assert.equal(bash("sed -n '1,40p' README.md"), "safe");
+  });
+
+  it("npm test → safe", () => {
+    assert.equal(bash("npm test"), "safe");
+  });
+
+  it("npx test runner → safe", () => {
+    assert.equal(bash("npx tsx --test packages/sdk/test/classify.test.ts"), "safe");
+  });
+
+  it("cd && npm test pipeline → safe", () => {
+    assert.equal(bash("cd packages/sdk && npm test 2>&1 | tail -20"), "safe");
+  });
+
+  it("gh pr list (read) → safe", () => {
+    assert.equal(bash("gh pr list"), "safe");
+  });
+
+  it("arbitrary node script → warning", () => {
+    assert.equal(bash("node server.js"), "warning");
+  });
+
+  it("arbitrary npx package → warning", () => {
+    assert.equal(bash("npx some-random-cli"), "warning");
+  });
+
+  it("npm run <script> → warning", () => {
+    assert.equal(bash("npm run build"), "warning");
+  });
+});
+
+describe("no false high_stakes from SQL words in plain text", () => {
+  it("grep for the word 'truncate' → safe (not a SQL TRUNCATE)", () => {
+    assert.equal(bash('grep -n "truncate" packages/sdk/src/describe.ts'), "safe");
+  });
+
+  it("echo containing 'drop table' → safe (no real SQL context)", () => {
+    assert.equal(bash('echo "remember to drop table later"'), "safe");
+  });
+
+  it("real psql DROP still high_stakes", () => {
+    assert.equal(bash('psql -c "DROP TABLE users"'), "high_stakes");
+  });
+
+  it("real psql heredoc DROP still high_stakes", () => {
+    assert.equal(bash("psql <<'SQL'\nDROP TABLE users;\nSQL"), "high_stakes");
+  });
+});
+
+describe("shell control flow — for/while/if loops are transparent", () => {
+  it("for ... do <safe cmds> done → safe", () => {
+    const cmd = `for f in packages/sdk/test/*.test.ts; do echo "$f"; npx tsx --test "$f"; done`;
+    assert.equal(bash(cmd), "safe");
+  });
+
+  it("dangerous command inside a loop body is still caught", () => {
+    assert.equal(bash("for f in *; do rm -rf $f; done"), "high_stakes");
+  });
+});
+
+describe("redirect detection is quote-aware", () => {
+  it("'>' inside a quoted grep pattern is not a file write → safe", () => {
+    assert.equal(bash('grep -n "echo > somefile" src/x.ts'), "safe");
+  });
+
+  it("a real redirect to an absolute path is still review", () => {
+    assert.equal(bash('echo hi > /etc/evil.conf'), "review");
+  });
+});
+
+describe("rm of ephemeral temp files → warning", () => {
+  it("rm of /tmp files → warning", () => {
+    assert.equal(bash("rm /tmp/a.mjs /tmp/b.mjs"), "warning");
+  });
+
+  it("rm -rf /tmp (the temp root) stays high_stakes", () => {
+    assert.equal(bash("rm -rf /tmp"), "high_stakes");
+  });
+
+  it("rm mixing temp and non-temp stays high_stakes", () => {
+    assert.equal(bash("rm /tmp/a && rm ./important.txt"), "high_stakes");
   });
 });

@@ -421,9 +421,9 @@ describe("classify — shell write tier rules", () => {
     assert.equal(tier, "review");
   });
 
-  it("echo > in-project also prompts (content-creation is always review)", () => {
+  it("echo > in-project is warning (matches the Write tool's in-project tier)", () => {
     const tier = classify("Bash", { command: 'echo "x" > local-note.txt' });
-    assert.equal(tier, "review");
+    assert.equal(tier, "warning");
   });
 
   it("echo > /dev/null is safe (devnull redirects aren't writes)", () => {
@@ -461,8 +461,13 @@ describe("classify — shell write tier rules", () => {
     assert.equal(tier, "review");
   });
 
-  it("sed -i is review (mutates existing file)", () => {
+  it("sed -i in-project is warning (in-project edit, matches Write tool)", () => {
     const tier = classify("Bash", { command: "sed -i 's/x/y/' foo.yml" });
+    assert.equal(tier, "warning");
+  });
+
+  it("sed -i outside the project stays review", () => {
+    const tier = classify("Bash", { command: "sed -i 's/x/y/' /etc/conf.yml" });
     assert.equal(tier, "review");
   });
 
@@ -604,9 +609,9 @@ describe("classify — SQL inside wrappers", () => {
     assert.equal(classify("Bash", { command: cmd }), "high_stakes");
   });
 
-  it("python3 -c without SQL → review (default unchanged)", () => {
+  it("python3 -c without SQL → warning (code execution, no SQL detected)", () => {
     const tier = classify("Bash", { command: `python3 -c "print(1)"` });
-    assert.equal(tier, "review");
+    assert.equal(tier, "warning");
   });
 
   it("sqlite3 .tables → safe (read-only dot-command)", () => {
