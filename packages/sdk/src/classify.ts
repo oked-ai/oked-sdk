@@ -108,17 +108,36 @@ const SAFE_COMMANDS = [
   // high-stakes scan, which runs on the full command first.
   /^(for|while|until|do|done|then|else|elif|fi|case|esac|if|select)\b/,
   /^(done|fi|esac|\}|\{|:|true|false)\s*$/,
+  // Inert shell builtins / flow helpers with no side effects.
+  /^sleep\b/,
+  /^exit\b/,
+  /^return\b/,
+  /^seq\b/,
+  /^test\b/,
+  /^\[\[?\s/,          // [ ... ]  and  [[ ... ]]  conditionals
+  // `<cmd> --help` / `--version` just prints usage. (Dangerous verbs like
+  // `git push` are matched by HIGH_STAKES on the full command first.)
+  /\s--(help|version)\b/,
+  // Read-only npm subcommands beyond the install/version ones above.
+  /^npm\s+(prefix|root|bin|whoami|ping|docs|repo|why|explain|pkg\s+get|config\s+get)\b/,
 ];
 
-// Bash commands classified as high stakes (destructive, irreversible, external)
-const HIGH_STAKES_COMMANDS = [
+// File deletion (rm/rmdir/trash). Checked PER-STAGE (not on the full command)
+// so the ephemeral-temp downgrade can run first: `something; rm /tmp/x` must be
+// warning, but `rm /tmp/x` mixed with a non-temp delete in another stage stays
+// high_stakes. Matching the bare word also catches it inside a loop body or a
+// $(...) substitution stage.
+const DELETE_PATTERNS = [
   /\brm\b/,
-  /\brm\b\s+(?:-[^\s]*[rf][^\s]*\s+)*-[^\s]*[rf][^\s]*\b/,
-  /\brm\s+--recursive\b/,
-  /\brm\b.*\s+\//,  // rm with absolute path
   /\brmdir\b/,
   /\btrash\b/,
   /\btrash-put\b/,
+];
+
+// Bash commands classified as high stakes (destructive, irreversible, external).
+// Scanned on the FULL command (some patterns, e.g. download|shell, span a pipe).
+// File deletion lives in DELETE_PATTERNS (per-stage) instead, see above.
+const HIGH_STAKES_COMMANDS = [
   /\bgit\s+push\b/,
   /\bgit\s+reset\s+--hard\b/,
   /\bgit\s+clean\s+-f/,
@@ -322,6 +341,7 @@ function splitTopLevel(cmd: string): string[] {
   const out: string[] = [];
   let cur = "";
   let quote: '"' | "'" | null = null;
+  let subDepth = 0; // depth inside $( ... ) / `...` command substitutions
   let i = 0;
   while (i < cmd.length) {
     const ch = cmd[i];
@@ -337,6 +357,12 @@ function splitTopLevel(cmd: string): string[] {
       i++;
       continue;
     }
+    // Command substitution: keep `$( ... )` / backticks intact so a pipe or `;`
+    // inside (e.g. `V=$(curl … | sed …)`) isn't treated as a top-level operator.
+    if (ch === "$" && cmd[i + 1] === "(") { subDepth++; cur += "$("; i += 2; continue; }
+    if (subDepth > 0 && ch === "(") { subDepth++; cur += ch; i++; continue; }
+    if (subDepth > 0 && ch === ")") { subDepth--; cur += ch; i++; continue; }
+    if (subDepth > 0) { cur += ch; i++; continue; }
     // Heredoc: consume the opener and the entire body (up to the closing
     // delimiter line) as part of the current segment, so operators inside a
     // heredoc fed to an interpreter (psql/node/…) aren't treated as separators.
@@ -388,6 +414,53 @@ function isEphemeralOnlyDeletion(command: string): boolean {
   return targets.every((a) => isEphemeralPath(unquote(a)));
 }
 
+/**
+ * Classifies a single stage that begins with one or more `NAME=value`
+ * assignments (a pure assignment like `TARGET=abc`, an env prefix like
+ * `FOO=bar cmd`, or a capture like `V=$(cmd)`). Strips the leading assignments,
+ * then takes the worst tier of: each command-substitution inner found in the
+ * values, plus any trailing command. A purely literal assignment is `safe`.
+ * Returns null if the stage is not assignment-prefixed.
+ */
+function classifyAssignmentStage(stage: string): RiskTier | null {
+  if (!/^\w+=/.test(stage)) return null;
+  const inners: string[] = [];
+  let i = 0;
+  while (i < stage.length) {
+    const m = stage.slice(i).match(/^(\w+)=/);
+    if (!m) break; // next token isn't an assignment → it's the command
+    i += m[0].length;
+    let quote: '"' | "'" | null = null;
+    while (i < stage.length) {
+      const ch = stage[i];
+      if (quote) { if (ch === quote) quote = null; i++; continue; }
+      if (ch === '"' || ch === "'") { quote = ch; i++; continue; }
+      if (ch === "$" && stage[i + 1] === "(") {
+        let d = 1, j = i + 2;
+        while (j < stage.length && d > 0) { if (stage[j] === "(") d++; else if (stage[j] === ")") d--; j++; }
+        inners.push(stage.slice(i + 2, j - 1));
+        i = j;
+        continue;
+      }
+      if (ch === "`") {
+        let j = i + 1;
+        while (j < stage.length && stage[j] !== "`") j++;
+        inners.push(stage.slice(i + 1, j));
+        i = j + 1;
+        continue;
+      }
+      if (/\s/.test(ch)) break; // end of this value
+      i++;
+    }
+    while (i < stage.length && /\s/.test(stage[i])) i++;
+  }
+  const rest = stage.slice(i).trim();
+  let tier: RiskTier = "safe";
+  for (const inner of inners) tier = maxTier(tier, classifyBashCommand(inner));
+  if (rest) tier = maxTier(tier, classifyBashCommand(rest));
+  return tier;
+}
+
 function classifyBashCommand(command: string): RiskTier {
   if (!command) return "safe";
 
@@ -395,15 +468,12 @@ function classifyBashCommand(command: string): RiskTier {
   // and must not be scanned for high-stakes tokens, operators, or redirects.
   const trimmed = stripHeredocBodies(command).trim();
 
-  // rm/trash of only ephemeral temp files → warning (before the high-stakes
-  // scan, which would otherwise match the bare `rm`).
-  if (isEphemeralOnlyDeletion(trimmed)) return "warning";
-
   // High-stakes scan on the FULL command, before any splitting. These patterns
   // use \b and several intentionally span an operator (e.g. `curl … | bash`,
   // `wget … | sh` — download-and-execute), so they have to be matched against
   // the whole string. Most-restrictive-wins: a high-stakes match anywhere in a
-  // compound command takes the whole command to high_stakes.
+  // compound command takes the whole command to high_stakes. (File deletion is
+  // NOT here — it's per-stage below so the ephemeral-temp downgrade can run.)
   for (const pattern of HIGH_STAKES_COMMANDS) {
     if (pattern.test(trimmed)) return "high_stakes";
   }
@@ -420,6 +490,23 @@ function classifyBashCommand(command: string): RiskTier {
       "safe",
     );
   }
+
+  // ---- single stage from here ----
+
+  // File deletion, per-stage so the ephemeral-temp carve-out can win: deleting
+  // only throwaway temp files (/tmp, $TMPDIR, /var/folders, …) → warning; any
+  // non-temp target (or the temp root itself) → high_stakes.
+  if (isEphemeralOnlyDeletion(trimmed)) return "warning";
+  for (const pattern of DELETE_PATTERNS) {
+    if (pattern.test(trimmed)) return "high_stakes";
+  }
+
+  // Variable assignments: `NAME=value` (pure) or `NAME=$(cmd) rest` (env prefix
+  // / capture). Classify the command-substitution inners and any trailing
+  // command; a purely literal assignment is safe. Dangerous substitutions were
+  // already caught by the high-stakes/delete scans above.
+  const assignTier = classifyAssignmentStage(trimmed);
+  if (assignTier !== null) return assignTier;
 
   // sudo: privilege escalation. A high-stakes inner command was already caught
   // by the full-string scan above (\b patterns match through the `sudo` prefix);
