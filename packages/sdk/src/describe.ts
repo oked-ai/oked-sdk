@@ -8,7 +8,7 @@
  * backwards-compatible single-line consumers (audit logs, SMS).
  */
 
-import { extractShellWriteOps } from "./classify.js";
+import { extractShellWriteOps, stripHeredocBodies } from "./classify.js";
 
 const BODY_PREVIEW_MAX = 200;
 const COMMAND_INLINE_MAX = 50;
@@ -106,7 +106,9 @@ function summarize(toolName: string, toolInput: Record<string, unknown>): Render
 // ───────────────────────────────────────────────────────────────────────
 
 function summarizeBash(command: string, sizeBytes?: number): Rendered {
-  const cmd = (command || "").trim();
+  // Strip heredoc bodies so a file's literal contents aren't parsed as shell
+  // (and don't bloat the card) — the redirect/target on the opener line stays.
+  const cmd = stripHeredocBodies(command || "").trim();
   if (!cmd) return { title: "Run empty command", kind: "unknown_bash" };
 
   // SQL detection runs before shell-write detection so that inline-interpreter
@@ -159,8 +161,11 @@ function summarizeBash(command: string, sizeBytes?: number): Rendered {
   if (/\bgit\s+checkout\s+--\s+\./.test(cmd)) return { title: "Discard all unstaged changes", kind: "git_checkout" };
   if (/\bgit\s+restore\s+--staged\s+\./.test(cmd)) return { title: "Unstage all staged changes", kind: "git_restore" };
   if (/\bgit\s+commit\b/.test(cmd)) {
-    const m = cmd.match(/-m\s+["']([^"']+)["']/);
-    return m ? { title: `Git commit "${m[1]}"`, kind: "git_commit" } : { title: "Git commit", kind: "git_commit" };
+    // Pull a simple quoted -m message. Bail (show plain "Git commit") when the
+    // message is a command substitution / heredoc — `-m "$(cat <<'EOF' … )"` —
+    // since that has no clean inline title to extract.
+    const m = cmd.match(/-m\s+["']([^"'$]+)["']/);
+    return m ? { title: `Git commit "${truncate(m[1], 60)}"`, kind: "git_commit" } : { title: "Git commit", kind: "git_commit" };
   }
 
   // gh pr create — reversible (PRs can be closed). Extract --title when present.
