@@ -26,16 +26,21 @@ oked init
 
 ## What gets intercepted
 
-The hook uses a four-tier classifier:
+The hook uses a four-tier classifier. Classification is **effect-based**: it
+detects the *kind of effect* an action has rather than matching specific command
+names, and **defaults to no prompt**. Only destructive, irreversible, or
+outward-facing operations put a human in the loop.
 
 | Tier | Behavior | Examples |
 |---|---|---|
-| `safe` | Auto-allow, no notification | `Read`, `Glob`, read-only Bash (`ls`, `git status`, plain `curl` GET) |
-| `warning` | Terminal log only, no push | `Write` / `Edit` / `NotebookEdit` on a file inside the project |
-| `review` | Push notification, tap to approve | `Write` / `Edit` on a file outside the project, MCP `create_*` / `send_*` / `update_*` |
-| `high_stakes` | Push notification with confirmation | `rm -rf`, `git push --force`, `DROP TABLE`, `delete_*` MCP tools |
+| `safe` | Auto-allow, no notification | Reads & queries, a DB `SELECT`, and any command with no detected side effect — `ls`, `grep`, `jq`, `node`, `npx`, plain `curl` GET (the default) |
+| `warning` | Terminal log only, no push | A reversible local mutation: file create / `cp` / `mv`, a `/tmp` delete, local git (`add`/`commit`), `npm install`, SQL `INSERT`/`CREATE` |
+| `review` | Push notification, tap to approve | Sensitive-path writes (`~/.ssh`, shell rc, system dirs, OKed config), `sudo`, outward message/email sends, MCP `create_*` / `send_*` / `update_*` |
+| `high_stakes` | Push notification with confirmation | Destructive / irreversible / external: `rm` of non-temp data, `DROP TABLE` / `DELETE FROM`, `git push` / `reset --hard` / `branch -D`, `mkfs` / `dd`-to-device / `shutdown`, `curl` POST/DELETE, `ssh`/`scp`, `npm publish`, `kill` |
 
-Everything not matched by the classifier defaults to `review`.
+A Bash command that matches none of the prompt-worthy effect categories defaults
+to `safe` — running a command is not, by itself, something we interrupt you for.
+(Unknown non-Bash *tools* still default to `review`.)
 
 ## How it works
 
