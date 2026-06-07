@@ -431,13 +431,18 @@ describe("classify — shell write tier rules", () => {
     assert.equal(tier, "safe");
   });
 
-  it("cp is review (can overwrite a target)", () => {
+  it("cp to a non-sensitive target is warning (reversible local copy)", () => {
     const tier = classify("Bash", { command: "cp /etc/passwd /tmp/x" });
-    assert.equal(tier, "review");
+    assert.equal(tier, "warning");
   });
 
-  it("mv is review (moves/removes the source path)", () => {
+  it("mv to a non-sensitive target is warning (local move)", () => {
     const tier = classify("Bash", { command: "mv a.txt b.txt" });
+    assert.equal(tier, "warning");
+  });
+
+  it("cp INTO a sensitive path is review", () => {
+    const tier = classify("Bash", { command: "cp evil /etc/cron.d/job" });
     assert.equal(tier, "review");
   });
 
@@ -566,11 +571,11 @@ describe("classify — SQL inside wrappers", () => {
     assert.equal(tier, "high_stakes");
   });
 
-  it("python3 -c with UPDATE + WHERE → review", () => {
+  it("python3 -c with UPDATE + WHERE → warning (scoped row update, reversible)", () => {
     const tier = classify("Bash", {
       command: `python3 -c "import sqlite3; sqlite3.connect('demo.db').execute('UPDATE users SET active=1 WHERE id=2')"`,
     });
-    assert.equal(tier, "review");
+    assert.equal(tier, "warning");
   });
 
   it("python3 -c with CREATE TABLE → warning (see PR #19)", () => {
@@ -580,11 +585,11 @@ describe("classify — SQL inside wrappers", () => {
     assert.equal(tier, "warning");
   });
 
-  it("python3 -c with INSERT INTO → review", () => {
+  it("python3 -c with INSERT INTO → warning (adds rows, reversible)", () => {
     const tier = classify("Bash", {
       command: `python3 -c "import sqlite3; sqlite3.connect('demo.db').execute('INSERT INTO products VALUES (1)')"`,
     });
-    assert.equal(tier, "review");
+    assert.equal(tier, "warning");
   });
 
   it("node -e with DROP TABLE → high_stakes", () => {
@@ -609,9 +614,9 @@ describe("classify — SQL inside wrappers", () => {
     assert.equal(classify("Bash", { command: cmd }), "high_stakes");
   });
 
-  it("python3 -c without SQL → warning (code execution, no SQL detected)", () => {
+  it("python3 -c without SQL → safe (opaque code execution is not prompt-worthy)", () => {
     const tier = classify("Bash", { command: `python3 -c "print(1)"` });
-    assert.equal(tier, "warning");
+    assert.equal(tier, "safe");
   });
 
   it("sqlite3 .tables → safe (read-only dot-command)", () => {
@@ -622,8 +627,8 @@ describe("classify — SQL inside wrappers", () => {
     assert.equal(classify("Bash", { command: `sqlite3 data.db ".schema"` }), "safe");
   });
 
-  it("sqlite3 .import → review (mutating dot-command)", () => {
-    assert.equal(classify("Bash", { command: `sqlite3 data.db ".import data.csv users"` }), "review");
+  it("sqlite3 .import → warning (loads rows, reversible local mutation)", () => {
+    assert.equal(classify("Bash", { command: `sqlite3 data.db ".import data.csv users"` }), "warning");
   });
 });
 

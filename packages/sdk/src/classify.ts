@@ -4,10 +4,25 @@ import type { RiskTier } from "./types.js";
 import { findSqlInCommand } from "./describe.js";
 import { TIER_ORDER } from "./degraded.js";
 
-// Tier 1 - safe: auto-allow, no notification (Read, Glob, ls, git status, etc.)
-// Tier 2 - warning: terminal log only, no push (Write/Edit inside project dir)
-// Tier 3 - review: push notification required (Write/Edit outside project, unknown bash)
-// Tier 4 - high_stakes: push + number matching (rm -rf, git push, DROP TABLE, etc.)
+// Classification is EFFECT-BASED, not command-name-based. We don't keep an
+// allowlist of "safe commands"; instead we detect the few categories of effect
+// that warrant a human in the loop, and DEFAULT TO NO PROMPT for everything
+// else. Running a command, reading, copying a file, a DB SELECT, or deleting a
+// /tmp scratch file must never prompt — only destructive, irreversible, or
+// outward-facing operations do.
+//
+// Tier 1 - safe: auto-allow, silent. No detected side effect (reads, queries,
+//                and any command we don't recognize as mutating — the default).
+// Tier 2 - warning: terminal log only, no push. A reversible LOCAL mutation
+//                (file create/copy/move, /tmp delete, local git, install,
+//                code-exec, SQL INSERT/CREATE).
+// Tier 3 - review: push notification, tap to approve. Prompt-worthy but not
+//                catastrophic: sensitive-path writes (~/.ssh, shell rc, system
+//                dirs, OKed's own config), sudo, outward message/email sends.
+// Tier 4 - high_stakes: push + number matching. Destructive / irreversible /
+//                external: rm of non-temp data, DROP/TRUNCATE/DELETE FROM,
+//                git push / reset --hard / branch -D, mkfs / dd-to-device /
+//                shutdown, curl POST/DELETE, ssh/scp, npm publish, kill.
 
 // Tools that are always safe (read-only, no side effects)
 const SAFE_TOOLS = new Set([
@@ -47,80 +62,11 @@ const REVIEW_TOOLS = new Set<string>([]);
 // Tools that are always high stakes
 const HIGH_STAKES_TOOLS = new Set<string>([]);
 
-// Bash commands classified as safe (read-only, informational)
-const SAFE_COMMANDS = [
-  /^ls\b/,
-  /^pwd$/,
-  /^echo\b/,
-  /^cat\b/,
-  /^head\b/,
-  /^tail\b/,
-  /^wc\b/,
-  /^date$/,
-  /^whoami$/,
-  /^which\b/,
-  /^type\b/,
-  /^file\b/,
-  /^stat\b/,
-  /^du\b/,
-  /^df\b/,
-  /^uname\b/,
-  /^env$/,
-  /^printenv\b/,
-  /^node\s+(-v|--version)/,
-  /^npm\s+(list|ls|--version|-v|view|info|outdated|audit)\b/,
-  /^npx\s+-v/,
-  /^git\s+(status|log|diff|branch|remote|show|tag|stash\s+list|ls-files|ls-tree|ls-remote|check-ignore|check-attr|rev-parse|rev-list|describe|cat-file|blame|shortlog|reflog|name-rev|whatchanged|for-each-ref|symbolic-ref|merge-base|var|grep|count-objects|show-ref|cherry|verify-commit|fsck)\b/,
-  /^git\s+config\s+(--get|--get-all|--get-regexp|--list|-l)\b/,
-  /^docker\s+(ps|images|inspect|logs)\b/,
-  /^docker\s+compose\s+(ps|logs)\b/,
-  /^tree\b/,
-  /^find\b/,
-  /^grep\b/,
-  /^rg\b/,
-  /^fd\b/,
-  /^jq\b/,
-  /^curl\s+-s.*\|\s*(jq|python|node)/,  // curl piped to parser (usually read-only)
-  /^curl\b/,  // curl without -X defaults to GET (high-stakes patterns checked first)
-  // himalaya (email CLI) read-only ops. Listing/reading mail or folder state
-  // never mutates anything remotely. Only `message send|reply|forward` and
-  // `message delete` / `folder delete|expunge|purge` matter; those land in
-  // the review/high-stakes paths.
-  /^himalaya\s+(account|folder|envelope|message\s+(?:read|export|search|copy|move)|attachment\s+(?:download|list)|template|search)\b/,
-  // cd just changes directory — no side effect of its own. Any dangerous
-  // command chained after it (`cd x && rm -rf`) is caught per-stage.
-  /^cd\b/,
-  // sed without -i / --in-place only prints to stdout (read-only). In-place
-  // edits are detected as a write op (below) before this is reached.
-  /^sed\b/,
-  // gh read-only subcommands — listing/viewing PRs, issues, runs, etc.
-  /^gh\s+(pr|issue|repo|run|workflow|release|api)\s+(list|view|status|diff|checks)\b/,
-  // Test runners — running the project's own tests is part of the dev loop.
-  // (Arbitrary node/npx/python execution is `warning`, see WARNING_COMMANDS.)
-  /^npm\s+(test|t)\b/,
-  /^npx\s+(tsx|ts-node|jest|vitest|mocha|ava|cypress|playwright|tsc)\b/,
-  /^(jest|vitest|mocha|pytest|ava)\b/,
-  /^python3?\s+-m\s+pytest\b/,
-  // Shell control-flow keywords. A compound like `for f in *; do cmd; done`
-  // is split on `;` into stages; these keyword stages carry no risk of their
-  // own, and any real command in the body is classified per-stage. Dangerous
-  // commands hidden in a $(...) on a keyword line are still caught by the
-  // high-stakes scan, which runs on the full command first.
-  /^(for|while|until|do|done|then|else|elif|fi|case|esac|if|select)\b/,
-  /^(done|fi|esac|\}|\{|:|true|false)\s*$/,
-  // Inert shell builtins / flow helpers with no side effects.
-  /^sleep\b/,
-  /^exit\b/,
-  /^return\b/,
-  /^seq\b/,
-  /^test\b/,
-  /^\[\[?\s/,          // [ ... ]  and  [[ ... ]]  conditionals
-  // `<cmd> --help` / `--version` just prints usage. (Dangerous verbs like
-  // `git push` are matched by HIGH_STAKES on the full command first.)
-  /\s--(help|version)\b/,
-  // Read-only npm subcommands beyond the install/version ones above.
-  /^npm\s+(prefix|root|bin|whoami|ping|docs|repo|why|explain|pkg\s+get|config\s+get)\b/,
-];
+// NOTE: there is intentionally NO "safe commands" allowlist. Under the
+// effect-based model, anything we don't detect as a mutation or a prompt-worthy
+// effect IS safe by default (reads, queries, `ls`, `grep`, `jq`, `awk`, `sort`,
+// unknown commands, …). We only enumerate the things that DO warrant a log
+// (WARNING_*) or a prompt (REVIEW_*, HIGH_STAKES_*).
 
 // File deletion (rm/rmdir/trash). Checked PER-STAGE (not on the full command)
 // so the ephemeral-temp downgrade can run first: `something; rm /tmp/x` must be
@@ -150,10 +96,6 @@ const HIGH_STAKES_COMMANDS = [
   // -c/-e, interpreter -e/-c bodies, heredocs), then classifySqlSeverity.
   /\bdocker\s+(rm|rmi|system\s+prune)\b/,
   /\bdocker\s+compose\s+down\b/,
-  /\bkill\b/,
-  /\bpkill\b/,
-  /\bkillall\b/,
-  /\bchmod\s+777\b/,
   /\bcurl\s+.*-X\s*(DELETE|PUT|POST|PATCH)\b/i,
   /\bcurl\s+.*--request\s*(DELETE|PUT|POST|PATCH)\b/i,
   // curl flags that send a request body (POST/PUT/PATCH) without an explicit -X
@@ -179,37 +121,76 @@ const HIGH_STAKES_COMMANDS = [
   /\bhimalaya\s+message\s+delete\b/,
   /\bhimalaya\s+folder\s+(delete|expunge|purge)\b/,
   /\bhimalaya\s+account\s+delete\b/,
+  // Overwriting a raw block device (`> /dev/sda`, `… > /dev/nvme0n1`) destroys a
+  // disk irreversibly. (dd to a device is in HIGH_STAKES_STAGE.)
+  />\s*\/dev\/(sd|nvme|hd|disk|mmcblk|vd)\w*/,
 ];
 
-// Commands that auto-allow without a phone prompt but are logged (warning):
-// reversible/local actions where an audit line is enough.
+// Destructive / irreversible commands matched PER-STAGE at the start of a stage
+// (after stripping a leading `sudo `), so the destructive WORD can't be hit
+// inside an argument or a commit message (`git commit -m "kill the flaky test"`
+// must not be high_stakes). These don't span pipes, so per-stage `^`-anchoring
+// is both safe and precise.
+const HIGH_STAKES_STAGE = [
+  // Filesystem / disk destruction.
+  /^mkfs(\.\w+)?\b/,
+  /^mkswap\b/,
+  /^(fdisk|parted|gparted)\b/,
+  /^dd\b.*\bof=\/dev\//,
+  /^shred\b/,
+  /^truncate\b/,                       // `truncate -s 0 file` wipes contents
+  /^find\b.*\s-delete\b/,              // `find … -delete` removes matches
+  // Power / system state.
+  /^(shutdown|reboot|halt|poweroff)\b/,
+  // Remote/outward file transfer (almost always a remote target).
+  /^scp\b/,
+  /^rsync\b.*(--delete|\s\S+:)/,        // rsync --delete, or to a host:path target
+  // Local git history/work destruction (force branch delete, tag delete,
+  // dropping/clearing stashed work). Reversible local git (add/commit/stash) is
+  // a WARNING marker below.
+  /^git\s+branch\s+(?:-D|--delete)\b/,
+  /^git\s+tag\s+(?:-d|--delete)\b/,
+  /^git\s+stash\s+(?:drop|clear)\b/,
+  // Process termination.
+  /^kill\b/,
+  /^pkill\b/,
+  /^killall\b/,
+  // Wide-open permissions.
+  /^chmod\s+(?:-\S+\s+)*777\b/,
+];
+
+// Outward-but-recoverable commands → review (prompt, simple approve). Sending
+// mail/messages can't be unsent, but it isn't destructive to local state, so it
+// sits below high_stakes. Matched per-stage. (Destructive himalaya verbs —
+// message delete, folder purge — are high_stakes in the full scan above.)
+const REVIEW_COMMANDS = [
+  /^himalaya\s+message\s+(send|reply|forward)\b/,
+];
+
+// Local-mutation MARKERS for DETECTED side effects. These never gate a prompt —
+// under the effect-based model anything not flagged destructive/outward/sensitive
+// already auto-allows. They exist only to pick the `warning` (logged) vs `safe`
+// (silent) label, and cover the local mutations we can recognize by shape but
+// that aren't a plain file write (those are handled by extractShellWriteOps).
+//
+// Opaque code execution (node/npx/python/claude/test runners) is intentionally
+// NOT here: we can't tell whether it mutated anything, and a destructive effect
+// buried inside `node -e …` would slip through regardless of the label — so
+// logging it adds terminal noise without buying safety. It stays `safe`, just
+// like any other unrecognized command. A real file write it performs is a
+// separate Bash/Write call that gets classified on its own.
 const WARNING_COMMANDS = [
-  // Local, reversible git ops — branch/stage/commit/stash/switch. They touch
-  // only the local repo and can be undone (amend, reset, checkout).
-  // Destructive/remote git (push, reset --hard, clean, checkout -- .) is matched
-  // by HIGH_STAKES_COMMANDS above and wins first. `git stash drop|clear` is
-  // excluded — those discard stashed work — so it stays `review`.
+  // Local, reversible git writes — stage/commit/switch/stash. They mutate the
+  // local repo but can be undone (amend, reset, checkout). Destructive git
+  // (push, reset --hard, branch -D, stash drop/clear) is caught above and wins.
   /^git\s+add\b/,
   /^git\s+commit\b/,
   /^git\s+checkout\s+-b\b/,
   /^git\s+switch\b/,
   /^git\s+stash\b(?!\s+(?:drop|clear))/,
-  // PR creation is reversible (a PR can be closed); the underlying branch push
-  // is separately high_stakes.
   /^gh\s+pr\s+create\b/,
-  // Arbitrary code execution (node/npx/python/npm run/bun/deno). The spawned
-  // process can do anything and its syscalls don't pass back through OKed, so
-  // we don't prompt but keep a local trail. Known test runners and read-only
-  // version flags are handled as `safe` (SAFE_COMMANDS) before reaching here.
-  /^node\b/,
-  /^npx\b/,
-  /^python3?\b/,
-  /^npm\s+run\b/,
-  /^bun\b/,
-  /^deno\b/,
-  // Package installs run dependency postinstall scripts (code execution), so
-  // they're not "safe" — but they're a constant part of the dev loop, so log
-  // (warning) rather than prompt.
+  // Package installs always mutate node_modules and run dependency postinstall
+  // scripts — a known local mutation worth an audit line.
   /^npm\s+(install|ci|i|update|upgrade|rebuild|prune|dedupe)\b/,
   /^(pnpm|yarn)\s+(install|add|ci|up|upgrade)\b/,
 ];
@@ -239,13 +220,20 @@ function isEphemeralPath(filePath: string): boolean {
 // executes it is classified separately).
 function isSensitiveWritePath(filePath: string): boolean {
   if (!filePath) return true; // unknown target → err toward review
+  const home = os.homedir();
+  // Expand a leading `~` / `$HOME` / `${HOME}` to the real home dir BEFORE
+  // resolving. In a shell `echo x > ~/.zshrc` the tilde IS the home dir, but
+  // path.resolve treats `~` as a literal segment under cwd, which would miss
+  // sensitive home targets (shell rc, ~/.ssh, …) and silently downgrade them.
+  const expanded = filePath
+    .replace(/^~(?=\/|$)/, home)
+    .replace(/^\$\{?HOME\}?(?=\/|$)/, home);
   let resolved: string;
   try {
-    resolved = path.resolve(filePath);
+    resolved = path.resolve(expanded);
   } catch {
     return true;
   }
-  const home = os.homedir();
   const underHome = (rel: string) => {
     const base = path.join(home, rel);
     return resolved === base || resolved.startsWith(base + path.sep);
@@ -461,6 +449,53 @@ function classifyAssignmentStage(stage: string): RiskTier | null {
   return tier;
 }
 
+/**
+ * `env [OPTION]... [NAME=VALUE]... [COMMAND [ARG]...]` runs COMMAND with a
+ * modified environment (a wrapper like sudo / an assignment prefix). Strips
+ * env's own options (`-i`, `-u NAME`, `-C dir`, `-`, `--unset=NAME`, …) and any
+ * leading NAME=VALUE pairs, then classifies the inner COMMAND from its original
+ * (quote-preserving) offset. `env` with no command just prints the environment
+ * → safe. Returns null if the stage doesn't start with `env`.
+ */
+function classifyEnvStage(stage: string): RiskTier | null {
+  const lead = /^env\b[ \t]*/.exec(stage);
+  if (!lead) return null;
+  // env options that consume a following argument token.
+  const argTaking = new Set(["-u", "--unset", "-C", "--chdir", "-P", "-S", "--split-string"]);
+  const readToken = (from: number): number => {
+    let i = from;
+    let quote: '"' | "'" | null = null;
+    while (i < stage.length) {
+      const ch = stage[i];
+      if (quote) { if (ch === quote) quote = null; i++; continue; }
+      if (ch === '"' || ch === "'") { quote = ch; i++; continue; }
+      if (/\s/.test(ch)) break;
+      i++;
+    }
+    return i;
+  };
+  let i = lead[0].length;
+  while (i < stage.length) {
+    while (i < stage.length && /\s/.test(stage[i])) i++;
+    if (i >= stage.length) break;
+    const start = i;
+    i = readToken(i);
+    const tok = stage.slice(start, i);
+    if (tok === "-") continue;                                  // ignore-environment marker
+    if (tok.startsWith("--") && tok.includes("=")) continue;    // --unset=NAME etc.
+    if (tok.startsWith("-")) {
+      if (argTaking.has(tok)) {                                 // consume its argument token
+        while (i < stage.length && /\s/.test(stage[i])) i++;
+        i = readToken(i);
+      }
+      continue;
+    }
+    if (/^\w+=/.test(tok)) continue;                            // NAME=VALUE
+    return classifyBashCommand(stage.slice(start).trim());      // first real word → the command
+  }
+  return "safe"; // `env` / `env -u X` with no command just prints the environment
+}
+
 function classifyBashCommand(command: string): RiskTier {
   if (!command) return "safe";
 
@@ -501,12 +536,27 @@ function classifyBashCommand(command: string): RiskTier {
     if (pattern.test(trimmed)) return "high_stakes";
   }
 
+  // Destructive/irreversible single commands, matched at stage start with any
+  // leading `sudo ` stripped (so `sudo mkfs …` is still caught, but the word
+  // can't fire inside an argument). These don't span pipes, so `^`-anchoring is
+  // precise and avoids prose false-positives.
+  const bareStage = trimmed.replace(/^sudo\s+/, "");
+  for (const pattern of HIGH_STAKES_STAGE) {
+    if (pattern.test(bareStage)) return "high_stakes";
+  }
+
   // Variable assignments: `NAME=value` (pure) or `NAME=$(cmd) rest` (env prefix
   // / capture). Classify the command-substitution inners and any trailing
   // command; a purely literal assignment is safe. Dangerous substitutions were
   // already caught by the high-stakes/delete scans above.
   const assignTier = classifyAssignmentStage(trimmed);
   if (assignTier !== null) return assignTier;
+
+  // `env [opts] [NAME=VAL]... cmd` runs cmd with a modified environment. Strip
+  // the env prefix and classify the inner command (a dangerous inner was already
+  // caught by the high-stakes full scan). Bare `env` just prints the env → safe.
+  const envTier = classifyEnvStage(trimmed);
+  if (envTier !== null) return envTier;
 
   // sudo: privilege escalation. A high-stakes inner command was already caught
   // by the full-string scan above (\b patterns match through the `sudo` prefix);
@@ -520,35 +570,32 @@ function classifyBashCommand(command: string): RiskTier {
   const sql = findSqlInCommand(trimmed);
   if (sql) return classifySqlSeverity(sql);
 
-  // File-mutating shell patterns. Content-creation idioms (echo > X, tee,
-  // dd of=, touch, sed -i) are the bypass route from a denied Write, so they're
-  // classified exactly like the Write/Edit tool: `warning` unless a target is a
-  // sensitive path (system dir, secret store, shell rc, OKed config), which
-  // stays `review`. cp/mv (which can clobber/relocate existing files) stay
-  // review.
+  // File-mutating shell patterns (echo > X, tee, dd of=, touch, sed -i, cp, mv).
+  // A file write/copy/move is a reversible LOCAL mutation, classified like the
+  // Write/Edit tool: `warning` (logged) — UNLESS a target is a sensitive path
+  // (system dir, secret store, shell rc, OKed config), which stays `review`.
+  // (Overwriting a raw block device was already caught by the high-stakes scan.)
   const ops = extractShellWriteOps(trimmed);
   if (ops.length > 0) {
-    const creates = ops.filter((o) => o.kind !== "copy" && o.kind !== "move");
-    if (creates.length > 0) {
-      return creates.some((o) => isSensitiveWritePath(o.target)) ? "review" : "warning";
-    }
-    return "review";
+    const targets = ops.map((o) => o.target);
+    return targets.some((t) => isSensitiveWritePath(t)) ? "review" : "warning";
   }
 
-  // Check safe patterns
-  for (const pattern of SAFE_COMMANDS) {
-    if (pattern.test(trimmed)) return "safe";
+  // Outward sends (email/message) → review.
+  for (const pattern of REVIEW_COMMANDS) {
+    if (pattern.test(trimmed)) return "review";
   }
 
-  // Reversible/local commands (local git, gh pr create, code execution) →
-  // warning: logged, no phone approval. Checked after SAFE so read-only git
-  // (status/log/`stash list`) and known test runners stay fully silent.
+  // Local-mutation markers (local git, code execution, installs) → warning:
+  // logged, no prompt. Everything else is a read or an unrecognized command with
+  // no detected effect — and under the effect-based model that means `safe`.
   for (const pattern of WARNING_COMMANDS) {
     if (pattern.test(trimmed)) return "warning";
   }
 
-  // Default: review (require approval for unknown commands)
-  return "review";
+  // Default: safe. No destructive/outward/sensitive effect was detected, so we
+  // do NOT put a human in the loop just for "running a command".
+  return "safe";
 }
 
 function classifySqlSeverity(sql: string): RiskTier {
@@ -561,7 +608,10 @@ function classifySqlSeverity(sql: string): RiskTier {
   if (/^\s*(EXPLAIN|SHOW|DESCRIBE|DESC)\b/i.test(sql)) return "safe";
   // SQLite dot-commands (.tables, .schema, .dump, etc.) — safe unless they mutate
   if (/^\s*\./.test(sql) && !/^\s*\.(import|read|restore)\b/i.test(sql)) return "safe";
-  return "review";
+  // INSERT/ALTER and other non-destructive DML: a reversible row/schema change,
+  // not a data wipe → warning (logged, no prompt). Destructive SQL (DROP /
+  // TRUNCATE / DELETE FROM / UPDATE-without-WHERE) returned high_stakes above.
+  return "warning";
 }
 
 export type ShellWriteKind = "create" | "append" | "edit" | "touch" | "copy" | "move";

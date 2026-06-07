@@ -38,17 +38,22 @@ describe("curl — data-sending flags are high_stakes", () => {
   });
 });
 
-describe("mv vs cp", () => {
-  it("mv is review (moves/removes the source path)", () => {
-    assert.equal(bash("mv a.txt b.txt"), "review");
+describe("mv vs cp — reversible local mutation → warning", () => {
+  it("mv → warning (a local move, not destructive)", () => {
+    assert.equal(bash("mv a.txt b.txt"), "warning");
   });
 
-  it("cp is review (can overwrite a target)", () => {
-    assert.equal(bash("cp a.txt b.txt"), "review");
+  it("cp → warning (copying a file)", () => {
+    assert.equal(bash("cp a.txt b.txt"), "warning");
   });
 
-  it("mv mixed with a file create is review (create wins)", () => {
-    assert.equal(bash("mv a.txt b.txt && echo hi > c.txt"), "review");
+  it("cp/mv into a sensitive path → review", () => {
+    const home = process.env.HOME;
+    assert.equal(bash(`cp id_rsa ${home}/.ssh/authorized_keys`), "review");
+  });
+
+  it("mv mixed with a file create → warning (both local)", () => {
+    assert.equal(bash("mv a.txt b.txt && echo hi > c.txt"), "warning");
   });
 });
 
@@ -263,8 +268,8 @@ describe("local git ops — warning, not review", () => {
     assert.equal(bash("git add . && git reset --hard"), "high_stakes");
   });
 
-  it("git stash drop stays review (discards work)", () => {
-    assert.equal(bash("git stash drop"), "review");
+  it("git stash drop → high_stakes (irreversibly discards stashed work)", () => {
+    assert.equal(bash("git stash drop"), "high_stakes");
   });
 });
 
@@ -337,7 +342,7 @@ describe("heredoc handling", () => {
   });
 });
 
-describe("dev commands — read/test safe, code-exec warning", () => {
+describe("dev commands — running commands is not prompt-worthy", () => {
   it("cd → safe", () => {
     assert.equal(bash("cd packages/sdk"), "safe");
   });
@@ -362,16 +367,28 @@ describe("dev commands — read/test safe, code-exec warning", () => {
     assert.equal(bash("gh pr list"), "safe");
   });
 
-  it("arbitrary node script → warning", () => {
-    assert.equal(bash("node server.js"), "warning");
+  // Opaque code execution can't be told apart from any other unrecognized
+  // command, so it stays safe (no prompt, no log). A destructive effect hidden
+  // inside it would slip through regardless of a warning label.
+  it("arbitrary node script → safe", () => {
+    assert.equal(bash("node server.js"), "safe");
   });
 
-  it("arbitrary npx package → warning", () => {
-    assert.equal(bash("npx some-random-cli"), "warning");
+  it("arbitrary npx package → safe", () => {
+    assert.equal(bash("npx some-random-cli"), "safe");
   });
 
-  it("npm run <script> → warning", () => {
-    assert.equal(bash("npm run build"), "warning");
+  it("npm run <script> → safe", () => {
+    assert.equal(bash("npm run build"), "safe");
+  });
+
+  // Detected local mutations still log (warning), no prompt.
+  it("npm install → warning (mutates node_modules)", () => {
+    assert.equal(bash("npm install left-pad"), "warning");
+  });
+
+  it("git commit → warning (local repo write)", () => {
+    assert.equal(bash('git commit -m "wip"'), "warning");
   });
 });
 
@@ -558,6 +575,97 @@ describe("diagnostic shell shapes → safe (round 3)", () => {
   });
 });
 
+describe("mkdir / awk diagnostic setup shapes → safe (round 4)", () => {
+  it("mkdir -p → safe (idempotent directory create)", () => {
+    assert.equal(bash("mkdir -p ~/.claude/skills/oked-release"), "safe");
+  });
+
+  it("mkdir && echo $(cd && pwd) compound → safe", () => {
+    assert.equal(
+      bash(`mkdir -p ~/.claude/skills/oked-release && echo "created $(cd ~/.claude/skills/oked-release && pwd)"`),
+      "safe",
+    );
+  });
+
+  it("awk reading a file → safe (read-only text processor)", () => {
+    assert.equal(
+      bash(`awk 'NR==1{if($0!="---"){print "BAD"; exit 1}}' SKILL.md`),
+      "safe",
+    );
+  });
+
+  it("cd && awk && echo compound → safe", () => {
+    assert.equal(
+      bash(`cd ~/.claude/skills/oked-release && awk 'NR==1{print $0}' SKILL.md && echo "total lines: $(wc -l < SKILL.md)"`),
+      "safe",
+    );
+  });
+
+  it("find/ls/echo diagnostic probe → safe", () => {
+    assert.equal(
+      bash(`echo "=== find claude binary ==="; ls -la ~/.claude/local/claude 2>/dev/null; find /usr/local/bin "$HOME/.nvm" -maxdepth 4 -name claude -type f 2>/dev/null | head -5`),
+      "safe",
+    );
+  });
+});
+
+describe("hash / command -v builtins → safe (round 4)", () => {
+  it("hash -r → safe (clears the command-location cache)", () => {
+    assert.equal(bash("hash -r 2>/dev/null"), "safe");
+  });
+
+  it("command -v claude → safe (read-only lookup)", () => {
+    assert.equal(bash("command -v claude"), "safe");
+  });
+
+  it("command -V claude → safe", () => {
+    assert.equal(bash("command -V claude"), "safe");
+  });
+
+  it("bare `command <cmd>` is NOT blanket-safe (it executes)", () => {
+    // `command rm -rf /` runs rm — must not slip through as safe.
+    assert.equal(bash("command rm -rf /"), "high_stakes");
+  });
+
+  it("npm install verify one-liner → warning, not review (no push)", () => {
+    const cmd = `npm install -g @anthropic-ai/claude-code 2>&1 | tail -6; echo "=== verify ==="; hash -r 2>/dev/null; command -v claude && claude --version 2>&1 | head -1`;
+    assert.equal(bash(cmd), "warning");
+  });
+});
+
+describe("env wrapper + claude headless — no prompt (round 4)", () => {
+  it("env -u VAR claude -p → safe (env prefix stripped; code-exec is not prompt-worthy)", () => {
+    assert.equal(
+      bash(`env -u CLAUDECODE claude -p --model opus --output-format text "Reply with exactly: OK" 2>&1`),
+      "safe",
+    );
+  });
+
+  it("oked-release auth-check compound → safe (no push)", () => {
+    assert.equal(
+      bash(`cd ~/.claude/skills/oked-release && env -u CLAUDECODE claude -p --model opus --output-format text "Reply with exactly: OK" 2>&1 | head -5; echo "exit:$?"`),
+      "safe",
+    );
+  });
+
+  it("bare claude -p → safe", () => {
+    assert.equal(bash(`claude -p "hello"`), "safe");
+  });
+
+  it("env with only assignments + a safe command → safe", () => {
+    assert.equal(bash(`env FOO=bar ls -la`), "safe");
+  });
+
+  it("env with no command (prints environment) → safe", () => {
+    assert.equal(bash(`env -u CLAUDECODE`), "safe");
+  });
+
+  it("env wrapping a dangerous inner is still high_stakes", () => {
+    assert.equal(bash(`env -i rm -rf /important`), "high_stakes");
+    assert.equal(bash(`env FOO=bar git push`), "high_stakes");
+  });
+});
+
 describe("ephemeral rm inside a compound → warning (round 3)", () => {
   it("npx tsx ...; rm -f /tmp/x → warning (delete is per-stage)", () => {
     assert.equal(bash("npx tsx /tmp/probe.mjs 2>&1; rm -f /tmp/probe.mjs"), "warning");
@@ -565,5 +673,95 @@ describe("ephemeral rm inside a compound → warning (round 3)", () => {
 
   it("echo done; rm /etc/x → high_stakes (non-temp delete in a stage)", () => {
     assert.equal(bash("echo done; rm /etc/important"), "high_stakes");
+  });
+});
+
+describe("effect-category model — permissive default (round 5)", () => {
+  // Unrecognized read/transform commands are safe with NO explicit pattern —
+  // this is the whole point of the inversion (no more allowlist whack-a-mole).
+  it("uncommon read/transform commands → safe by default", () => {
+    for (const cmd of [
+      "sort -u file.txt | uniq -c",
+      "comm -13 a.txt b.txt",
+      "cut -d, -f2 data.csv",
+      "tr 'a-z' 'A-Z' < in.txt",
+      "awk '{print $1}' log",
+      `jq -r '.items[] | .id' data.json | sort | head -20`,
+      "xxd binfile | head",
+      "column -t -s, table.csv",
+      "some-unknown-cli --do-a-thing",
+    ]) {
+      assert.equal(bash(cmd), "safe", `${cmd} should be safe`);
+    }
+  });
+
+  it("db SELECT → safe; INSERT/CREATE → warning; DROP/DELETE → high_stakes", () => {
+    assert.equal(bash(`psql -c "SELECT * FROM users"`), "safe");
+    assert.equal(bash(`psql -c "INSERT INTO users(name) VALUES('x')"`), "warning");
+    assert.equal(bash(`psql -c "DELETE FROM users"`), "high_stakes");
+  });
+
+  it("newly-covered destructive/irreversible ops → high_stakes", () => {
+    for (const cmd of [
+      "mkfs.ext4 /dev/sda1",
+      "dd if=image.iso of=/dev/sda bs=4M",
+      "shutdown -h now",
+      "reboot",
+      "shred -u secret.key",
+      "truncate -s 0 important.log",
+      "find . -name '*.tmp' -delete",
+      "git branch -D feature",
+      "git tag -d v1.2.3",
+      "git stash clear",
+      "scp secrets.env user@host:/tmp/",
+      "rsync --delete ./ host:/backup",
+      "echo boom > /dev/sda",
+    ]) {
+      assert.equal(bash(cmd), "high_stakes", `${cmd} should be high_stakes`);
+    }
+  });
+
+  it("sudo-prefixed destructive op is still high_stakes", () => {
+    assert.equal(bash("sudo mkfs.ext4 /dev/sdb1"), "high_stakes");
+  });
+
+  it("destructive words inside prose/args do NOT false-trigger", () => {
+    assert.equal(bash('git commit -m "kill the flaky test and shutdown logic"'), "warning");
+    assert.equal(bash('grep -n "truncate" src/db.ts'), "safe");
+    assert.equal(bash('echo "remember to reboot the staging box"'), "safe");
+  });
+
+  it("outward sends stay review; sudo stays review", () => {
+    assert.equal(bash("cat /tmp/d.eml | himalaya message send"), "review");
+    assert.equal(bash("sudo apt-get install ripgrep"), "review");
+  });
+
+  it("shell write to ~ / $HOME sensitive paths is review (tilde expanded)", () => {
+    assert.equal(bash("echo evil > ~/.zshrc"), "review");
+    assert.equal(bash('echo key >> "$HOME/.ssh/authorized_keys"'), "review");
+    assert.equal(bash("cp payload ~/.bashrc"), "review");
+    // a non-sensitive home path is still just a warning
+    assert.equal(bash("echo notes > ~/scratch.txt"), "warning");
+  });
+
+  it("destructive effect still wins inside a compound", () => {
+    assert.equal(bash("ls -la && rm -rf ~/data"), "high_stakes");
+    assert.equal(bash("echo hi && mkfs /dev/sdb"), "high_stakes");
+    assert.equal(bash("git status; git push origin main"), "high_stakes");
+  });
+
+  it("the exact screenshot commands from this session no longer prompt", () => {
+    const noPrompt = (t: string) => t === "safe" || t === "warning";
+    for (const cmd of [
+      `mkdir -p ~/.claude/skills/oked-release && echo "created $(cd ~/.claude/skills/oked-release && pwd)"`,
+      `cd ~/.claude/skills/oked-release && awk 'NR==1{print $0}' SKILL.md && echo "lines: $(wc -l < SKILL.md)"`,
+      `echo "=== find ==="; ls -la ~/.claude/local/claude 2>/dev/null; find /usr/local/bin "$HOME/.nvm" -maxdepth 4 -name claude -type f 2>/dev/null | head -5`,
+      `npm install -g @anthropic-ai/claude-code 2>&1 | tail -6; echo "=== verify ==="; hash -r 2>/dev/null; command -v claude && claude --version 2>&1 | head -1`,
+      `cd ~/.claude/skills/oked-release && env -u CLAUDECODE claude -p --model opus --output-format text "Reply with exactly: OK" 2>&1 | head -5; echo "exit:$?"`,
+      `f=/Users/oren/x.jsonl; jq -r 'select(.t=="b") | .cmd' "$f" 2>/dev/null | sort -u | head`,
+      `cp /tmp/probe.ts ./probe.ts`,
+    ]) {
+      assert.ok(noPrompt(bash(cmd)), `${cmd} -> ${bash(cmd)} (should not prompt)`);
+    }
   });
 });
