@@ -57,9 +57,9 @@ describe("mv vs cp — reversible local mutation → warning", () => {
   });
 });
 
-describe("git push remains high_stakes after pattern cleanup", () => {
-  it("git push → high_stakes", () => {
-    assert.equal(bash("git push"), "high_stakes");
+describe("git push: plain → warning, force → high_stakes", () => {
+  it("git push → warning", () => {
+    assert.equal(bash("git push"), "warning");
   });
 
   it("git push --force → high_stakes", () => {
@@ -68,6 +68,10 @@ describe("git push remains high_stakes after pattern cleanup", () => {
 
   it("git push -f → high_stakes", () => {
     assert.equal(bash("git push -f"), "high_stakes");
+  });
+
+  it("git push --force-with-lease → high_stakes", () => {
+    assert.equal(bash("git push --force-with-lease"), "high_stakes");
   });
 });
 
@@ -280,8 +284,8 @@ describe("local git ops — warning, not review", () => {
     assert.equal(bash("git status"), "safe");
   });
 
-  it("git push stays high_stakes (remote)", () => {
-    assert.equal(bash("git push"), "high_stakes");
+  it("git push → warning (remote, no force)", () => {
+    assert.equal(bash("git push"), "warning");
   });
 
   it("git reset --hard stays high_stakes in a chain", () => {
@@ -682,7 +686,11 @@ describe("env wrapper + claude headless — no prompt (round 4)", () => {
 
   it("env wrapping a dangerous inner is still high_stakes", () => {
     assert.equal(bash(`env -i rm -rf /important`), "high_stakes");
-    assert.equal(bash(`env FOO=bar git push`), "high_stakes");
+    assert.equal(bash(`env FOO=bar git push --force`), "high_stakes");
+  });
+
+  it("env wrapping a plain push is warning", () => {
+    assert.equal(bash(`env FOO=bar git push`), "warning");
   });
 });
 
@@ -767,7 +775,11 @@ describe("effect-category model — permissive default (round 5)", () => {
   it("destructive effect still wins inside a compound", () => {
     assert.equal(bash("ls -la && rm -rf ~/data"), "high_stakes");
     assert.equal(bash("echo hi && mkfs /dev/sdb"), "high_stakes");
-    assert.equal(bash("git status; git push origin main"), "high_stakes");
+    assert.equal(bash("git status; git push --force origin main"), "high_stakes");
+  });
+
+  it("plain push inside a compound is warning", () => {
+    assert.equal(bash("git status; git push origin main"), "warning");
   });
 
   it("the exact screenshot commands from this session no longer prompt", () => {
