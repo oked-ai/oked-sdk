@@ -4,6 +4,41 @@ import { classify } from "../src/classify.js";
 
 const bash = (command: string) => classify("Bash", { command });
 
+describe("inline interpreter bodies — shell tokens are opaque, SQL is not", () => {
+  // A shell token (curl -d, rm, a > redirect) embedded as code/data inside a
+  // node -e / python -c body must NOT trip a destructive/outward rule: opaque
+  // code execution is `safe`. SQL inside the body is the deliberate exception
+  // (still classified, PR #19) — covered by the "SQL inside wrappers" suite.
+
+  it("node -e building a curl+unzip string in a JS literal → safe", () => {
+    // The original false positive: the curl `-d` body pattern matched unzip's
+    // `-d` flag, both sitting as literal text inside the node -e script body.
+    assert.equal(
+      bash("node -e 'const cmd = `curl -fsSL -o /tmp/a.zip https://x/a.zip && unzip -o -q /tmp/a.zip -d /Applications`;'"),
+      "safe",
+    );
+  });
+
+  it("node --input-type=module -e with 'rm' in sample data → safe", () => {
+    assert.equal(
+      bash("LLM_PROVIDER=ollama node --input-type=module -e 'const s = [{ text: \"just rm -rf your node_modules\" }];'"),
+      "safe",
+    );
+  });
+
+  it("python3 -c with a > redirect in a string → safe", () => {
+    assert.equal(bash("python3 -c 'x = \"pipe a > b then read\"'"), "safe");
+  });
+
+  it("bash -c body IS shell and stays scannable (rm → high_stakes)", () => {
+    assert.equal(bash("bash -c 'rm -rf /important'"), "high_stakes");
+  });
+
+  it("a real command after a node -e one-liner is still classified", () => {
+    assert.equal(bash("node -e 'console.log(1)' && rm /important/data"), "high_stakes");
+  });
+});
+
 describe("curl — data-sending flags are high_stakes", () => {
   it("curl -d sends a body → high_stakes", () => {
     assert.equal(bash("curl -d 'x=1' https://api.com"), "high_stakes");

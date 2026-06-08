@@ -581,26 +581,37 @@ function classifySshStage(stage: string): RiskTier | null {
 function classifyBashCommand(command: string): RiskTier {
   if (!command) return "safe";
 
-  // Strip heredoc bodies up front: their contents are literal data, not shell,
-  // and must not be scanned for high-stakes tokens, operators, or redirects.
-  const trimmed = stripHeredocBodies(command).trim();
+  // Two views of the command:
+  //  - `intact`  : heredoc bodies stripped only. Used for SQL detection, so SQL
+  //                written inline in an interpreter one-liner (`node -e`,
+  //                `python -c`) or a DB CLI is still classified (PR #19).
+  //  - `stripped`: ALSO blanks inline-interpreter script bodies. Used for every
+  //                SHELL-pattern scan, so a shell token embedded as code/data in
+  //                an interpreter body (`rm`, `curl -d`, a `>` redirect — e.g. a
+  //                reddit post fed to `node -e '…samples…'`) does not trip a
+  //                destructive/outward rule. (SQL keywords in that data can still
+  //                surface via `intact` — that is the accepted shell-only-opacity
+  //                trade-off; see classifyStageShellEffects.)
+  const intact = stripHeredocBodies(command).trim();
+  const stripped = stripInlineScriptBodies(intact).trim();
 
-  // High-stakes scan on the FULL command, before any splitting. These patterns
-  // use \b and several intentionally span an operator (e.g. `curl … | bash`,
-  // `wget … | sh` — download-and-execute), so they have to be matched against
-  // the whole string. Most-restrictive-wins: a high-stakes match anywhere in a
-  // compound command takes the whole command to high_stakes. (File deletion is
-  // NOT here — it's per-stage below so the ephemeral-temp downgrade can run.)
+  // High-stakes scan on the FULL (body-stripped) command, before any splitting.
+  // These patterns use \b and several intentionally span an operator (e.g.
+  // `curl … | bash`, `wget … | sh` — download-and-execute), so they have to be
+  // matched against the whole string. Most-restrictive-wins: a high-stakes match
+  // anywhere in a compound command takes the whole command to high_stakes. (File
+  // deletion is NOT here — it's per-stage below so the ephemeral-temp downgrade
+  // can run.)
   for (const pattern of HIGH_STAKES_COMMANDS) {
-    if (pattern.test(trimmed)) return "high_stakes";
+    if (pattern.test(stripped)) return "high_stakes";
   }
 
   // Compound commands: split on top-level `|`, `||`, `&&`, `;` and take the
-  // highest tier. Without this, `cat /tmp/draft.eml | himalaya message send`
-  // would match `^cat\b` and silently allow the send, and `git add … && git
-  // commit …` couldn't be recognized as the local git ops they are. Only
-  // recurse when there are 2+ stages so single commands don't loop.
-  const stages = splitTopLevel(trimmed);
+  // highest tier. Split the body-INTACT view so each stage keeps its SQL
+  // visible; recursion re-derives both views per stage. (Blanking a script body
+  // never changes top-level operator structure — operators inside the quoted
+  // body aren't split points either way — so stage boundaries are identical.)
+  const stages = splitTopLevel(intact);
   if (stages.length > 1) {
     return stages.reduce<RiskTier>(
       (worst, stage) => maxTier(worst, classifyBashCommand(stage)),
@@ -610,19 +621,35 @@ function classifyBashCommand(command: string): RiskTier {
 
   // ---- single stage from here ----
 
+  // SQL severity from the body-INTACT view: an interpreter wrapper (python -c,
+  // node -e, heredoc), a DB CLI (psql -c, sqlite3 db "...", mysql -e), or SQL at
+  // the top of the command. Folded in as a floor so it survives even when the
+  // shell pass short-circuits to `safe` (e.g. an assignment-prefixed node -e).
+  const sql = findSqlInCommand(intact);
+  const sqlTier: RiskTier = sql ? classifySqlSeverity(sql) : "safe";
+
+  return maxTier(sqlTier, classifyStageShellEffects(stripped));
+}
+
+/**
+ * Shell-effect classification of a SINGLE, already-body-stripped stage. No SQL
+ * detection here — that runs on the body-intact view in classifyBashCommand and
+ * is folded in by the caller. Returns the stage's tier (default `safe`).
+ */
+function classifyStageShellEffects(stage: string): RiskTier {
   // File deletion, per-stage so the ephemeral-temp carve-out can win: deleting
   // only throwaway temp files (/tmp, $TMPDIR, /var/folders, …) → warning; any
   // non-temp target (or the temp root itself) → high_stakes.
-  if (isEphemeralOnlyDeletion(trimmed)) return "warning";
+  if (isEphemeralOnlyDeletion(stage)) return "warning";
   for (const pattern of DELETE_PATTERNS) {
-    if (pattern.test(trimmed)) return "high_stakes";
+    if (pattern.test(stage)) return "high_stakes";
   }
 
   // Destructive/irreversible single commands, matched at stage start with any
   // leading `sudo ` stripped (so `sudo mkfs …` is still caught, but the word
   // can't fire inside an argument). These don't span pipes, so `^`-anchoring is
   // precise and avoids prose false-positives.
-  const bareStage = trimmed.replace(/^sudo\s+/, "");
+  const bareStage = stage.replace(/^sudo\s+/, "");
   for (const pattern of HIGH_STAKES_STAGE) {
     if (pattern.test(bareStage)) return "high_stakes";
   }
@@ -631,46 +658,39 @@ function classifyBashCommand(command: string): RiskTier {
   // (not on the full compound command) so the greedy `.*` can't reach across a
   // `&&`/`|` and match a `-d`/`-T`/etc. flag belonging to a different command.
   for (const pattern of HIGH_STAKES_CURL_STAGE) {
-    if (pattern.test(trimmed)) return "high_stakes";
+    if (pattern.test(stage)) return "high_stakes";
   }
 
   // Variable assignments: `NAME=value` (pure) or `NAME=$(cmd) rest` (env prefix
   // / capture). Classify the command-substitution inners and any trailing
   // command; a purely literal assignment is safe. Dangerous substitutions were
   // already caught by the high-stakes/delete scans above.
-  const assignTier = classifyAssignmentStage(trimmed);
+  const assignTier = classifyAssignmentStage(stage);
   if (assignTier !== null) return assignTier;
 
   // `env [opts] [NAME=VAL]... cmd` runs cmd with a modified environment. Strip
   // the env prefix and classify the inner command (a dangerous inner was already
   // caught by the high-stakes full scan). Bare `env` just prints the env → safe.
-  const envTier = classifyEnvStage(trimmed);
+  const envTier = classifyEnvStage(stage);
   if (envTier !== null) return envTier;
 
   // ssh is a transport — classify the remote command it runs (interactive /
   // port-forwarding ssh has no inspectable command → review floor). scp/rsync
   // to a remote are file transfers and stay high_stakes (HIGH_STAKES_STAGE).
-  const sshTier = classifySshStage(trimmed);
+  const sshTier = classifySshStage(stage);
   if (sshTier !== null) return sshTier;
 
   // sudo: privilege escalation. A high-stakes inner command was already caught
   // by the full-string scan above (\b patterns match through the `sudo` prefix);
   // anything else still warrants review.
-  if (/^sudo\s/.test(trimmed)) return "review";
-
-  // SQL hidden inside an interpreter wrapper (python -c, node -e, heredoc),
-  // a DB CLI (psql -c, sqlite3 db "...", mysql -e), or at the top of the
-  // command. Severity comes from the statement, not the wrapper. (High-stakes
-  // SQL — DROP/TRUNCATE/DELETE FROM — is already covered by the scan above.)
-  const sql = findSqlInCommand(trimmed);
-  if (sql) return classifySqlSeverity(sql);
+  if (/^sudo\s/.test(stage)) return "review";
 
   // File-mutating shell patterns (echo > X, tee, dd of=, touch, sed -i, cp, mv).
   // A file write/copy/move is a reversible LOCAL mutation, classified like the
   // Write/Edit tool: `warning` (logged) — UNLESS a target is a sensitive path
   // (system dir, secret store, shell rc, OKed config), which stays `review`.
   // (Overwriting a raw block device was already caught by the high-stakes scan.)
-  const ops = extractShellWriteOps(trimmed);
+  const ops = extractShellWriteOps(stage);
   if (ops.length > 0) {
     const targets = ops.map((o) => o.target);
     return targets.some((t) => isSensitiveWritePath(t)) ? "review" : "warning";
@@ -678,14 +698,14 @@ function classifyBashCommand(command: string): RiskTier {
 
   // Outward sends (email/message) → review.
   for (const pattern of REVIEW_COMMANDS) {
-    if (pattern.test(trimmed)) return "review";
+    if (pattern.test(stage)) return "review";
   }
 
   // Local-mutation markers (local git, code execution, installs) → warning:
   // logged, no prompt. Everything else is a read or an unrecognized command with
   // no detected effect — and under the effect-based model that means `safe`.
   for (const pattern of WARNING_COMMANDS) {
-    if (pattern.test(trimmed)) return "warning";
+    if (pattern.test(stage)) return "warning";
   }
 
   // Default: safe. No destructive/outward/sensitive effect was detected, so we
@@ -767,6 +787,55 @@ export function stripHeredocBodies(command: string): string {
     i++;
   }
   return out.join("\n");
+}
+
+// Interpreters whose inline `-e`/`-c`/`--eval` (and perl/deno one-liner) body is
+// opaque CODE — not shell. We blank that body before the SHELL-pattern scans so
+// tokens embedded as code or data (`rm`, `curl -d`, a `>` redirect) don't trip a
+// destructive/outward rule. This matches the documented policy that opaque code
+// execution is `safe` (see the WARNING_COMMANDS note): we can't tell what a
+// `node -e`/`python -c` body does, and a real destructive shell effect buried
+// inside it would slip through the label regardless — so scanning the body for
+// shell tokens only manufactures false positives.
+//
+// NOTE: SQL is the deliberate exception. classifyBashCommand still runs SQL
+// detection on the body-INTACT view, so inline SQL in a `node -e`/`python -c`
+// one-liner stays classified (PR #19). The trade-off ("shell-only opacity"): a
+// SQL keyword sitting in DATA passed to an interpreter can still surface.
+//
+// Deliberately EXCLUDED from stripping: shell interpreters (`sh -c`, `bash -c`)
+// whose body IS shell — those bodies must stay scannable. The matcher requires a
+// quoted body, so an unquoted `node -e expr` (which can't carry spaces/operators)
+// is left untouched.
+const INLINE_SCRIPT_RE =
+  /\b(?:node|deno|bun|python[23]?|ruby|perl)\b[^\n|;&'"]*?\s(?:eval|--eval|--print|-e|-c|-p|-ne|-pe|-ple|-ane|-nae)\b\s*(['"])/g;
+
+export function stripInlineScriptBodies(command: string): string {
+  INLINE_SCRIPT_RE.lastIndex = 0;
+  let out = "";
+  let last = 0;
+  let m: RegExpExecArray | null;
+  while ((m = INLINE_SCRIPT_RE.exec(command)) !== null) {
+    const quote = m[1];
+    const bodyStart = m.index + m[0].length; // index just past the opening quote
+    let j = bodyStart;
+    if (quote === "'") {
+      // Single quotes: no escaping in shell — body runs to the next single quote.
+      while (j < command.length && command[j] !== "'") j++;
+    } else {
+      // Double quotes: a backslash escapes the next char.
+      while (j < command.length && command[j] !== '"') {
+        if (command[j] === "\\") j++;
+        j++;
+      }
+    }
+    out += command.slice(last, bodyStart); // prefix through the opening quote
+    out += quote;                           // closing quote — interior blanked
+    last = j < command.length ? j + 1 : command.length;
+    INLINE_SCRIPT_RE.lastIndex = last;      // resume after the closing quote
+  }
+  out += command.slice(last);
+  return out;
 }
 
 /** Find output redirects (`>`, `>>`, `&>`, `2>`, …) outside quoted strings.
