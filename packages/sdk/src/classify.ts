@@ -98,15 +98,13 @@ const HIGH_STAKES_COMMANDS = [
   // -c/-e, interpreter -e/-c bodies, heredocs), then classifySqlSeverity.
   /\bdocker\s+(rm|rmi|system\s+prune)\b/,
   /\bdocker\s+compose\s+down\b/,
-  /\bcurl\s+.*-X\s*(DELETE|PUT|POST|PATCH)\b/i,
-  /\bcurl\s+.*--request\s*(DELETE|PUT|POST|PATCH)\b/i,
-  // curl flags that send a request body (POST/PUT/PATCH) without an explicit -X
-  /\bcurl\b.*\s-d[\s=]/,
-  /\bcurl\b.*\s--data(-raw|-binary|-urlencode|-ascii)?[\s=]/,
-  /\bcurl\b.*\s-F[\s=]/,
-  /\bcurl\b.*\s--form[\s=]/,
-  /\bcurl\b.*\s(-T|--upload-file)[\s=]/,
-  /\bcurl\b.*\s--json[\s=]/,
+  // NOTE: curl request-method/body flags (-X DELETE, --data, -F, -T, --json, …)
+  // are NOT here. Their `.*` would match greedily across a `&&`/`|` boundary and
+  // grab a flag belonging to a LATER command (e.g. `curl -o … && unzip … -d dir`
+  // false-matched the curl `-d` POST-body pattern on unzip's destination flag).
+  // They belong to a single curl invocation, so they're scanned PER-STAGE in
+  // HIGH_STAKES_CURL_STAGE below. Only the download-and-execute patterns
+  // (`curl|wget … | sh`) genuinely span a pipe and stay in this full scan.
   /\bwget\s+.*\|\s*(bash|sh|zsh)\b/,
   /\bcurl\s+.*\|\s*(bash|sh|zsh)\b/,
   /\bnpm\s+publish\b/,
@@ -158,6 +156,23 @@ const HIGH_STAKES_STAGE = [
   /^killall\b/,
   // Wide-open permissions.
   /^chmod\s+(?:-\S+\s+)*777\b/,
+];
+
+// curl request-method / request-body flags, scanned PER-STAGE (a single stage
+// has no top-level pipe, so `\bcurl\b.*` can't cross into another command — the
+// `-d`/`-T`/etc. it finds belongs to THIS curl). A curl that sends a body or a
+// mutating method (POST/PUT/PATCH/DELETE) is an outward write → high_stakes.
+// A plain `curl -o file URL` download has none of these and stays safe.
+const HIGH_STAKES_CURL_STAGE = [
+  /\bcurl\s+.*-X\s*(DELETE|PUT|POST|PATCH)\b/i,
+  /\bcurl\s+.*--request\s*(DELETE|PUT|POST|PATCH)\b/i,
+  // curl flags that send a request body (POST/PUT/PATCH) without an explicit -X
+  /\bcurl\b.*\s-d[\s=]/,
+  /\bcurl\b.*\s--data(-raw|-binary|-urlencode|-ascii)?[\s=]/,
+  /\bcurl\b.*\s-F[\s=]/,
+  /\bcurl\b.*\s--form[\s=]/,
+  /\bcurl\b.*\s(-T|--upload-file)[\s=]/,
+  /\bcurl\b.*\s--json[\s=]/,
 ];
 
 // Outward-but-recoverable commands → review (prompt, simple approve). Sending
@@ -610,6 +625,13 @@ function classifyBashCommand(command: string): RiskTier {
   const bareStage = trimmed.replace(/^sudo\s+/, "");
   for (const pattern of HIGH_STAKES_STAGE) {
     if (pattern.test(bareStage)) return "high_stakes";
+  }
+
+  // curl with a mutating method or request body → high_stakes. Scanned per-stage
+  // (not on the full compound command) so the greedy `.*` can't reach across a
+  // `&&`/`|` and match a `-d`/`-T`/etc. flag belonging to a different command.
+  for (const pattern of HIGH_STAKES_CURL_STAGE) {
+    if (pattern.test(trimmed)) return "high_stakes";
   }
 
   // Variable assignments: `NAME=value` (pure) or `NAME=$(cmd) rest` (env prefix
