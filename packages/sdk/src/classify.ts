@@ -68,17 +68,28 @@ const HIGH_STAKES_TOOLS = new Set<string>([]);
 // unknown commands, …). We only enumerate the things that DO warrant a log
 // (WARNING_*) or a prompt (REVIEW_*, HIGH_STAKES_*).
 
-// File deletion (rm/rmdir/trash). Checked PER-STAGE (not on the full command)
-// so the ephemeral-temp downgrade can run first: `something; rm /tmp/x` must be
-// warning, but `rm /tmp/x` mixed with a non-temp delete in another stage stays
-// high_stakes. Matching the bare word also catches it inside a loop body or a
-// $(...) substitution stage.
-const DELETE_PATTERNS = [
-  /\brm\b/,
-  /\brmdir\b/,
-  /\btrash\b/,
-  /\btrash-put\b/,
-];
+// File deletion (rm/rmdir/trash), detected in COMMAND POSITION only. Checked
+// PER-STAGE (not the full command) so the ephemeral-temp downgrade can run
+// first. Earlier this matched the bare word `\brm\b` anywhere, which fired on
+// `rm` sitting in an ARGUMENT — a branch name (`git push origin fix-rm-thing`),
+// a filename (`touch fix-rm.txt`), or echo text — turning benign commands
+// (including file creation) into false high_stakes prompts. Now it only fires
+// when the delete word is the command being run.
+//
+// DELETE_LEAD strips leading command wrappers / loop-body keywords (and their
+// flags) so a real delete that isn't literally first — `sudo rm`, `command rm`,
+// `xargs -0 rm`, `do rm` (from `for …; do rm …; done`) — still anchors at start.
+// Wrappers that take their own structured args (env, ssh, NAME=…, sh -c) are
+// handled by their dedicated stage classifiers, which recurse into the inner
+// command, so they're intentionally not here.
+const DELETE_LEAD =
+  /^(?:(?:sudo|command|exec|builtin|time|nice|xargs|then|do|else)\b\s*(?:-\S+\s+)*)+/;
+// rm/rmdir/trash at the (lead-stripped) start of the stage, at the start of a
+// line, or immediately inside a substitution/subshell/group ($( ), `…`, ( ),
+// { ). Deliberately NOT after `;`/`|`/`&`/a quote, so a delete word sitting in
+// quoted DATA (echo text, a commit message) doesn't match.
+const DELETE_COMMAND_RE =
+  /(?:^|[\n`({]|\$\()\s*(?:rm|rmdir|trash|trash-put)\b/;
 
 // Bash commands classified as high stakes (destructive, irreversible, external).
 // Scanned on the FULL command (some patterns, e.g. download|shell, span a pipe).
@@ -578,6 +589,22 @@ function classifySshStage(stage: string): RiskTier | null {
   return "review"; // only options / a bare host token → treat as remote access
 }
 
+/**
+ * `sh -c '<shell>'` / `bash -c "<shell>"` (also zsh/ksh/dash, and combined flags
+ * like `-lc`) runs the quoted argument AS shell. Recurse on the body so its
+ * effect is classified by the same rules — mirrors classifySshStage. Only fires
+ * when the shell IS the stage's command; a `-c` flag on another tool (e.g.
+ * `grep -c`) is unaffected because the stage doesn't start with a shell name.
+ * Returns null if the stage isn't a `sh -c`-style invocation.
+ */
+function classifyShellCStage(stage: string): RiskTier | null {
+  const m = stage.match(
+    /^(?:bash|sh|zsh|ksh|dash)\b[^'"]*?\s-[A-Za-z]*c\s+(['"])([\s\S]*?)\1/,
+  );
+  if (!m) return null;
+  return classifyBashCommand(m[2]);
+}
+
 function classifyBashCommand(command: string): RiskTier {
   if (!command) return "safe";
 
@@ -637,13 +664,13 @@ function classifyBashCommand(command: string): RiskTier {
  * is folded in by the caller. Returns the stage's tier (default `safe`).
  */
 function classifyStageShellEffects(stage: string): RiskTier {
-  // File deletion, per-stage so the ephemeral-temp carve-out can win: deleting
-  // only throwaway temp files (/tmp, $TMPDIR, /var/folders, …) → warning; any
-  // non-temp target (or the temp root itself) → high_stakes.
+  // File deletion in COMMAND POSITION, per-stage so the ephemeral-temp carve-out
+  // can win: deleting only throwaway temp files (/tmp, $TMPDIR, /var/folders, …)
+  // → warning; any non-temp target (or the temp root itself) → high_stakes.
+  // A delete word sitting in an argument (filename, branch name, echo text) is
+  // NOT a deletion — that's the false positive DELETE_COMMAND_RE avoids.
   if (isEphemeralOnlyDeletion(stage)) return "warning";
-  for (const pattern of DELETE_PATTERNS) {
-    if (pattern.test(stage)) return "high_stakes";
-  }
+  if (DELETE_COMMAND_RE.test(stage.replace(DELETE_LEAD, ""))) return "high_stakes";
 
   // Destructive/irreversible single commands, matched at stage start with any
   // leading `sudo ` stripped (so `sudo mkfs …` is still caught, but the word
@@ -679,6 +706,14 @@ function classifyStageShellEffects(stage: string): RiskTier {
   // to a remote are file transfers and stay high_stakes (HIGH_STAKES_STAGE).
   const sshTier = classifySshStage(stage);
   if (sshTier !== null) return sshTier;
+
+  // `sh -c '<shell>'` / `bash -c "<shell>"` runs the quoted argument AS shell —
+  // recurse so its effect is classified by the same rules (mirrors ssh). This
+  // is why the command-position delete scan above can ignore quoted text: a real
+  // shell-out like `bash -c 'rm -rf /important'` is caught HERE, by re-running
+  // the body as a command, while `echo 'rm …'` (data) is not.
+  const shellCTier = classifyShellCStage(stage);
+  if (shellCTier !== null) return shellCTier;
 
   // sudo: privilege escalation. A high-stakes inner command was already caught
   // by the full-string scan above (\b patterns match through the `sudo` prefix);

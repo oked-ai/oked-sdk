@@ -4,6 +4,53 @@ import { classify } from "../src/classify.js";
 
 const bash = (command: string) => classify("Bash", { command });
 
+describe("delete detection is command-position only (not substring in args)", () => {
+  // `rm`/`rmdir`/`trash` sitting in an ARGUMENT — a branch name, a filename,
+  // echo text, a commit message — must NOT be read as a deletion. Creating a
+  // file or pushing a branch whose name happens to contain "rm" must not prompt.
+  it("git push of a branch named with 'rm' → warning, not high_stakes", () => {
+    assert.equal(bash("git push -u origin fix-rm-target-parsing"), "warning");
+  });
+  it("git push of a branch named with 'trash' → warning", () => {
+    assert.equal(bash("git push -u origin feature/trash-cleanup"), "warning");
+  });
+  it("touch a file whose name contains 'rm' → warning (file create, no delete)", () => {
+    assert.equal(bash("touch src/utils/rmdir-helper.ts"), "warning");
+  });
+  it("echo into a file named with 'rm' → warning", () => {
+    assert.equal(bash("echo notes > rm-list.md"), "warning");
+  });
+  it("echo text mentioning rm into a file → warning", () => {
+    assert.equal(bash('echo "remember to rm old logs later" > todo.txt'), "warning");
+  });
+  it("commit message mentioning rm → warning (local git), not a delete", () => {
+    assert.equal(bash('git commit -m "cleanup rm calls"'), "warning");
+  });
+
+  // Real deletions in every command position still fire.
+  it("plain rm of non-temp → high_stakes", () => {
+    assert.equal(bash("rm -rf /important"), "high_stakes");
+  });
+  it("loop body `do rm` → high_stakes", () => {
+    assert.equal(bash("for f in *; do rm -rf $f; done"), "high_stakes");
+  });
+  it("`command rm` wrapper → high_stakes", () => {
+    assert.equal(bash("command rm -rf /"), "high_stakes");
+  });
+  it("`xargs -0 rm` (flags after wrapper) → high_stakes", () => {
+    assert.equal(bash("find . -name '*.log' | xargs -0 rm"), "high_stakes");
+  });
+  it("`bash -c 'rm …'` recurses and stays high_stakes", () => {
+    assert.equal(bash("bash -c 'rm -rf /important'"), "high_stakes");
+  });
+  it("`bash -c 'echo hi'` is safe (recursed body is safe)", () => {
+    assert.equal(bash("bash -c 'echo hi'"), "safe");
+  });
+  it("rm inside $(…) → high_stakes", () => {
+    assert.equal(bash("echo $(rm -rf /)"), "high_stakes");
+  });
+});
+
 describe("inline interpreter bodies — shell tokens are opaque, SQL is not", () => {
   // A shell token (curl -d, rm, a > redirect) embedded as code/data inside a
   // node -e / python -c body must NOT trip a destructive/outward rule: opaque
