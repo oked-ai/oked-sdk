@@ -137,25 +137,45 @@ describe("file writes -> warning everywhere except sensitive paths", () => {
   });
 });
 
-describe("ssh remote exec — high_stakes (irreversible remote effects)", () => {
-  it("ssh user@host with remote command → high_stakes", () => {
-    assert.equal(bash('ssh user@example.com "ls /"'), "high_stakes");
+describe("ssh — tier comes from the remote command (effect-based)", () => {
+  it("ssh host with a read-only remote command → safe", () => {
+    assert.equal(bash('ssh user@example.com "ls /"'), "safe");
   });
 
-  it("ssh -i key.pem ubuntu@ip with remote command → high_stakes", () => {
+  it("ssh -o … host with a remote diagnostic pipeline → safe (the reported case)", () => {
     assert.equal(
-      bash("ssh -i key.pem ubuntu@1.2.3.4 systemctl restart nginx"),
-      "high_stakes",
+      bash(`ssh -o ConnectTimeout=15 ubuntu@ec2-16-170-241-107.eu-north-1.compute.amazonaws.com 'npm list -g --depth=0 2>/dev/null | grep @oked; echo ---; command -v oked-openclaw || echo NO'`),
+      "safe",
     );
   });
 
-  it("ssh user@host with no command (interactive shell) → high_stakes", () => {
-    assert.equal(bash("ssh user@example.com"), "high_stakes");
+  it("ssh -i key.pem host with a destructive remote command → high_stakes", () => {
+    assert.equal(bash("ssh -i key.pem ubuntu@1.2.3.4 'rm -rf /var/data'"), "high_stakes");
   });
 
-  it("ssh-keygen (no user@host) stays out of high_stakes", () => {
-    // ssh-keygen is local and reversible; should fall through, not match.
-    assert.notEqual(bash("ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519"), "high_stakes");
+  it("ssh host with a remote DROP TABLE → high_stakes", () => {
+    assert.equal(bash(`ssh db.internal 'psql -c "DROP TABLE users"'`), "high_stakes");
+  });
+
+  it("ssh host with a remote local-mutation → warning", () => {
+    assert.equal(bash(`ssh host 'cp a.txt b.txt'`), "warning");
+  });
+
+  it("ssh host with no command (interactive shell) → review floor", () => {
+    assert.equal(bash("ssh user@example.com"), "review");
+  });
+
+  it("ssh with port forwarding (-L) → review (opaque access)", () => {
+    assert.equal(bash("ssh -L 8080:localhost:80 user@example.com"), "review");
+  });
+
+  it("ssh-keygen is local — not an ssh remote at all → safe", () => {
+    assert.equal(bash("ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519"), "safe");
+  });
+
+  it("scp/rsync to a remote stay high_stakes (file transfer, not ssh exec)", () => {
+    assert.equal(bash("scp secrets.env user@host:/tmp/"), "high_stakes");
+    assert.equal(bash("rsync --delete ./ host:/backup"), "high_stakes");
   });
 });
 
