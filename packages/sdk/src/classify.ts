@@ -21,7 +21,7 @@ import { TIER_ORDER } from "./degraded.js";
 //                dirs, OKed's own config), sudo, outward message/email sends.
 // Tier 4 - high_stakes: push + number matching. Destructive / irreversible /
 //                external: rm of non-temp data, DROP/TRUNCATE/DELETE FROM,
-//                git push / reset --hard / branch -D, mkfs / dd-to-device /
+//                git push --force / reset --hard / branch -D, mkfs / dd-to-device /
 //                shutdown, curl POST/DELETE, ssh/scp, npm publish, kill.
 
 // Tools that are always safe (read-only, no side effects)
@@ -84,7 +84,9 @@ const DELETE_PATTERNS = [
 // Scanned on the FULL command (some patterns, e.g. download|shell, span a pipe).
 // File deletion lives in DELETE_PATTERNS (per-stage) instead, see above.
 const HIGH_STAKES_COMMANDS = [
-  /\bgit\s+push\b/,
+  // Force push rewrites remote history irreversibly. A plain push is downgraded
+  // to `warning` in WARNING_COMMANDS below. Mirrors describe.ts force detection.
+  /\bgit\s+push\b[^\n]*\s(?:--force(?:-with-lease)?|-f)\b/,
   /\bgit\s+reset\s+--hard\b/,
   /\bgit\s+clean\s+-f/,
   /\bgit\s+checkout\s+--\s+\./,
@@ -181,12 +183,16 @@ const REVIEW_COMMANDS = [
 const WARNING_COMMANDS = [
   // Local, reversible git writes — stage/commit/switch/stash. They mutate the
   // local repo but can be undone (amend, reset, checkout). Destructive git
-  // (push, reset --hard, branch -D, stash drop/clear) is caught above and wins.
+  // (force push, reset --hard, branch -D, stash drop/clear) is caught above and wins.
   /^git\s+add\b/,
   /^git\s+commit\b/,
   /^git\s+checkout\s+-b\b/,
   /^git\s+switch\b/,
   /^git\s+stash\b(?!\s+(?:drop|clear))/,
+  // Plain push (no force). Outward, but the remote keeps full history and the
+  // push is recoverable, so by policy it logs rather than prompts. Force push is
+  // high_stakes in the full scan above and wins before reaching here.
+  /^git\s+push\b/,
   /^gh\s+pr\s+create\b/,
   // Package installs always mutate node_modules and run dependency postinstall
   // scripts — a known local mutation worth an audit line.
