@@ -36,6 +36,24 @@ describe("curl — data-sending flags are high_stakes", () => {
   it("curl piped to jq stays safe", () => {
     assert.equal(bash("curl -s https://api.com | jq ."), "safe");
   });
+
+  it("curl download then unzip -d stays safe (no cross-stage -d false match)", () => {
+    // Regression: the curl `-d` POST-body pattern was scanned on the full
+    // compound command, so its greedy `.*` reached across `&&` and matched
+    // unzip's `-d` destination flag, mislabeling a plain download as high_stakes.
+    assert.equal(
+      bash("curl -fsSL -o /tmp/app.zip https://x.com/app.zip && unzip -o -q /tmp/app.zip -d /Applications"),
+      "safe",
+    );
+  });
+
+  it("curl -o download then later -d flag on another command stays safe", () => {
+    assert.equal(bash("curl -fsSL -o /tmp/x.tar https://x.com/x.tar && tar xf /tmp/x.tar && find . -name '*.log' -d"), "safe");
+  });
+
+  it("curl POST is still high_stakes when it is a later stage", () => {
+    assert.equal(bash("echo start && curl -X POST https://api.com -d '{}'"), "high_stakes");
+  });
 });
 
 describe("mv vs cp — reversible local mutation → warning", () => {
