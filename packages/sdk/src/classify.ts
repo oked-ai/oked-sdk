@@ -110,12 +110,11 @@ const HIGH_STAKES_COMMANDS = [
   /\bnpm\s+publish\b/,
   /\bnpm\s+unpublish\b/,
   /\bnpx\s+.*\s+deploy\b/,
-  // ssh to a remote host. Effects on the remote side cannot be undone from
-  // here, so treat every interactive/remote-exec ssh as high_stakes. Matches
-  // `ssh user@host ...` and `ssh -i key.pem ubuntu@1.2.3.4 ...`. The
-  // \bssh\s+ prefix (whitespace required) excludes `ssh-keygen`/`ssh-add`/
-  // `ssh-keyscan` which are local and reversible.
-  /\bssh\s+(?:\S+\s+)*\S+@\S+/,
+  // NOTE: ssh is intentionally NOT a blanket high_stakes here. ssh is a
+  // transport — the real effect is whatever runs on the remote host — so it's
+  // classified by its remote command in classifySshStage (a read-only remote
+  // diagnostic shouldn't prompt; a destructive one still does). scp/rsync to a
+  // remote ARE file transfers (outward writes) and stay in HIGH_STAKES_STAGE.
   // himalaya destructive ops. message delete + folder delete/expunge/purge
   // wipe mail from the server irreversibly; account delete wipes local config.
   /\bhimalaya\s+message\s+delete\b/,
@@ -496,6 +495,68 @@ function classifyEnvStage(stage: string): RiskTier | null {
   return "safe"; // `env` / `env -u X` with no command just prints the environment
 }
 
+// ssh options that consume a following argument token (the rest are flags).
+const SSH_ARG_OPTS = new Set([
+  "-b", "-c", "-D", "-E", "-e", "-F", "-I", "-i", "-J", "-L", "-l", "-m",
+  "-O", "-o", "-p", "-Q", "-R", "-S", "-W", "-w",
+]);
+
+/**
+ * `ssh [opts] [user@]host [remote command]` — ssh is a transport, so the tier
+ * comes from the REMOTE command, classified by the same effect rules as a local
+ * one (`ssh host ls` → safe; `ssh host 'rm -rf /data'` → high_stakes). An ssh
+ * with no command opens an interactive shell, and port/dynamic forwarding
+ * (`-L`/`-R`/`-D`/`-W`) grants opaque access — neither is inspectable, so both
+ * get a `review` floor (one prompt for remote access). Returns null if the stage
+ * isn't an ssh invocation. Excludes `ssh-keygen`/`ssh-add`/`ssh-keyscan` (the
+ * `^ssh\s` anchor requires whitespace, not a hyphen).
+ */
+function classifySshStage(stage: string): RiskTier | null {
+  const lead = /^ssh\s+/.exec(stage);
+  if (!lead) return null;
+  const readToken = (from: number): number => {
+    let i = from;
+    let quote: '"' | "'" | null = null;
+    while (i < stage.length) {
+      const ch = stage[i];
+      if (quote) { if (ch === quote) quote = null; i++; continue; }
+      if (ch === '"' || ch === "'") { quote = ch; i++; continue; }
+      if (/\s/.test(ch)) break;
+      i++;
+    }
+    return i;
+  };
+  let i = lead[0].length;
+  let sawForward = false;
+  while (i < stage.length) {
+    while (i < stage.length && /\s/.test(stage[i])) i++;
+    if (i >= stage.length) break;
+    const start = i;
+    i = readToken(i);
+    const tok = stage.slice(start, i);
+    if (tok.startsWith("-")) {
+      if (/^-[LRDW]/.test(tok)) sawForward = true;       // forwarding/tunnel
+      if (SSH_ARG_OPTS.has(tok)) {                        // separated option arg
+        while (i < stage.length && /\s/.test(stage[i])) i++;
+        i = readToken(i);
+      }
+      continue;
+    }
+    // First non-option token is the [user@]host. Everything after it is the
+    // remote command (usually a single quoted string).
+    if (sawForward) return "review";
+    let rest = stage.slice(i).trim();
+    if (!rest) return "review";                           // interactive shell
+    // Strip one wrapping quote layer so the remote command's own operators
+    // (`;`, `|`) are classified as command separators, not quoted data.
+    if (rest.length >= 2 && (rest[0] === '"' || rest[0] === "'") && rest[rest.length - 1] === rest[0]) {
+      rest = rest.slice(1, -1);
+    }
+    return classifyBashCommand(rest);
+  }
+  return "review"; // only options / a bare host token → treat as remote access
+}
+
 function classifyBashCommand(command: string): RiskTier {
   if (!command) return "safe";
 
@@ -557,6 +618,12 @@ function classifyBashCommand(command: string): RiskTier {
   // caught by the high-stakes full scan). Bare `env` just prints the env → safe.
   const envTier = classifyEnvStage(trimmed);
   if (envTier !== null) return envTier;
+
+  // ssh is a transport — classify the remote command it runs (interactive /
+  // port-forwarding ssh has no inspectable command → review floor). scp/rsync
+  // to a remote are file transfers and stay high_stakes (HIGH_STAKES_STAGE).
+  const sshTier = classifySshStage(trimmed);
+  if (sshTier !== null) return sshTier;
 
   // sudo: privilege escalation. A high-stakes inner command was already caught
   // by the full-string scan above (\b patterns match through the `sudo` prefix);
