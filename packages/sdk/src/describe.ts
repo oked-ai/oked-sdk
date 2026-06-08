@@ -903,6 +903,14 @@ function parseRmTargets(argsString: string): string[] {
     while (i < str.length && /\s/.test(str[i])) i++;
     if (i >= str.length) break;
 
+    // A shell command separator (`;`, `|`, `||`, `&&`, `&`), a redirect (`>`,
+    // `>>`, `2>`, `&>`), a closing `)`/`}`, a comment, or a newline ends the rm
+    // argument list — everything after belongs to a different command. Without
+    // this, a compound `if …; then rm -rf "$P"; else echo "…"; fi` would sweep
+    // the trailing `;`/`else`/`echo`/`fi` (and the echo's text) in as "files",
+    // rendering a bogus "Delete N files recursively".
+    if (/^(?:&?\d*[<>]|[;|&`)}#\n])/.test(str.slice(i))) break;
+
     let token: string;
     if (str[i] === '"') {
       const close = str.indexOf('"', i + 1);
@@ -914,7 +922,9 @@ function parseRmTargets(argsString: string): string[] {
       else { token = str.slice(i + 1, close); i = close + 1; }
     } else {
       const start = i;
-      while (i < str.length && !/\s/.test(str[i])) i++;
+      // Stop the bare token at whitespace OR a separator/redirect char, so
+      // `"$P";` and `$P;` both yield just the path.
+      while (i < str.length && !/[\s;|&<>`)}#]/.test(str[i])) i++;
       token = str.slice(start, i);
     }
 

@@ -190,6 +190,29 @@ describe("Bash — multi-file rm", () => {
     assert.equal(f!.Target!.split("\n").length, 3);
   });
 
+  it("rm inside if/else compound → only the real target, not shell tokens", () => {
+    // Regression: parseRmTargets used to sweep the trailing `;`/`else`/`echo`/
+    // `fi` (and the echo's quoted text) in as "files", rendering a bogus
+    // "Delete 7 files recursively" with an unreadable body.
+    const f = describeFields("Bash", {
+      command: `if [ -f "$PROFILE" ]; then rm -rf "$PROFILE"; else echo "no existing profile (clean)"; fi`,
+    });
+    assert.equal(f!.Title, "Delete file recursively");
+    assert.equal(f!.Target, "$PROFILE");
+  });
+
+  it("rm target list stops at a redirect (2>/dev/null is not a file)", () => {
+    const f = describeFields("Bash", { command: `rm -rf "$P" 2>/dev/null` });
+    assert.equal(f!.Title, "Delete file recursively");
+    assert.equal(f!.Target, "$P");
+  });
+
+  it("rm followed by a piped command lists only the rm target", () => {
+    const f = describeFields("Bash", { command: "rm -rf build && echo done" });
+    assert.equal(f!.Title, "Delete file recursively");
+    assert.equal(f!.Target, "build");
+  });
+
   it("rm with quoted paths containing spaces", () => {
     const f = describeFields("Bash", {
       command: 'rm "path with spaces/file1.txt" \'another path/file2.txt\' plain.txt',
