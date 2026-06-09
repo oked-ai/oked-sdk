@@ -352,10 +352,12 @@ function maxTier(a: RiskTier, b: RiskTier): RiskTier {
 }
 
 /** Split a shell command into top-level segments on the operators that
- * sequence separate commands: `|`, `||`, `&&`, `;`. Operators inside quoted
- * strings — including the `"$(cat <<'EOF' … )"` heredoc form used for commit
- * messages — are kept intact so message text isn't split. Returns trimmed,
- * non-empty segments. */
+ * sequence separate commands: `|`, `||`, `&&`, `;`, and a bare newline (a
+ * newline separates commands in a multi-line script exactly like `;`).
+ * Operators inside quoted strings, command substitutions, and heredoc bodies —
+ * including the `"$(cat <<'EOF' … )"` heredoc form used for commit messages —
+ * are kept intact so message text isn't split. A backslash-escaped newline is a
+ * line continuation, not a separator. Returns trimmed, non-empty segments. */
 function splitTopLevel(cmd: string): string[] {
   const out: string[] = [];
   let cur = "";
@@ -408,6 +410,15 @@ function splitTopLevel(cmd: string): string[] {
       continue;
     }
     if (ch === "|" || ch === ";") {
+      out.push(cur.trim());
+      cur = "";
+      i++;
+      continue;
+    }
+    // A bare newline sequences commands like `;`. A backslash immediately before
+    // it is a line continuation (the two lines are one command), so keep it.
+    if (ch === "\n") {
+      if (cmd[i - 1] === "\\") { cur += ch; i++; continue; }
       out.push(cur.trim());
       cur = "";
       i++;
