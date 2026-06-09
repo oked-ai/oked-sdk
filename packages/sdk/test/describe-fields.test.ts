@@ -227,6 +227,23 @@ describe("Bash — multi-file rm", () => {
     assert.equal(f!.Title, "POST request to api.example.com");
   });
 
+  it("method-only curl (no body) is described by its method", () => {
+    // `-X` is preceded by whitespace, so the matcher must not use `\b-X`.
+    assert.equal(
+      describeFields("Bash", { command: "curl -s -X DELETE https://api.example.com/items/5" })!.Title,
+      "DELETE request to api.example.com",
+    );
+    assert.equal(
+      describeFields("Bash", { command: "curl -X PUT https://api.example.com/items/5" })!.Title,
+      "PUT request to api.example.com",
+    );
+  });
+
+  it("loopback DELETE in a for-loop headlines the request", () => {
+    const cmd = "for id in 1 2 3; do curl -s -X DELETE http://localhost:3997/api/tweet-drafts/$id; done";
+    assert.equal(describeFields("Bash", { command: cmd })!.Title, "DELETE request to localhost");
+  });
+
   it("plain `> file` (no curl) is still Create file", () => {
     const f = describeFields("Bash", { command: "echo hi > /tmp/note.log" });
     assert.equal(f!.Title, "Create file");

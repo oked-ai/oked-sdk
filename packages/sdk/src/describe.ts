@@ -113,8 +113,10 @@ function summarize(toolName: string, toolInput: Record<string, unknown>): Render
  */
 function summarizeMutatingCurl(cmd: string): Rendered | null {
   if (!/\b(?:curl|wget)\b/.test(cmd)) return null;
+  // `(?:^|\s)` not `\b`: `-X` is preceded by whitespace, and `\b` requires a
+  // word char before the `-`, so `\b-X` never matches the usual ` -X DELETE`.
   const methodM = cmd.match(
-    /\b-X\s*(DELETE|POST|PUT|PATCH)\b|\B--request[=\s]+(DELETE|POST|PUT|PATCH)\b/i,
+    /(?:^|\s)-X\s*(DELETE|POST|PUT|PATCH)\b|(?:^|\s)--request[=\s]+(DELETE|POST|PUT|PATCH)\b/i,
   );
   const hasBody =
     /\s-d[\s=]|\s--data(?:-raw|-binary|-urlencode|-ascii)?[\s=]|\s-F[\s=]|\s--form[\s=]|\s(?:-T|--upload-file)[\s=]|\s--json[\s=]/.test(
