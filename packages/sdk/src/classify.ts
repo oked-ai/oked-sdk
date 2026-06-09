@@ -616,6 +616,32 @@ function classifyShellCStage(stage: string): RiskTier | null {
   return classifyBashCommand(m[2]);
 }
 
+// A curl/wget whose target host is loopback (localhost, 127.0.0.0/8, 0.0.0.0,
+// ::1). A request to a server on this machine is a LOCAL action, not an outward
+// one, so a mutating method/body (POST/PUT/DELETE, -d, …) to it doesn't warrant
+// a prompt — it downgrades to `warning`. (Download-and-execute, `curl … | sh`,
+// is matched earlier on the FULL command and stays high_stakes regardless of
+// host, so this only affects the request-method/body patterns.)
+function isLoopbackAuthority(authority: string): boolean {
+  const host = authority.replace(/^\[/, "").replace(/\]$/, "").toLowerCase();
+  return host === "localhost" || host === "0.0.0.0" || host === "::1" ||
+    /^127(?:\.\d{1,3}){3}$/.test(host);
+}
+
+function isLoopbackHttpStage(stage: string): boolean {
+  if (!/\b(?:curl|wget)\b/.test(stage)) return false;
+  const schemed = [
+    ...stage.matchAll(/\bhttps?:\/\/(?:[^@/\s'"]*@)?(\[[0-9A-Fa-f:]+\]|[^/:\s'"]+)/g),
+  ].map((m) => m[1]);
+  // Every explicit http(s) target must be loopback; a single external URL means
+  // the request reaches the network and stays high_stakes.
+  if (schemed.length > 0) return schemed.every(isLoopbackAuthority);
+  // No scheme'd URL: curl also accepts a scheme-less target (`curl localhost:3999/x`).
+  // Accept a loopback host token only when no other http(s) URL is present.
+  if (/\bhttps?:\/\//i.test(stage)) return false;
+  return /(?:^|[\s@])(?:localhost|127(?:\.\d{1,3}){3}|0\.0\.0\.0|\[::1\])(?::\d+)?(?:[/\s'"]|$)/i.test(stage);
+}
+
 function classifyBashCommand(command: string): RiskTier {
   if (!command) return "safe";
 
@@ -695,8 +721,12 @@ function classifyStageShellEffects(stage: string): RiskTier {
   // curl with a mutating method or request body → high_stakes. Scanned per-stage
   // (not on the full compound command) so the greedy `.*` can't reach across a
   // `&&`/`|` and match a `-d`/`-T`/etc. flag belonging to a different command.
+  // A request to a LOOPBACK host (localhost/127.x/::1) is a local action, not an
+  // outward one, so it downgrades to `warning` (logged, no prompt).
   for (const pattern of HIGH_STAKES_CURL_STAGE) {
-    if (pattern.test(stage)) return "high_stakes";
+    if (pattern.test(stage)) {
+      return isLoopbackHttpStage(stage) ? "warning" : "high_stakes";
+    }
   }
 
   // Variable assignments: `NAME=value` (pure) or `NAME=$(cmd) rest` (env prefix

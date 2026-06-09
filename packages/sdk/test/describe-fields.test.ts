@@ -213,6 +213,25 @@ describe("Bash — multi-file rm", () => {
     assert.equal(f!.Target, "build");
   });
 
+  it("compound command headlines the POST, not an incidental file redirect", () => {
+    // Regression: `node … > /tmp/x.log … && curl -X POST …` was titled
+    // "Create file" even though the prompt is driven by the POST.
+    const f = describeFields("Bash", {
+      command: "node index.js > /tmp/oked-test.log 2>&1 &\ncurl -s -X POST http://localhost:3999/api/draft -d '{}'",
+    });
+    assert.equal(f!.Title, "POST request to localhost");
+  });
+
+  it("a request body without -X is described as a POST", () => {
+    const f = describeFields("Bash", { command: "curl --json '{}' https://api.example.com/x" });
+    assert.equal(f!.Title, "POST request to api.example.com");
+  });
+
+  it("plain `> file` (no curl) is still Create file", () => {
+    const f = describeFields("Bash", { command: "echo hi > /tmp/note.log" });
+    assert.equal(f!.Title, "Create file");
+  });
+
   it("rm with quoted paths containing spaces", () => {
     const f = describeFields("Bash", {
       command: 'rm "path with spaces/file1.txt" \'another path/file2.txt\' plain.txt',

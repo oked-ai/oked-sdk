@@ -105,6 +105,34 @@ function summarize(toolName: string, toolInput: Record<string, unknown>): Render
 // Bash / shell — semantic rerendering
 // ───────────────────────────────────────────────────────────────────────
 
+/**
+ * A curl/wget that uses a mutating method (POST/PUT/PATCH/DELETE) or sends a
+ * request body. Returns a "<METHOD> request to <host>" rendering, or null if the
+ * command isn't a mutating HTTP request. Headlines the outward request ahead of
+ * an incidental file redirect in a compound command.
+ */
+function summarizeMutatingCurl(cmd: string): Rendered | null {
+  if (!/\b(?:curl|wget)\b/.test(cmd)) return null;
+  const methodM = cmd.match(
+    /\b-X\s*(DELETE|POST|PUT|PATCH)\b|\B--request[=\s]+(DELETE|POST|PUT|PATCH)\b/i,
+  );
+  const hasBody =
+    /\s-d[\s=]|\s--data(?:-raw|-binary|-urlencode|-ascii)?[\s=]|\s-F[\s=]|\s--form[\s=]|\s(?:-T|--upload-file)[\s=]|\s--json[\s=]/.test(
+      cmd,
+    );
+  if (!methodM && !hasBody) return null;
+  const method = (methodM?.[1] || methodM?.[2] || "POST").toUpperCase();
+  const url = cmd.match(/https?:\/\/[^\s'"]+/)?.[0] || "";
+  const host = url ? extractHost(url) : "URL";
+  const kind: OperationKind =
+    method === "DELETE" ? "http_delete" : method === "PUT" ? "http_put" : "http_post";
+  return {
+    title: `${method} request to ${host}`,
+    body: cmd.length > COMMAND_INLINE_MAX ? truncateBody(cmd) : undefined,
+    kind,
+  };
+}
+
 function summarizeBash(command: string, sizeBytes?: number): Rendered {
   const cmd = (command || "").trim();
   if (!cmd) return { title: "Run empty command", kind: "unknown_bash" };
@@ -115,6 +143,14 @@ function summarizeBash(command: string, sizeBytes?: number): Rendered {
   // inside the quoted body otherwise match the `>` redirect regex.
   const sql = findSqlInCommand(cmd);
   if (sql) return summarizeSql(sql, cmd);
+
+  // A mutating curl/wget (POST/PUT/DELETE, or a request body) is described
+  // BEFORE shell-write detection. In a compound command the outward request is
+  // the headline operation, while a `> log` redirect is incidental — otherwise
+  // `node … > /tmp/x.log … && curl -X POST …` mislabels as "Create file" even
+  // though the prompt is driven by the POST.
+  const mutatingCurl = summarizeMutatingCurl(cmd);
+  if (mutatingCurl) return mutatingCurl;
 
   const shellWrite = summarizeShellWrite(cmd);
   if (shellWrite) return shellWrite;
@@ -196,19 +232,6 @@ function summarizeBash(command: string, sizeBytes?: number): Rendered {
     }
   }
 
-  // curl with method
-  const curlMethod = cmd.match(/curl\s+[^|]*-X\s*(DELETE|POST|PUT|PATCH)/i);
-  if (curlMethod) {
-    const url = cmd.match(/https?:\/\/[^\s'"]+/)?.[0] || "";
-    const host = url ? extractHost(url) : "URL";
-    const method = curlMethod[1].toUpperCase();
-    const kind: OperationKind = method === "DELETE" ? "http_delete" : method === "POST" ? "http_post" : method === "PUT" ? "http_put" : "http_post";
-    return {
-      title: `${method} request to ${host}`,
-      body: cmd.length > COMMAND_INLINE_MAX ? truncateBody(cmd) : undefined,
-      kind,
-    };
-  }
   if (/\bwget\b.*\|\s*(bash|sh|zsh)\b/.test(cmd) || /\bcurl\b.*\|\s*(bash|sh|zsh)\b/.test(cmd)) {
     const url = cmd.match(/https?:\/\/[^\s|'"]+/)?.[0];
     return {
