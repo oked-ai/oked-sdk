@@ -20,12 +20,13 @@ let passed = 0;
 }
 
 // Unknown/sensitive tool with no OKED_API_KEY → defer to native prompt (ask).
-// Use a genuinely prompt-worthy command: `git push` is high_stakes. (A /tmp
-// deletion would be `warning` — the ephemeral-temp downgrade — and short-circuit
-// to allow before the missing-key branch, so it can't exercise this path.)
+// Use a genuinely prompt-worthy command: a force push is high_stakes. (A plain
+// `git push` is only `warning` since #46, and a /tmp deletion is `warning` via
+// the ephemeral-temp downgrade — both short-circuit to allow before the
+// missing-key branch, so neither exercises this path.)
 {
   delete process.env.OKED_API_KEY;
-  const out = await okedPreToolUseHook(mkInput("Bash", { command: "git push origin main" }), undefined, {
+  const out = await okedPreToolUseHook(mkInput("Bash", { command: "git push --force origin main" }), undefined, {
     signal: new AbortController().signal,
   });
   assert.equal(
