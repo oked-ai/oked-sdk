@@ -804,6 +804,40 @@ describe("ephemeral rm inside a compound → warning (round 3)", () => {
   });
 });
 
+describe("newline is a top-level command separator (multi-line scripts)", () => {
+  // A newline sequences commands like `;`. Without splitting on it, the last
+  // command got glued onto the previous line, so an ephemeral `rm "$TMP"` lost
+  // its stage-start anchoring and was misread as high_stakes. This is the
+  // lockfile-refresh shape from the release runbook.
+  it("multi-line script ending in `rm -rf $TMP` → warning (ephemeral)", () => {
+    const cmd = [
+      'cd /repo && npm install',
+      'TMP=$(mktemp -d)',
+      'cp a "$TMP/"; cp b "$TMP/"',
+      '( cd "$TMP" && npm install --package-lock-only )',
+      'cp "$TMP/lock" ./lock',
+      'rm -rf "$TMP"',
+    ].join("\n");
+    assert.equal(bash(cmd), "warning");
+  });
+
+  it("ephemeral rm after a newline → warning", () => {
+    assert.equal(bash('cp a b\nrm -rf "$TMP"'), "warning");
+  });
+
+  it("non-temp rm after a newline still → high_stakes", () => {
+    assert.equal(bash("echo a\nrm -rf /important"), "high_stakes");
+  });
+
+  it("backslash line-continuation keeps one command intact", () => {
+    assert.equal(bash("rm -rf /important \\\n  /also-important"), "high_stakes");
+  });
+
+  it("several safe lines → safe", () => {
+    assert.equal(bash("ls -la\ncat README.md\necho done"), "safe");
+  });
+});
+
 describe("effect-category model — permissive default (round 5)", () => {
   // Unrecognized read/transform commands are safe with NO explicit pattern —
   // this is the whole point of the inversion (no more allowlist whack-a-mole).
