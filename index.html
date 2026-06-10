@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>OKed — Your AI agents, your approval</title>
+  <title>OKed: Your AI agents, your approval</title>
   <meta name="description" content="OKed intercepts risky AI agent actions before they happen and asks for your approval on your phone. Stay in control without slowing down." />
   <link rel="icon" type="image/png" href="assets/favicon.png" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -1003,8 +1003,8 @@
     <h1>Your AI agents act.<br /><span class="gradient">You stay in control.</span></h1>
 
     <p class="hero-sub">
-      OKed intercepts risky agent actions before they happen — sending instant
-      approval requests to your phone. One tap to approve or deny. Zero surprises.
+      OKed intercepts risky agent actions before they happen and sends an instant
+      Telegram message asking for your approval. One tap to approve or deny. Zero surprises.
     </p>
 
     <form class="waitlist-form" id="hero-form" novalidate>
@@ -1077,8 +1077,8 @@
       <div class="section-label">Live demo</div>
       <h2 class="section-title">Watch it intercept real threats</h2>
       <p class="section-sub">
-        Click any scenario — or watch them cycle. Every request pauses your agent and
-        lands on your phone before a single byte is changed.
+        Click any scenario or watch them cycle. Every request pauses your agent and
+        lands on your Telegram before a single byte is changed.
       </p>
 
       <div class="demo-tabs" id="demo-tabs">
@@ -1095,7 +1095,7 @@
         <div class="demo-terminal">
           <div class="terminal-chrome">
             <div class="terminal-dots"><span></span><span></span><span></span></div>
-            <div class="terminal-title">agent — zsh</div>
+            <div class="terminal-title">agent - zsh</div>
           </div>
           <div class="terminal-body" id="demo-terminal-body"></div>
         </div>
@@ -1128,7 +1128,7 @@
       <div class="section-label">How it works</div>
       <h2 class="section-title">Three steps between your agent<br />and a bad day</h2>
       <p class="section-sub">
-        OKed sits outside your agent process — so it can't be bypassed, even by a
+        OKed sits outside your agent process, so it can't be bypassed even by a
         misbehaving model.
       </p>
 
@@ -1137,7 +1137,7 @@
           <div class="step-number">01</div>
           <span class="step-icon">🔍</span>
           <h3>Agent calls a tool</h3>
-          <p>Your AI agent attempts a tool call — reading files, running code, making API requests, or anything in between.</p>
+          <p>Your AI agent attempts a tool call: reading files, running code, making API requests, or anything in between.</p>
           <div class="step-connector"></div>
         </div>
         <div class="step">
@@ -1151,13 +1151,13 @@
           <div class="step-number">03</div>
           <span class="step-icon">📱</span>
           <h3>You get a notification</h3>
-          <p>A rich push notification lands on your phone via Telegram or web push. The agent pauses until you decide.</p>
+          <p>A Telegram message lands on your phone instantly. The agent pauses until you decide.</p>
           <div class="step-connector"></div>
         </div>
         <div class="step">
           <div class="step-number">04</div>
           <span class="step-icon">✅</span>
-          <h3>Approve or deny — in one tap</h3>
+          <h3>Approve or deny in one tap</h3>
           <p>Tap Approve and your agent continues. Tap Deny and the call is blocked. Full audit trail saved automatically.</p>
         </div>
       </div>
@@ -1177,13 +1177,13 @@
       <div class="features-grid fade-up">
         <div class="feature-card">
           <span class="feature-icon">📲</span>
-          <h3>Real-time push notifications</h3>
-          <p>Approval requests hit your phone instantly via Telegram or web push — wherever you are, whatever you're doing.</p>
+          <h3>Telegram approval channel</h3>
+          <p>Approval requests hit your Telegram instantly. Wherever you are, whatever you're doing, your phone is the control panel.</p>
         </div>
         <div class="feature-card">
           <span class="feature-icon">🎯</span>
           <h3>Smart risk classification</h3>
-          <p>Every action is scored across four risk tiers — safe, warning, review, and high-stakes — so you only get pinged when it matters.</p>
+          <p>Every action is scored across four risk tiers: safe, warning, review, and high-stakes. You only get pinged when it matters.</p>
         </div>
         <div class="feature-card">
           <span class="feature-icon">⚡</span>
@@ -1193,12 +1193,12 @@
         <div class="feature-card">
           <span class="feature-icon">🔒</span>
           <h3>Out-of-process security</h3>
-          <p>OKed runs outside the agent process — it cannot be disabled or bypassed by the model, no matter what it tries.</p>
+          <p>OKed runs outside the agent process. It cannot be disabled or bypassed by the model, no matter what it tries.</p>
         </div>
         <div class="feature-card">
           <span class="feature-icon">📋</span>
           <h3>Full audit trail</h3>
-          <p>Every decision is logged. Review what your agents attempted, what you approved, and what you blocked — all in one place.</p>
+          <p>Every decision is logged. Review what your agents attempted, what you approved, and what you blocked, all in one place.</p>
         </div>
         <div class="feature-card">
           <span class="feature-icon">🌐</span>
@@ -1223,7 +1223,7 @@
         <div class="tier-card tier-safe">
           <div class="tier-badge">Safe</div>
           <h3>Auto-approved</h3>
-          <p>Read-only operations. File reads, searches, API lookups — runs without interruption.</p>
+          <p>Read-only operations. File reads, searches, API lookups. Runs without interruption.</p>
         </div>
         <div class="tier-card tier-warn">
           <div class="tier-badge">Warning</div>
@@ -1343,7 +1343,7 @@
     });
 
     // ─────────────────────────────────────────
-    // Hero phone — simple approve/deny
+    // Hero phone: simple approve/deny
     // ─────────────────────────────────────────
     function heroApprove(btn) {
       const card = btn.closest('.notification-card');
@@ -1402,7 +1402,7 @@
     }
 
     // ─────────────────────────────────────────
-    // Demo section — scenarios
+    // Demo section: scenarios
     // ─────────────────────────────────────────
     const SCENARIOS = [
       {
@@ -1516,9 +1516,9 @@
         if (line.cls === 'cmd') continue; // rendered with prompt
         if (line.cls === 'wait') {
           if (state === 'approved') {
-            html += `<span class="t-approved"><span>✔</span><span>Action approved — agent continuing</span></span>`;
+            html += `<span class="t-approved"><span>✔</span><span>Action approved. Agent continuing.</span></span>`;
           } else if (state === 'denied') {
-            html += `<span class="t-denied"><span>✖</span><span>Action denied — agent stopped</span></span>`;
+            html += `<span class="t-denied"><span>✖</span><span>Action denied. Agent stopped.</span></span>`;
           } else {
             html += `<span class="t-wait"><span class="t-spinner"></span><span>${line.text}</span></span>`;
           }
@@ -1649,7 +1649,7 @@
     });
 
     // ─────────────────────────────────────────
-    // Scroll animations — only when JS runs
+    // Scroll animations: only when JS runs
     // ─────────────────────────────────────────
     document.documentElement.classList.add('js-ready');
 
