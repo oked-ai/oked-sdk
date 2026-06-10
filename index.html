@@ -705,6 +705,245 @@
 
     .footer-links a:hover { color: var(--muted); }
 
+    /* ── Demo section ── */
+    .demo-section { background: var(--surface); }
+
+    .demo-tabs {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 48px;
+      margin-bottom: 32px;
+    }
+
+    .demo-tab {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 9px 18px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--muted);
+      cursor: pointer;
+      transition: border-color 0.2s, color 0.2s, background 0.2s;
+      font-family: inherit;
+    }
+
+    .demo-tab:hover {
+      border-color: rgba(108,99,255,0.35);
+      color: var(--text);
+    }
+
+    .demo-tab.active {
+      background: rgba(108,99,255,0.1);
+      border-color: rgba(108,99,255,0.45);
+      color: var(--accent2);
+    }
+
+    .demo-panel {
+      display: grid;
+      grid-template-columns: 1fr auto 340px;
+      gap: 24px;
+      align-items: center;
+    }
+
+    /* Terminal */
+    .demo-terminal {
+      background: #0d1117;
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+    }
+
+    .terminal-chrome {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 16px;
+      background: rgba(255,255,255,0.03);
+      border-bottom: 1px solid rgba(255,255,255,0.05);
+    }
+
+    .terminal-dots { display: flex; gap: 6px; }
+
+    .terminal-dots span {
+      width: 10px; height: 10px;
+      border-radius: 50%;
+    }
+
+    .terminal-dots span:nth-child(1) { background: #ff5f57; }
+    .terminal-dots span:nth-child(2) { background: #ffbd2e; }
+    .terminal-dots span:nth-child(3) { background: #28ca41; }
+
+    .terminal-title {
+      font-size: 0.7rem;
+      color: rgba(255,255,255,0.25);
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      margin-left: auto;
+    }
+
+    .terminal-body {
+      padding: 20px;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      font-size: 0.78rem;
+      line-height: 1.8;
+      min-height: 220px;
+    }
+
+    .t-line { display: block; }
+    .t-prompt { color: #58a6ff; }
+    .t-cmd    { color: #e6edf3; }
+    .t-info   { color: #8b949e; }
+    .t-key    { color: #79c0ff; }
+    .t-val    { color: #a5d6ff; }
+    .t-warn   { color: #d29922; }
+    .t-wait   {
+      color: #fbbf24;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 4px;
+    }
+
+    .t-spinner {
+      width: 10px; height: 10px;
+      border: 2px solid rgba(251,191,36,0.25);
+      border-top-color: #fbbf24;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      flex-shrink: 0;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .t-approved {
+      color: var(--green);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 4px;
+    }
+
+    .t-denied {
+      color: var(--red);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 4px;
+    }
+
+    /* Demo arrow connector */
+    .demo-arrow {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+      color: var(--faint);
+      font-size: 0.65rem;
+    }
+
+    .demo-arrow-line {
+      width: 1px;
+      height: 32px;
+      background: linear-gradient(to bottom, transparent, var(--accent), transparent);
+      opacity: 0.5;
+    }
+
+    .demo-arrow-icon {
+      font-size: 1.1rem;
+      color: var(--accent2);
+      opacity: 0.7;
+    }
+
+    /* Demo phone */
+    .demo-phone-wrap {
+      display: flex;
+      justify-content: center;
+    }
+
+    .demo-phone-frame {
+      width: 300px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 40px;
+      padding: 20px 18px;
+      box-shadow:
+        0 0 0 8px rgba(255,255,255,0.025),
+        0 32px 64px rgba(0,0,0,0.6),
+        0 0 80px rgba(108,99,255,0.12);
+    }
+
+    /* Notification feed in demo phone */
+    .notif-meta {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+
+    .notif-tool-badge {
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      font-size: 0.62rem;
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 6px;
+      padding: 2px 8px;
+      color: var(--muted);
+    }
+
+    .notif-agent {
+      font-size: 0.62rem;
+      color: var(--faint);
+    }
+
+    .notif-tier-demo {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      border-radius: 100px;
+      padding: 4px 12px;
+      font-size: 0.65rem;
+      font-weight: 800;
+      letter-spacing: 0.05em;
+      margin-bottom: 14px;
+    }
+
+    .demo-notif-actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-top: 14px;
+    }
+
+    /* Progress bar for auto-cycle */
+    .demo-progress {
+      height: 2px;
+      background: var(--border);
+      border-radius: 2px;
+      margin-bottom: 24px;
+      overflow: hidden;
+    }
+
+    .demo-progress-bar {
+      height: 100%;
+      background: linear-gradient(90deg, var(--accent), var(--accent2));
+      border-radius: 2px;
+      width: 0%;
+      transition: width linear;
+    }
+
+    @media (max-width: 900px) {
+      .demo-panel {
+        grid-template-columns: 1fr;
+      }
+
+      .demo-arrow { flex-direction: row; }
+      .demo-arrow-line { width: 32px; height: 1px; }
+      .demo-phone-wrap { justify-content: center; }
+      .demo-phone-frame { width: 280px; }
+    }
+
     /* ── Animations ── */
     .fade-up {
       opacity: 0;
@@ -818,12 +1057,63 @@
           <div class="notif-tier">⚠ HIGH STAKES</div>
 
           <div class="notif-actions">
-            <button class="notif-btn notif-btn-deny" onclick="demoDeny(this)">✕ Deny</button>
-            <button class="notif-btn notif-btn-approve" onclick="demoApprove(this)">✓ Approve</button>
+            <button class="notif-btn notif-btn-deny" onclick="heroDeny(this)">✕ Deny</button>
+            <button class="notif-btn notif-btn-approve" onclick="heroApprove(this)">✓ Approve</button>
           </div>
         </div>
       </div>
       <div class="phone-glow"></div>
+    </div>
+  </section>
+
+  <!-- ── Demo ── -->
+  <section class="demo-section" id="demo">
+    <div class="section-inner">
+      <div class="section-label">Live demo</div>
+      <h2 class="section-title">Watch it intercept real threats</h2>
+      <p class="section-sub">
+        Click any scenario — or watch them cycle. Every request pauses your agent and
+        lands on your phone before a single byte is changed.
+      </p>
+
+      <div class="demo-tabs" id="demo-tabs">
+        <button class="demo-tab active" data-index="0">💣 Shell delete</button>
+        <button class="demo-tab" data-index="1">🔀 Force push</button>
+        <button class="demo-tab" data-index="2">✏️ Config overwrite</button>
+        <button class="demo-tab" data-index="3">💳 Stripe charge</button>
+      </div>
+
+      <div class="demo-progress"><div class="demo-progress-bar" id="demo-progress-bar"></div></div>
+
+      <div class="demo-panel fade-up">
+        <!-- Terminal -->
+        <div class="demo-terminal">
+          <div class="terminal-chrome">
+            <div class="terminal-dots"><span></span><span></span><span></span></div>
+            <div class="terminal-title">agent — zsh</div>
+          </div>
+          <div class="terminal-body" id="demo-terminal-body"></div>
+        </div>
+
+        <!-- Arrow -->
+        <div class="demo-arrow">
+          <div class="demo-arrow-line"></div>
+          <div class="demo-arrow-icon">→</div>
+          <div class="demo-arrow-line"></div>
+        </div>
+
+        <!-- Phone -->
+        <div class="demo-phone-wrap">
+          <div class="demo-phone-frame">
+            <div class="phone-notch"></div>
+            <div class="phone-status">
+              <span>9:41</span>
+              <span style="letter-spacing:2px">●●●</span>
+            </div>
+            <div id="demo-notification-card" class="notification-card"></div>
+          </div>
+        </div>
+      </div>
     </div>
   </section>
 
@@ -996,8 +1286,10 @@
   </footer>
 
   <script>
-    // ── Waitlist form handler ──
-    // Wire `WAITLIST_ENDPOINT` to your real backend (e.g. Loops, Mailchimp, or your own API)
+    // ─────────────────────────────────────────
+    // Waitlist
+    // Wire WAITLIST_ENDPOINT to your real backend (Loops, Mailchimp, your own API)
+    // ─────────────────────────────────────────
     const WAITLIST_ENDPOINT = '/api/waitlist';
 
     async function handleWaitlistSubmit(form, successEl) {
@@ -1016,23 +1308,19 @@
       btn.textContent = 'Joining…';
 
       try {
-        // Attempt real submission
         const res = await fetch(WAITLIST_ENDPOINT, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ email }),
         });
-
-        if (!res.ok) throw new Error('server error');
+        if (!res.ok) throw new Error();
       } catch {
-        // In dev / before backend is wired, still show success
         console.info('[OKed waitlist] Submitted:', email);
       }
 
       form.style.display = 'none';
       successEl.classList.add('show');
 
-      // Sync both forms so duplicate submit isn't possible
       document.querySelectorAll('.waitlist-form').forEach(f => {
         const inp = f.querySelector('input[type="email"]');
         if (inp) inp.value = email;
@@ -1049,72 +1337,318 @@
       handleWaitlistSubmit(e.currentTarget, document.getElementById('cta-success'));
     });
 
-    // ── Phone demo interaction ──
-    function demoApprove(btn) {
+    // ─────────────────────────────────────────
+    // Hero phone — simple approve/deny
+    // ─────────────────────────────────────────
+    function heroApprove(btn) {
       const card = btn.closest('.notification-card');
-      card.style.transition = 'opacity 0.4s, transform 0.4s';
-      card.style.opacity = '0';
-      card.style.transform = 'scale(0.95)';
+      card.style.transition = 'opacity 0.35s, transform 0.35s';
+      card.style.opacity = '0'; card.style.transform = 'scale(0.95)';
       setTimeout(() => {
-        card.innerHTML = `
-          <div style="text-align:center;padding:12px 0">
-            <div style="font-size:2rem;margin-bottom:8px">✅</div>
-            <div style="font-size:0.78rem;font-weight:700;color:#34d399">Action approved</div>
-            <div style="font-size:0.68rem;color:var(--muted);margin-top:4px">Agent is continuing…</div>
-          </div>`;
-        card.style.opacity = '1';
-        card.style.transform = '';
-        setTimeout(resetDemo, 3000);
-      }, 400);
+        card.innerHTML = `<div style="text-align:center;padding:14px 0">
+          <div style="font-size:2.2rem;margin-bottom:8px">✅</div>
+          <div style="font-size:0.78rem;font-weight:700;color:#34d399">Action approved</div>
+          <div style="font-size:0.68rem;color:var(--muted);margin-top:4px">Agent is continuing…</div></div>`;
+        card.style.opacity = '1'; card.style.transform = '';
+        setTimeout(heroResetCard, 3000);
+      }, 350);
     }
 
-    function demoDeny(btn) {
+    function heroDeny(btn) {
       const card = btn.closest('.notification-card');
-      card.style.transition = 'opacity 0.4s, transform 0.4s';
-      card.style.opacity = '0';
-      card.style.transform = 'scale(0.95)';
+      card.style.transition = 'opacity 0.35s, transform 0.35s';
+      card.style.opacity = '0'; card.style.transform = 'scale(0.95)';
       setTimeout(() => {
-        card.innerHTML = `
-          <div style="text-align:center;padding:12px 0">
-            <div style="font-size:2rem;margin-bottom:8px">🚫</div>
-            <div style="font-size:0.78rem;font-weight:700;color:#f87171">Action denied</div>
-            <div style="font-size:0.68rem;color:var(--muted);margin-top:4px">Agent has been stopped.</div>
-          </div>`;
-        card.style.opacity = '1';
-        card.style.transform = '';
-        setTimeout(resetDemo, 3000);
-      }, 400);
+        card.innerHTML = `<div style="text-align:center;padding:14px 0">
+          <div style="font-size:2.2rem;margin-bottom:8px">🚫</div>
+          <div style="font-size:0.78rem;font-weight:700;color:#f87171">Action denied</div>
+          <div style="font-size:0.68rem;color:var(--muted);margin-top:4px">Agent has been stopped.</div></div>`;
+        card.style.opacity = '1'; card.style.transform = '';
+        setTimeout(heroResetCard, 3000);
+      }, 350);
     }
 
-    function resetDemo() {
-      const card = document.querySelector('.notification-card');
-      card.style.transition = 'opacity 0.4s';
+    function heroResetCard() {
+      const card = document.querySelector('.hero .notification-card');
+      if (!card) return;
+      card.style.transition = 'opacity 0.35s';
+      card.style.opacity = '0';
+      setTimeout(() => {
+        card.innerHTML = heroCardHTML();
+        card.style.opacity = '1';
+      }, 350);
+    }
+
+    function heroCardHTML() {
+      return `
+        <div class="notif-header">
+          <div class="notif-icon">🛡️</div>
+          <div><div class="notif-app">OKED</div></div>
+          <div class="notif-time">now</div>
+        </div>
+        <div class="notif-title">Action requires your approval</div>
+        <div class="notif-body">Your agent wants to run a shell command:</div>
+        <div class="notif-code">rm -rf ./production-data/</div>
+        <div class="notif-tier">⚠ HIGH STAKES</div>
+        <div class="notif-actions">
+          <button class="notif-btn notif-btn-deny" onclick="heroDeny(this)">✕ Deny</button>
+          <button class="notif-btn notif-btn-approve" onclick="heroApprove(this)">✓ Approve</button>
+        </div>`;
+    }
+
+    // ─────────────────────────────────────────
+    // Demo section — scenarios
+    // ─────────────────────────────────────────
+    const SCENARIOS = [
+      {
+        tab: '💣 Shell delete',
+        tierLabel: 'HIGH STAKES',
+        tierColor: '#f87171',
+        tierBg: 'rgba(248,113,113,0.1)',
+        tierBorder: 'rgba(248,113,113,0.28)',
+        tool: 'bash',
+        agent: 'claude-agent · deploy-cleanup',
+        notifTitle: 'Destructive shell command',
+        notifBody: 'Your agent wants to execute:',
+        code: 'rm -rf ./production-data/',
+        terminal: [
+          { cls: 'prompt', text: '❯ ' },
+          { cls: 'cmd',    text: 'claude --agent deploy-cleanup\n' },
+          { cls: 'info',   text: '  Scanning old data directories...\n' },
+          { cls: 'key',    text: '  Found  ', extra: { cls: 'val', text: '/production-data  (2.1 GB)\n' } },
+          { cls: 'info',   text: '  ─────────────────────────────────\n' },
+          { cls: 'key',    text: '  Tool   ', extra: { cls: 'val', text: 'bash\n' } },
+          { cls: 'key',    text: '  Cmd    ', extra: { cls: 'val', text: 'rm -rf ./production-data/\n' } },
+          { cls: 'info',   text: '  ─────────────────────────────────\n' },
+          { cls: 'wait',   text: 'Waiting for approval on your phone…' },
+        ],
+      },
+      {
+        tab: '🔀 Force push',
+        tierLabel: 'HIGH STAKES',
+        tierColor: '#f87171',
+        tierBg: 'rgba(248,113,113,0.1)',
+        tierBorder: 'rgba(248,113,113,0.28)',
+        tool: 'bash',
+        agent: 'claude-agent · code-refactor',
+        notifTitle: 'Force push to main branch',
+        notifBody: 'Your agent wants to execute:',
+        code: 'git push --force origin main',
+        terminal: [
+          { cls: 'prompt', text: '❯ ' },
+          { cls: 'cmd',    text: 'claude --agent code-refactor\n' },
+          { cls: 'info',   text: '  Finished rewriting auth module\n' },
+          { cls: 'key',    text: '  Branch ', extra: { cls: 'val', text: 'main  (47 commits ahead)\n' } },
+          { cls: 'info',   text: '  ─────────────────────────────────\n' },
+          { cls: 'key',    text: '  Tool   ', extra: { cls: 'val', text: 'bash\n' } },
+          { cls: 'key',    text: '  Cmd    ', extra: { cls: 'val', text: 'git push --force origin main\n' } },
+          { cls: 'info',   text: '  ─────────────────────────────────\n' },
+          { cls: 'wait',   text: 'Waiting for approval on your phone…' },
+        ],
+      },
+      {
+        tab: '✏️ Config overwrite',
+        tierLabel: 'REVIEW',
+        tierColor: '#fb923c',
+        tierBg: 'rgba(251,146,60,0.1)',
+        tierBorder: 'rgba(251,146,60,0.3)',
+        tool: 'write_file',
+        agent: 'claude-agent · config-updater',
+        notifTitle: 'Writing production config',
+        notifBody: 'Your agent wants to overwrite:',
+        code: 'config/production.yaml',
+        terminal: [
+          { cls: 'prompt', text: '❯ ' },
+          { cls: 'cmd',    text: 'claude --agent config-updater\n' },
+          { cls: 'info',   text: '  Read current configuration\n' },
+          { cls: 'key',    text: '  Env    ', extra: { cls: 'warn', text: 'production\n' } },
+          { cls: 'info',   text: '  ─────────────────────────────────\n' },
+          { cls: 'key',    text: '  Tool   ', extra: { cls: 'val', text: 'write_file\n' } },
+          { cls: 'key',    text: '  Path   ', extra: { cls: 'val', text: 'config/production.yaml\n' } },
+          { cls: 'info',   text: '  ─────────────────────────────────\n' },
+          { cls: 'wait',   text: 'Waiting for approval on your phone…' },
+        ],
+      },
+      {
+        tab: '💳 Stripe charge',
+        tierLabel: 'REVIEW',
+        tierColor: '#fb923c',
+        tierBg: 'rgba(251,146,60,0.1)',
+        tierBorder: 'rgba(251,146,60,0.3)',
+        tool: 'http_post',
+        agent: 'claude-agent · billing-reconcile',
+        notifTitle: 'Stripe charge $5,000',
+        notifBody: 'Your agent wants to call:',
+        code: 'POST /v1/charges  amount=500000',
+        terminal: [
+          { cls: 'prompt', text: '❯ ' },
+          { cls: 'cmd',    text: 'claude --agent billing-reconcile\n' },
+          { cls: 'info',   text: '  Processing invoice #INV-2891\n' },
+          { cls: 'key',    text: '  Amount ', extra: { cls: 'warn', text: '$5,000.00 USD\n' } },
+          { cls: 'info',   text: '  ─────────────────────────────────\n' },
+          { cls: 'key',    text: '  Tool   ', extra: { cls: 'val', text: 'http_post\n' } },
+          { cls: 'key',    text: '  URL    ', extra: { cls: 'val', text: 'api.stripe.com/v1/charges\n' } },
+          { cls: 'info',   text: '  ─────────────────────────────────\n' },
+          { cls: 'wait',   text: 'Waiting for approval on your phone…' },
+        ],
+      },
+    ];
+
+    let demoIndex = 0;
+    let demoCycleTimer = null;
+    let demoProgressTimer = null;
+    const CYCLE_DURATION = 5000;
+
+    function renderTerminal(s, state) {
+      const tb = document.getElementById('demo-terminal-body');
+      if (!tb) return;
+      let html = '';
+      for (const line of s.terminal) {
+        if (line.cls === 'prompt') {
+          html += `<span class="t-line"><span class="t-prompt">${line.text}</span><span class="t-cmd">${s.terminal[1]?.text || ''}</span></span>`;
+          continue;
+        }
+        if (line.cls === 'cmd') continue; // rendered with prompt
+        if (line.cls === 'wait') {
+          if (state === 'approved') {
+            html += `<span class="t-approved"><span>✔</span><span>Action approved — agent continuing</span></span>`;
+          } else if (state === 'denied') {
+            html += `<span class="t-denied"><span>✖</span><span>Action denied — agent stopped</span></span>`;
+          } else {
+            html += `<span class="t-wait"><span class="t-spinner"></span><span>${line.text}</span></span>`;
+          }
+        } else if (line.extra) {
+          html += `<span class="t-line"><span class="t-${line.cls}">${line.text}</span><span class="t-${line.extra.cls}">${line.extra.text}</span></span>`;
+        } else {
+          html += `<span class="t-line t-${line.cls}">${line.text}</span>`;
+        }
+      }
+      tb.innerHTML = html;
+    }
+
+    function renderDemoPhone(s, state) {
+      const card = document.getElementById('demo-notification-card');
+      if (!card) return;
+
+      if (state === 'approved') {
+        card.style.transition = 'opacity 0.35s';
+        card.style.opacity = '0';
+        setTimeout(() => {
+          card.innerHTML = `<div style="text-align:center;padding:20px 0">
+            <div style="font-size:2.4rem;margin-bottom:10px">✅</div>
+            <div style="font-size:0.82rem;font-weight:700;color:#34d399">Action approved</div>
+            <div style="font-size:0.7rem;color:var(--muted);margin-top:5px">Agent is continuing…</div></div>`;
+          card.style.opacity = '1';
+        }, 350);
+        return;
+      }
+
+      if (state === 'denied') {
+        card.style.transition = 'opacity 0.35s';
+        card.style.opacity = '0';
+        setTimeout(() => {
+          card.innerHTML = `<div style="text-align:center;padding:20px 0">
+            <div style="font-size:2.4rem;margin-bottom:10px">🚫</div>
+            <div style="font-size:0.82rem;font-weight:700;color:#f87171">Action denied</div>
+            <div style="font-size:0.7rem;color:var(--muted);margin-top:5px">Agent has been stopped.</div></div>`;
+          card.style.opacity = '1';
+        }, 350);
+        return;
+      }
+
+      card.style.transition = 'opacity 0.35s';
       card.style.opacity = '0';
       setTimeout(() => {
         card.innerHTML = `
           <div class="notif-header">
             <div class="notif-icon">🛡️</div>
-            <div>
-              <div class="notif-app">OKED</div>
-            </div>
+            <div><div class="notif-app">OKED</div></div>
             <div class="notif-time">now</div>
           </div>
-          <div class="notif-title">Action requires your approval</div>
-          <div class="notif-body">Your agent wants to run a shell command:</div>
-          <div class="notif-code">rm -rf ./production-data/</div>
-          <div class="notif-tier">⚠ HIGH STAKES</div>
-          <div class="notif-actions">
-            <button class="notif-btn notif-btn-deny" onclick="demoDeny(this)">✕ Deny</button>
-            <button class="notif-btn notif-btn-approve" onclick="demoApprove(this)">✓ Approve</button>
+          <div class="notif-meta">
+            <span class="notif-tool-badge">${s.tool}</span>
+            <span class="notif-agent">${s.agent}</span>
+          </div>
+          <div class="notif-title">${s.notifTitle}</div>
+          <div class="notif-body">${s.notifBody}</div>
+          <div class="notif-code">${s.code}</div>
+          <div class="notif-tier-demo" style="background:${s.tierBg};border:1px solid ${s.tierBorder};color:${s.tierColor}">
+            ⚠ ${s.tierLabel}
+          </div>
+          <div class="demo-notif-actions">
+            <button class="notif-btn notif-btn-deny" onclick="demoAction('deny')">✕ Deny</button>
+            <button class="notif-btn notif-btn-approve" onclick="demoAction('approve')">✓ Approve</button>
           </div>`;
         card.style.opacity = '1';
-      }, 400);
+      }, 350);
     }
 
-    // ── Scroll animations ──
+    function renderScenario(index, state) {
+      const s = SCENARIOS[index];
+      document.querySelectorAll('.demo-tab').forEach((t, i) => t.classList.toggle('active', i === index));
+      renderTerminal(s, state);
+      renderDemoPhone(s, state);
+    }
+
+    function demoAction(type) {
+      clearDemoCycle();
+      renderScenario(demoIndex, type === 'approve' ? 'approved' : 'denied');
+      renderTerminal(SCENARIOS[demoIndex], type === 'approve' ? 'approved' : 'denied');
+      setTimeout(() => startDemoCycle((demoIndex + 1) % SCENARIOS.length), 2500);
+    }
+
+    function startDemoCycle(index) {
+      demoIndex = index;
+      renderScenario(index, 'pending');
+      startProgressBar();
+
+      demoCycleTimer = setTimeout(() => {
+        startDemoCycle((index + 1) % SCENARIOS.length);
+      }, CYCLE_DURATION);
+    }
+
+    function clearDemoCycle() {
+      clearTimeout(demoCycleTimer);
+      clearTimeout(demoProgressTimer);
+      const bar = document.getElementById('demo-progress-bar');
+      if (bar) { bar.style.transition = 'none'; bar.style.width = '0%'; }
+    }
+
+    function startProgressBar() {
+      const bar = document.getElementById('demo-progress-bar');
+      if (!bar) return;
+      bar.style.transition = 'none';
+      bar.style.width = '0%';
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          bar.style.transition = `width ${CYCLE_DURATION}ms linear`;
+          bar.style.width = '100%';
+        });
+      });
+    }
+
+    // Tab clicks
+    document.getElementById('demo-tabs')?.addEventListener('click', e => {
+      const btn = e.target.closest('.demo-tab');
+      if (!btn) return;
+      const idx = parseInt(btn.dataset.index, 10);
+      clearDemoCycle();
+      startDemoCycle(idx);
+    });
+
+    // Kick off on page load
+    document.addEventListener('DOMContentLoaded', () => {
+      renderScenario(0, 'pending');
+      startProgressBar();
+      demoCycleTimer = setTimeout(() => startDemoCycle(1), CYCLE_DURATION);
+    });
+
+    // ─────────────────────────────────────────
+    // Scroll animations
+    // ─────────────────────────────────────────
     const observer = new IntersectionObserver(
       entries => entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('visible'); }),
-      { threshold: 0.12 }
+      { threshold: 0.1 }
     );
 
     document.querySelectorAll('.fade-up').forEach(el => observer.observe(el));
