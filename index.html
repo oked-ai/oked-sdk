@@ -946,12 +946,17 @@
 
     /* ── Animations ── */
     .fade-up {
+      opacity: 1;
+      transform: none;
+    }
+
+    .js-ready .fade-up {
       opacity: 0;
       transform: translateY(28px);
       transition: opacity 0.6s ease, transform 0.6s ease;
     }
 
-    .fade-up.visible {
+    .js-ready .fade-up.visible {
       opacity: 1;
       transform: none;
     }
@@ -1644,8 +1649,10 @@
     });
 
     // ─────────────────────────────────────────
-    // Scroll animations
+    // Scroll animations — only when JS runs
     // ─────────────────────────────────────────
+    document.documentElement.classList.add('js-ready');
+
     const observer = new IntersectionObserver(
       entries => entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('visible'); }),
       { threshold: 0.1 }
