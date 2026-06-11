@@ -263,6 +263,16 @@ describe("Bash — multi-file rm", () => {
     assert.notEqual(f!.Title, "Kill process");
   });
 
+  it("rm on an interior line of a multi-line script headlines 'Delete file'", () => {
+    // Regression: the rm matcher used `(.+)$`, which only reaches end-of-string,
+    // so a `rm` on a middle line (followed by more commands) fell back to
+    // "Run command" instead of naming the delete.
+    const cmd = 'WT=/repo/.claude/worktrees/x\nrm "$WT/backend/node_modules"\ncd "$WT" && git status --short';
+    const f = describeFields("Bash", { command: cmd });
+    assert.equal(f!.Title, "Delete file");
+    assert.equal(f!.Target, "$WT/backend/node_modules");
+  });
+
   it("rm with quoted paths containing spaces", () => {
     const f = describeFields("Bash", {
       command: 'rm "path with spaces/file1.txt" \'another path/file2.txt\' plain.txt',

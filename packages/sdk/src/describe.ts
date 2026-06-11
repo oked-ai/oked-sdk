@@ -157,8 +157,12 @@ function summarizeBash(command: string, sizeBytes?: number): Rendered {
   const shellWrite = summarizeShellWrite(cmd);
   if (shellWrite) return shellWrite;
 
-  // rm / trash — file deletion
-  const rmMatch = cmd.match(/\b(?:rm|trash|trash-put|rmdir)\s+(?:(-rf?|-fr|--recursive|-r)\s+)?(.+)$/);
+  // rm / trash — file deletion. Match the delete's OWN line (`[^\n]+`), not
+  // `(.+)$`: without the `m` flag `$` only reaches end-of-string, so a `rm` on
+  // an interior line of a multi-line script (e.g. `rm "$WT/node_modules"` before
+  // a trailing `cd … && git status`) wouldn't match and the card fell back to
+  // the generic "Run command".
+  const rmMatch = cmd.match(/\b(?:rm|trash|trash-put|rmdir)\s+(?:(-rf?|-fr|--recursive|-r)\s+)?([^\n]+)/);
   if (rmMatch) {
     const recursive = !!rmMatch[1] || /^rm\s+-/.test(cmd);
     const targets = parseRmTargets(rmMatch[2]);
