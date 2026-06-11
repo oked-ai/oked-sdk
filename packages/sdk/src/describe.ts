@@ -252,6 +252,22 @@ function summarizeBash(command: string, sizeBytes?: number): Rendered {
     if (h) return h;
   }
 
+  // Process kill in COMMAND POSITION — headline it ahead of the compound
+  // "Run command" catch-all below, so a cleanup script like
+  // `if pgrep …; then pkill -f …; fi` reads "Kill processes", not "Run command".
+  // Command-position only (stage start, after ;/&&/||/newline/$( / a keyword),
+  // so "kill" inside echo text (e.g. "killing it") doesn't mislabel.
+  const killM = cmd.match(
+    /(?:^|[\n;&|`({]|\$\(|\b(?:sudo|then|do|else|command|xargs)\s+)\s*(killall|pkill|kill)\b/,
+  );
+  if (killM) {
+    return {
+      title: killM[1].toLowerCase() === "kill" ? "Kill process" : "Kill processes",
+      body: truncateBody(cmd),
+      kind: "kill_process",
+    };
+  }
+
   // Multi-step pipeline
   if (/&&|\|\||;/.test(cmd)) return { title: "Run command", body: truncateBody(cmd), kind: "shell_pipeline" };
 
@@ -273,9 +289,8 @@ function summarizeBash(command: string, sizeBytes?: number): Rendered {
   if (/\bnpm\s+unpublish\b/.test(cmd)) return { title: "Unpublish package from npm", kind: "npm_unpublish" };
   if (/\bnpx\s+.*\s+deploy\b/.test(cmd)) return { title: "Deploy via npx", body: truncateBody(cmd), kind: "npx_deploy" };
 
-  // kill / sudo / chmod
-  if (/\bkillall\b|\bpkill\b/.test(cmd)) return { title: "Kill processes", body: truncateBody(cmd), kind: "kill_process" };
-  if (/\bkill\b/.test(cmd)) return { title: "Kill process", body: truncateBody(cmd), kind: "kill_process" };
+  // sudo / chmod (kill/pkill/killall are handled in command position above,
+  // ahead of the compound catch-all).
   if (/\bsudo\b/.test(cmd)) {
     const inner = cmd.replace(/^sudo\s+/, "");
     return { title: `Run as root: ${truncate(inner, COMMAND_INLINE_MAX)}`, body: truncateBody(cmd), kind: "sudo" };
