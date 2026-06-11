@@ -249,6 +249,20 @@ describe("Bash — multi-file rm", () => {
     assert.equal(f!.Title, "Create file");
   });
 
+  it("a compound script that kills a process headlines 'Kill processes'", () => {
+    // Regression: the compound "Run command" catch-all ran before the kill
+    // handler, so `if pgrep …; then pkill -f …; fi` showed "Run command".
+    const cmd =
+      'if pgrep -f "user-data-dir=$PROFILE" >/dev/null 2>&1; then\n  echo "Stale Chrome — killing it."\n  pkill -f "user-data-dir=$PROFILE"\nfi';
+    assert.equal(describeFields("Bash", { command: cmd })!.Title, "Kill processes");
+  });
+
+  it("'killing' inside echo text is not mislabeled as a kill", () => {
+    const f = describeFields("Bash", { command: 'echo "killing it is bad" && ls' });
+    assert.notEqual(f!.Title, "Kill processes");
+    assert.notEqual(f!.Title, "Kill process");
+  });
+
   it("rm with quoted paths containing spaces", () => {
     const f = describeFields("Bash", {
       command: 'rm "path with spaces/file1.txt" \'another path/file2.txt\' plain.txt',
