@@ -653,6 +653,69 @@ describe("rm of temp via env var / macOS folders → warning", () => {
   });
 });
 
+describe("rm of a same-command mktemp var → warning", () => {
+  // The exact CI-parity smoke-test shape from the release pipeline: spin up an
+  // empty HOME, run tests, then clean up the throwaway dir. The cleanup must not
+  // page the user, because the dir was created by mktemp in the same command.
+  it("EMPTYHOME=$(mktemp -d); …; rm -rf \"$EMPTYHOME\" → warning", () => {
+    const cmd = [
+      `cd /repo`,
+      `EMPTYHOME=$(mktemp -d)`,
+      `HOME="$EMPTYHOME" env -u OKED_API_KEY npm test 2>&1 | tail -4`,
+      `rm -rf "$EMPTYHOME"`,
+    ].join("\n");
+    assert.equal(bash(cmd), "warning");
+  });
+
+  it("one-liner with ; separators → warning", () => {
+    assert.equal(
+      bash(`T=$(mktemp -d); HOME="$T" node smoke.mjs; rm -rf "$T"`),
+      "warning",
+    );
+  });
+
+  it("&&-chained mktemp then ;-separated rm → warning", () => {
+    assert.equal(
+      bash(`cd /repo && D=$(mktemp -d) && run "$D"; rm -rf "$D"`),
+      "warning",
+    );
+  });
+
+  it("export-prefixed and ${VAR} reference → warning", () => {
+    assert.equal(bash(`export T=$(mktemp); use; rm -rf "\${T}"`), "warning");
+  });
+
+  it("backtick mktemp assignment → warning", () => {
+    assert.equal(bash("T=`mktemp -d`; rm -rf \"$T\""), "warning");
+  });
+
+  it("subpath under the temp var → warning", () => {
+    assert.equal(bash(`T=$(mktemp -d); rm -rf "$T/cache"`), "warning");
+  });
+
+  // Safety boundaries: the carve-out must stay tight.
+  it("rm of a var NOT bound to mktemp stays high_stakes", () => {
+    assert.equal(bash(`H="$HOME"; rm -rf "$H"`), "high_stakes");
+  });
+
+  it("rm -rf \"$VAR\" with no assignment in the command stays high_stakes", () => {
+    // Separate Bash call: the binding isn't visible here, so we can't trust it.
+    assert.equal(bash(`rm -rf "$EMPTYHOME"`), "high_stakes");
+  });
+
+  it("subpath that climbs out with .. stays high_stakes", () => {
+    assert.equal(bash(`T=$(mktemp -d); rm -rf "$T/../../etc"`), "high_stakes");
+  });
+
+  it("mktemp var mixed with a non-temp target stays high_stakes", () => {
+    assert.equal(bash(`T=$(mktemp -d); rm -rf "$T" ./important`), "high_stakes");
+  });
+
+  it("a different (non-mktemp) var alongside the temp one stays high_stakes", () => {
+    assert.equal(bash(`T=$(mktemp -d); rm -rf "$T" "$OTHER"`), "high_stakes");
+  });
+});
+
 describe("npm install → warning (postinstall runs scripts)", () => {
   it("npm install → warning", () => {
     assert.equal(bash("npm install"), "warning");
