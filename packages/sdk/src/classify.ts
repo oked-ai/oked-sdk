@@ -1070,7 +1070,19 @@ function classifyMcpTool(toolName: string): RiskTier {
   const parts = toolName.split("__");
   const tool = parts[parts.length - 1] || "";
 
-  if (tool.startsWith("list_") || tool.startsWith("get_") || tool.startsWith("search_")) {
+  // Read-only retrieval verbs.
+  if (tool.startsWith("list_") || tool.startsWith("get_") || tool.startsWith("search_") ||
+      tool.startsWith("read_") || tool.startsWith("fetch_") || tool.startsWith("query_") ||
+      tool.startsWith("find_") || tool.startsWith("view_") || tool.startsWith("show_") ||
+      tool.startsWith("describe_") || tool.startsWith("inspect_") || tool.startsWith("check_") ||
+      tool.startsWith("count_")) {
+    return "safe";
+  }
+  // Annotation / transcript-marker verbs — they label or organize the session
+  // (mark a chapter, flag a follow-up, dismiss a chip) without touching the
+  // filesystem, network, or any external service, so they auto-allow silently.
+  if (tool.startsWith("mark_") || tool.startsWith("annotate_") || tool.startsWith("tag_") ||
+      tool.startsWith("label_") || tool.startsWith("dismiss_")) {
     return "safe";
   }
   if (tool.endsWith("_status") || tool.endsWith("_info") || tool.endsWith("_count") ||
