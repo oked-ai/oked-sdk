@@ -243,6 +243,34 @@ function isEphemeralPath(filePath: string): boolean {
   return TEMP_VAR_RE.test(filePath) || EPHEMERAL_PATH_RE.test(filePath);
 }
 
+// A shell variable assigned from `mktemp` / `mktemp -d` (optionally `export`ed)
+// at the start of a stage: `EMPTYHOME=$(mktemp -d)`, `T=`mktemp``. Its value is a
+// throwaway temp path the shell just created, so a same-command `rm -rf "$T"`
+// that deletes it is the ephemeral-temp case, not a real-data wipe. These names
+// are gathered across every stage of a compound command BEFORE any stage is
+// classified (see classifyBashCommand), so a delete in a later stage can see a
+// binding declared in an earlier one. Safe because the whole binding is visible
+// in this single inspected command string — no environment-resolution guess.
+const MKTEMP_ASSIGN_RE =
+  /^(?:export\s+|declare\s+|local\s+|readonly\s+)?(\w+)=["']?(?:\$\(|`)\s*mktemp\b/;
+
+function collectMktempVars(stage: string, into: Set<string>): void {
+  const m = stage.match(MKTEMP_ASSIGN_RE);
+  if (m) into.add(m[1]);
+}
+
+// True when `target` is a reference (`$VAR`, `${VAR}`, optionally with a trailing
+// subpath like `$VAR/cache`) to a variable known to hold an mktemp temp dir. A
+// subpath that climbs out with `..` could escape the temp tree, so it does NOT
+// qualify — that stays a real deletion.
+function isEphemeralVar(target: string, vars: Set<string>): boolean {
+  if (vars.size === 0) return false;
+  const m = target.match(/^\$\{?(\w+)\}?(\/.*)?$/);
+  if (!m || !vars.has(m[1])) return false;
+  if (m[2] && m[2].split("/").includes("..")) return false;
+  return true;
+}
+
 // Paths where a write/edit is genuinely dangerous and must stay `review`:
 // system directories, credential/secret stores, shell startup files (a
 // persistence vector), and OKed's own config (so an agent can't disable its
@@ -432,16 +460,20 @@ function splitTopLevel(cmd: string): string[] {
 }
 
 // rm/rmdir/trash whose every target is an ephemeral temp path (/tmp, %TEMP%,
-// …). Deleting throwaway temp files is low-risk, so it downgrades to warning.
-// Any non-temp target (or deleting a temp ROOT like `/tmp` itself, which isn't
-// an ephemeral *path*) means this returns false and the deletion stays
-// high_stakes.
-function isEphemeralOnlyDeletion(command: string): boolean {
+// …) or a variable bound to one by `mktemp` earlier in the same command
+// (`ephemeralVars`, e.g. `EMPTYHOME=$(mktemp -d); rm -rf "$EMPTYHOME"`).
+// Deleting throwaway temp files is low-risk, so it downgrades to warning. Any
+// non-temp target (or deleting a temp ROOT like `/tmp` itself, which isn't an
+// ephemeral *path*) means this returns false and the deletion stays high_stakes.
+function isEphemeralOnlyDeletion(command: string, ephemeralVars: Set<string> = new Set()): boolean {
   const m = command.match(/^(?:sudo\s+)?(?:rm|rmdir|trash|trash-put)\b\s+(.+)$/s);
   if (!m) return false;
   const targets = splitArgs(m[1]).filter((a) => !a.startsWith("-"));
   if (targets.length === 0) return false;
-  return targets.every((a) => isEphemeralPath(unquote(a)));
+  return targets.every((a) => {
+    const t = unquote(a);
+    return isEphemeralPath(t) || isEphemeralVar(t, ephemeralVars);
+  });
 }
 
 /**
@@ -642,7 +674,7 @@ function isLoopbackHttpStage(stage: string): boolean {
   return /(?:^|[\s@])(?:localhost|127(?:\.\d{1,3}){3}|0\.0\.0\.0|\[::1\])(?::\d+)?(?:[/\s'"]|$)/i.test(stage);
 }
 
-function classifyBashCommand(command: string): RiskTier {
+function classifyBashCommand(command: string, ephemeralVars: Set<string> = new Set()): RiskTier {
   if (!command) return "safe";
 
   // Two views of the command:
@@ -677,8 +709,14 @@ function classifyBashCommand(command: string): RiskTier {
   // body aren't split points either way — so stage boundaries are identical.)
   const stages = splitTopLevel(intact);
   if (stages.length > 1) {
+    // Gather temp-dir variables (`VAR=$(mktemp -d)`) declared anywhere in this
+    // compound command BEFORE classifying any stage, so a later `rm -rf "$VAR"`
+    // stage recognizes its target as throwaway even though the binding lives in
+    // an earlier stage. Inherits any vars passed from an enclosing command.
+    const vars = new Set(ephemeralVars);
+    for (const stage of stages) collectMktempVars(stage, vars);
     return stages.reduce<RiskTier>(
-      (worst, stage) => maxTier(worst, classifyBashCommand(stage)),
+      (worst, stage) => maxTier(worst, classifyBashCommand(stage, vars)),
       "safe",
     );
   }
@@ -692,7 +730,7 @@ function classifyBashCommand(command: string): RiskTier {
   const sql = findSqlInCommand(intact);
   const sqlTier: RiskTier = sql ? classifySqlSeverity(sql) : "safe";
 
-  return maxTier(sqlTier, classifyStageShellEffects(stripped));
+  return maxTier(sqlTier, classifyStageShellEffects(stripped, ephemeralVars));
 }
 
 /**
@@ -700,13 +738,13 @@ function classifyBashCommand(command: string): RiskTier {
  * detection here — that runs on the body-intact view in classifyBashCommand and
  * is folded in by the caller. Returns the stage's tier (default `safe`).
  */
-function classifyStageShellEffects(stage: string): RiskTier {
+function classifyStageShellEffects(stage: string, ephemeralVars: Set<string> = new Set()): RiskTier {
   // File deletion in COMMAND POSITION, per-stage so the ephemeral-temp carve-out
   // can win: deleting only throwaway temp files (/tmp, $TMPDIR, /var/folders, …)
   // → warning; any non-temp target (or the temp root itself) → high_stakes.
   // A delete word sitting in an argument (filename, branch name, echo text) is
   // NOT a deletion — that's the false positive DELETE_COMMAND_RE avoids.
-  if (isEphemeralOnlyDeletion(stage)) return "warning";
+  if (isEphemeralOnlyDeletion(stage, ephemeralVars)) return "warning";
   if (DELETE_COMMAND_RE.test(stage.replace(DELETE_LEAD, ""))) return "high_stakes";
 
   // Destructive/irreversible single commands, matched at stage start with any
