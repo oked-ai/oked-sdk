@@ -325,6 +325,13 @@ describe("gh pr create — warning tier, reversible", () => {
 describe("MCP tools", () => {
   it("read-style MCP tools are safe", () => {
     assert.equal(classify("mcp__github__get_issue", {}), "safe");
+    assert.equal(classify("mcp__db__query_rows", {}), "safe");
+    assert.equal(classify("mcp__fs__read_file", {}), "safe");
+  });
+
+  it("annotation/marker MCP tools are safe", () => {
+    assert.equal(classify("mcp__ccd_session__mark_chapter", {}), "safe");
+    assert.equal(classify("mcp__ccd_session__dismiss_task", {}), "safe");
   });
 
   it("send/create/update MCP tools require review", () => {
