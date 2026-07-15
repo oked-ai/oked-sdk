@@ -33,7 +33,7 @@ jobs:
       # `_authToken=${NODE_AUTH_TOKEN}` + always-auth, so npm attempts (empty)
       # token auth instead of OIDC trusted publishing. With no token .npmrc,
       # npm performs the OIDC credential exchange.
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
       # Fail fast (before npm ci/build) if a tag push doesn't match the version
