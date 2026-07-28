@@ -6,20 +6,12 @@ import { fileURLToPath } from "url";
 import { spawn } from "child_process";
 import { createInterface } from "readline";
 import { OKedClient, loadOKedConfig, OKED_CONFIG_PATH } from "@oked/sdk";
-
-const MCP_TOOL_MATCHER = "mcp__.*";
-const DEFAULT_TOOL_MATCHER = `Bash|Write|Edit|Agent|${MCP_TOOL_MATCHER}`;
-
-const HOOK_CONFIG = {
-  matcher: DEFAULT_TOOL_MATCHER,
-  hooks: [
-    {
-      type: "command",
-      command: "oked-hook",
-      timeout: 300,
-    },
-  ],
-};
+import {
+  HOOK_CONFIG,
+  hasOkedCommandHook,
+  ensureMcpMatcher,
+  ensureHookTimeout,
+} from "./hook-config.js";
 
 const DEFAULT_BACKEND_URL =
   process.env.OKED_BACKEND_URL || "https://api.oked.ai";
@@ -68,26 +60,6 @@ function writeOkedConfig(apiKey: string, backendUrl: string): void {
   } catch {
     // Windows doesn't honor chmod; the file lives in the user profile anyway.
   }
-}
-
-function hasOkedCommandHook(entry: { hooks?: unknown[] }): boolean {
-  return Boolean(
-    entry.hooks?.some(
-      (h: unknown) =>
-        typeof h === "object" &&
-        h !== null &&
-        (h as Record<string, unknown>).command === "oked-hook"
-    )
-  );
-}
-
-function ensureMcpMatcher(matcher?: string): string | undefined {
-  if (!matcher) return matcher;
-  const parts = matcher.split("|").map((part) => part.trim());
-  if (parts.some((part) => part === MCP_TOOL_MATCHER || part.startsWith("mcp__"))) {
-    return matcher;
-  }
-  return `${matcher}|${MCP_TOOL_MATCHER}`;
 }
 
 function openBrowser(url: string): boolean {
@@ -265,16 +237,18 @@ async function init(): Promise<void> {
     hooks?: unknown[];
   }>;
 
-  // Check if OKed hook already exists and upgrade older matchers to cover MCP
-  // tools (`mcp__<server>__<tool>`) as regular PreToolUse events.
-  let updatedOkedMatcher = false;
+  // Check if OKed hook already exists and upgrade it in place: older matchers
+  // need to cover MCP tools (`mcp__<server>__<tool>`) as regular PreToolUse
+  // events, and older timeouts predate the 10-minute approval window.
+  let updatedOkedHook = false;
   const hasOked = preToolUse.some((entry) => {
     if (!hasOkedCommandHook(entry)) return false;
     const nextMatcher = ensureMcpMatcher(entry.matcher);
     if (nextMatcher !== entry.matcher) {
       entry.matcher = nextMatcher;
-      updatedOkedMatcher = true;
+      updatedOkedHook = true;
     }
+    if (ensureHookTimeout(entry)) updatedOkedHook = true;
     return true;
   });
 
@@ -285,7 +259,7 @@ async function init(): Promise<void> {
     writeSettings(settingsPath, settings);
     console.log("OKed hook installed.");
     console.log(`  Config: ${settingsPath}`);
-  } else if (updatedOkedMatcher) {
+  } else if (updatedOkedHook) {
     hooks.PreToolUse = preToolUse;
     settings.hooks = hooks;
     writeSettings(settingsPath, settings);

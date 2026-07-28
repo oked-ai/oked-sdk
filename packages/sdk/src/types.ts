@@ -19,6 +19,17 @@ export interface ApprovalResponse {
 export interface OKedConfig {
   apiKey: string;
   backendUrl: string;
+  /**
+   * How long to wait for a human decision, in ms. Default 600_000 (10 min);
+   * see DEFAULT_APPROVAL_TIMEOUT_MS.
+   *
+   * Three timers nest around one approval: the backend's own expiry (which
+   * returns `decision: "timeout"`), this client-side abort, and - under a
+   * harness that kills the hook process - the harness limit. They must stay
+   * ordered backend < this < harness. Raise this and the harness limit has to
+   * move with it, or the process is killed before the fail-safe deny is
+   * written and the gate falls open instead of denying.
+   */
   timeout: number;
   /**
    * When true, an unreachable backend hard-denies every sensitive action

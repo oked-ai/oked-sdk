@@ -10,6 +10,7 @@
   "scripts": {
     "prebuild": "npm run build --workspace=@oked/sdk",
     "build": "tsc",
+    "test": "npm run build && node src/smoke.test.mjs",
     "prepublishOnly": "npm run build"
   },
   "files": [

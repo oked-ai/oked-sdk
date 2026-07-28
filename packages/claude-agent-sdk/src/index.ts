@@ -23,6 +23,7 @@ import {
   degradedDecision,
   OKedAuthError,
   OKedBackendUnreachableError,
+  DEFAULT_APPROVAL_TIMEOUT_MS,
 } from "@oked/sdk";
 import type { HookCallback, PreToolUseHookInput } from "@anthropic-ai/claude-agent-sdk";
 
@@ -132,6 +133,17 @@ export const okedPreToolUseHook: HookCallback = async (rawInput) => {
 };
 
 /**
+ * Seconds the Agent SDK allows this hook before aborting it.
+ *
+ * Must stay ABOVE the SDK's approval timeout. An aborted hook returns no
+ * permission decision at all, so the tool call falls back to the agent's
+ * normal permission flow rather than being denied - the same
+ * killed-before-deny hole the Claude Code hook has. Letting our own timeout
+ * fire first means the approval always resolves to an explicit allow or deny.
+ */
+const HOOK_TIMEOUT_SECONDS = DEFAULT_APPROVAL_TIMEOUT_MS / 1000 + 60;
+
+/**
  * Convenience: spread into the Claude Agent SDK `options.hooks`.
  *
  * ```ts
@@ -142,5 +154,7 @@ export const okedPreToolUseHook: HookCallback = async (rawInput) => {
  * ```
  */
 export function okedHooks() {
-  return { PreToolUse: [{ hooks: [okedPreToolUseHook] }] };
+  return {
+    PreToolUse: [{ hooks: [okedPreToolUseHook], timeout: HOOK_TIMEOUT_SECONDS }],
+  };
 }
