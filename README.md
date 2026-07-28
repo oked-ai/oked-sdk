@@ -85,7 +85,7 @@ if (!approved) throw new Error('denied')
 await createPayment(amount, recipient)
 ```
 
-The call returns `{ approved, approval_id, decision }`, where `decision` is `"approved" | "denied" | "timeout"`. Default timeout is 5 minutes; a timeout is treated as a denial.
+The call returns `{ approved, approval_id, decision }`, where `decision` is `"approved" | "denied" | "timeout"`. Default timeout is 10 minutes; a timeout is treated as a denial.
 
 ## Packages
 

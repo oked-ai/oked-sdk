@@ -44,7 +44,7 @@ Pass to `new OKedClient(config)`:
 |---|---|---|---|
 | `apiKey` | `string` | `OKED_API_KEY` env | Your OKed API key. Required. |
 | `backendUrl` | `string` | `https://api.oked.ai` | Override the OKed backend URL. |
-| `timeout` | `number` | `300000` | Per-approval timeout in ms. |
+| `timeout` | `number` | `600000` | Per-approval timeout in ms (10 minutes). If you raise it, raise the harness hook timeout to match: it must stay above this value so the fail-safe deny is written before the hook process is killed. |
 | `strictFailClosed` | `boolean` | `false` | When true, backend outages deny every tier. When false, outages deny only `high_stakes` and allow lower tiers. |
 
 ## API

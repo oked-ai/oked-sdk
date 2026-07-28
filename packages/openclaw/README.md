@@ -56,7 +56,7 @@ All keys go under `plugins.entries.oked`:
 | `minTier` | `"review" \| "high_stakes"` | `"review"` | Minimum risk tier that triggers approval. Set to `"high_stakes"` to only gate the most dangerous calls. `warning` is informational only and does not block. |
 | `alwaysApprove` | `string[]` | `[]` | Tool names to always require approval for, regardless of classifier. |
 | `alwaysAllow` | `string[]` | `[]` | Tool names to never gate. Use sparingly. |
-| `timeoutMs` | `number` | `300000` | Per-approval timeout in ms. |
+| `timeoutMs` | `number` | `600000` | Per-approval timeout in ms (10 minutes). Max `1800000`. |
 
 ## What gets gated
 
