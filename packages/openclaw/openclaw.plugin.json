@@ -34,7 +34,7 @@
       "timeoutMs": {
         "type": "integer",
         "minimum": 1000,
-        "maximum": 600000
+        "maximum": 1800000
       }
     }
   },
@@ -67,7 +67,7 @@
     },
     "timeoutMs": {
       "label": "Approval Timeout (ms)",
-      "help": "How long to wait for a human decision before the action is denied. Defaults to the SDK's value."
+      "help": "How long to wait for a human decision before the action is denied. Defaults to the SDK's value of 600000 (10 minutes); max 1800000 (30 minutes)."
     }
   }
 }

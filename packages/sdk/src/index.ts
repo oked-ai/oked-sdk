@@ -6,6 +6,17 @@ import { loadOKedConfig, OKED_RULES_CACHE_PATH, OKED_HEARTBEAT_PATH } from "./co
 import { OKedAuthError, OKedBackendUnreachableError } from "./errors.js";
 import { hostname } from "os";
 
+/**
+ * How long we wait for a human decision before giving up on the request.
+ *
+ * Sized for a human who has to be woken up (an oncall paged at 3am), not for a
+ * developer watching the terminal. Integrations that run under a harness which
+ * kills the hook process must set their own limit ABOVE this one, so our
+ * fail-safe deny is written before the harness pulls the plug. See
+ * HOOK_TIMEOUT_SECONDS in @oked/claude-code.
+ */
+export const DEFAULT_APPROVAL_TIMEOUT_MS = 600_000;
+
 function envStrictFailClosed(): boolean | undefined {
   const raw = process.env.OKED_STRICT_FAIL_CLOSED;
   if (raw === undefined) return undefined;
@@ -94,7 +105,7 @@ export class OKedClient {
         process.env.OKED_BACKEND_URL ||
         persisted.backendUrl ||
         "https://api.oked.ai",
-      timeout: config?.timeout || 300_000,
+      timeout: config?.timeout || DEFAULT_APPROVAL_TIMEOUT_MS,
       // Precedence: constructor > env > ~/.oked/config.json > default false.
       strictFailClosed:
         config?.strictFailClosed ??
