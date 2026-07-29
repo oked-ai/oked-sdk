@@ -40,8 +40,8 @@
     "@oked/sdk": "0.3.6"
   },
   "devDependencies": {
-    "@types/node": "^22.13.10",
-    "typescript": "^5.6.0"
+    "@types/node": "^26.1.2",
+    "typescript": "^7.0.2"
   },
   "keywords": [
     "openclaw",
