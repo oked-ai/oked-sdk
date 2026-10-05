@@ -12,7 +12,8 @@ export interface ApprovalRequest {
 
 export interface ApprovalResponse {
   approved: boolean;
-  approval_id: string;
+  /** null when no request row exists (e.g. a request that timed out client-side). */
+  approval_id: string | null;
   decision: "approved" | "denied" | "timeout";
 }
 
@@ -20,7 +21,7 @@ export interface OKedConfig {
   apiKey: string;
   backendUrl: string;
   /**
-   * How long to wait for a human decision, in ms. Default 600_000 (10 min);
+   * How long to wait for a human decision, in ms. Default 630_000 (10.5 min);
    * see DEFAULT_APPROVAL_TIMEOUT_MS.
    *
    * Three timers nest around one approval: the backend's own expiry (which

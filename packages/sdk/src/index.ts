@@ -14,8 +14,11 @@ import { hostname } from "os";
  * kills the hook process must set their own limit ABOVE this one, so our
  * fail-safe deny is written before the harness pulls the plug. See
  * HOOK_TIMEOUT_SECONDS in @oked/claude-code.
+ *
+ * 30s above the backend's own 10 minute expiry, so the backend's "timeout"
+ * answer normally arrives before our abort fires (backend < SDK < harness).
  */
-export const DEFAULT_APPROVAL_TIMEOUT_MS = 600_000;
+export const DEFAULT_APPROVAL_TIMEOUT_MS = 630_000;
 
 function envStrictFailClosed(): boolean | undefined {
   const raw = process.env.OKED_STRICT_FAIL_CLOSED;
@@ -177,9 +180,12 @@ export class OKedClient {
         }
       }
     } catch (err) {
-      // Network failure or the request-level timeout firing (AbortError).
-      // Both mean we never got a decision from the backend -> treat as an
-      // outage so degraded-mode can apply.
+      // The backend accepted the request and then held it past a timer: no
+      // human decided in time. That is a timeout (deny), not an outage, so it
+      // must never fall through to degraded-mode allow.
+      if (isHeldRequestTimeout(err)) return HELD_TIMEOUT;
+      // Connect failure: we never reached the backend -> treat as an outage
+      // so degraded-mode can apply.
       throw new OKedBackendUnreachableError(
         err instanceof Error ? `OKed backend unreachable: ${err.message}` : "OKed backend unreachable",
         err,
@@ -191,17 +197,23 @@ export class OKedClient {
       if (res.status === 401 || res.status === 403) {
         throw new OKedAuthError(`OKed backend error ${res.status}: ${body}`, res.status);
       }
+      // A gateway that gave up waiting on a held long-poll: same as above.
+      if (res.status === 504) return HELD_TIMEOUT;
       if (res.status >= 500) {
         throw new OKedBackendUnreachableError(`OKed backend error ${res.status}: ${body}`);
       }
       throw new Error(`OKed backend error ${res.status}: ${body}`);
     }
 
-    const result = (await res.json()) as {
-      approval_id: string;
-      decision: string;
-      status: string;
-    };
+    let result: { approval_id: string | null; decision: string; status: string };
+    try {
+      // The backend sends headers at once and streams whitespace heartbeats
+      // while it waits, so the wait for a human happens here, in the body.
+      result = (await res.json()) as typeof result;
+    } catch (err) {
+      if (isHeldRequestTimeout(err)) return HELD_TIMEOUT;
+      throw err;
+    }
 
     return {
       approved: result.decision === "approved",
@@ -285,6 +297,22 @@ export class OKedClient {
       // Best-effort presence signal; never block or break the agent.
     }
   }
+}
+
+const HELD_TIMEOUT: ApprovalResponse = { approved: false, approval_id: null, decision: "timeout" };
+
+/**
+ * True when a request reached the backend and then sat past a timer: our own
+ * abort (TimeoutError), or undici's 300s headers/body timeouts, which fire
+ * regardless of the abort signal on a silent long-poll.
+ */
+function isHeldRequestTimeout(err: unknown): boolean {
+  if (!err || typeof err !== "object") return false;
+  // AbortSignal.timeout() rejects with a DOMException, which is not an Error
+  // instance on every Node version, so match on the name alone.
+  if ((err as { name?: string }).name === "TimeoutError") return true;
+  const code = (err as { cause?: { code?: string } }).cause?.code ?? (err as { code?: string }).code;
+  return code === "UND_ERR_HEADERS_TIMEOUT" || code === "UND_ERR_BODY_TIMEOUT";
 }
 
 function isRetriableConnectError(err: unknown): boolean {

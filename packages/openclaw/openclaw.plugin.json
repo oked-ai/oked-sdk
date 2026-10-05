@@ -67,7 +67,7 @@
     },
     "timeoutMs": {
       "label": "Approval Timeout (ms)",
-      "help": "How long to wait for a human decision before the action is denied. Defaults to the SDK's value of 600000 (10 minutes); max 1800000 (30 minutes)."
+      "help": "How long to wait for a human decision before the action is denied. Defaults to the SDK's value of 630000 (10.5 minutes, just above the backend's 10 minute expiry); max 1800000 (30 minutes)."
     }
   }
 }

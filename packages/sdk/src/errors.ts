@@ -4,8 +4,11 @@
  *
  *  - OKedAuthError            -> bad/missing API key. Always deny. Never an
  *                                outage, so degraded-mode does NOT apply.
- *  - OKedBackendUnreachableError -> connect failure, timeout, or 5xx. This is
- *                                the outage case degradedDecision() handles.
+ *  - OKedBackendUnreachableError -> connect failure or 5xx. This is the
+ *                                outage case degradedDecision() handles. A
+ *                                request the backend accepted and then held
+ *                                past a timer is NOT an outage: approve()
+ *                                returns { decision: "timeout" } for it.
  *
  * An explicit user *deny* is NOT an error: approve() returns normally with
  * { approved: false, decision: "denied" } and must always be honored.
