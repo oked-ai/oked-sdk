@@ -1,0 +1,51 @@
+{
+  "name": "@oked/receipt-core",
+  "version": "0.3.6",
+  "description": "OKed signed approval receipts: format, canonical JSON, digests, signing and verification",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "test": "tsx --test test/*.test.ts",
+    "prepublishOnly": "npm run build"
+  },
+  "files": [
+    "dist"
+  ],
+  "keywords": [
+    "approval",
+    "receipt",
+    "audit",
+    "ed25519",
+    "agents"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/oked-ai/oked-sdk.git",
+    "directory": "packages/receipt-core"
+  },
+  "bugs": {
+    "url": "https://github.com/oked-ai/oked-sdk/issues"
+  },
+  "homepage": "https://github.com/oked-ai/oked-sdk/blob/main/docs/receipts.md",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.10",
+    "tsx": "^4.22.0",
+    "typescript": "^5.6.0"
+  }
+}
