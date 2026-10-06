@@ -4,6 +4,8 @@ import type { ApprovalRequest, ApprovalResponse, OKedConfig } from "./types.js";
 import type { Rule } from "./rules.js";
 import { loadOKedConfig, OKED_RULES_CACHE_PATH, OKED_HEARTBEAT_PATH } from "./config.js";
 import { OKedAuthError, OKedBackendUnreachableError } from "./errors.js";
+import { randomUUID } from "crypto";
+import { checkReceipt, OKED_RECEIPT_KEYS_URL } from "./receipt.js";
 import { hostname } from "os";
 
 /**
@@ -31,6 +33,12 @@ function envRulesCacheTtlMs(): number | undefined {
   if (raw === undefined) return undefined;
   const n = Number(raw);
   return Number.isFinite(n) && n >= 0 ? n * 1000 : undefined;
+}
+
+function envRequireReceipt(): boolean | undefined {
+  const raw = process.env.OKED_REQUIRE_RECEIPT;
+  if (raw === undefined) return undefined;
+  return raw === "1" || raw.toLowerCase() === "true";
 }
 
 function envHeartbeatIntervalMs(): number | undefined {
@@ -129,7 +137,20 @@ export class OKedClient {
           ? persisted.heartbeatIntervalSeconds * 1000
           : undefined) ??
         86_400_000,
+      requireReceipt: config?.requireReceipt ?? envRequireReceipt() ?? persisted.requireReceipt ?? false,
+      receiptKeysUrl:
+        config?.receiptKeysUrl ||
+        process.env.OKED_RECEIPT_KEYS_URL ||
+        persisted.receiptKeysUrl ||
+        OKED_RECEIPT_KEYS_URL,
+      receiptKeys: config?.receiptKeys,
+      client: config?.client,
+      source: config?.source,
     };
+  }
+
+  get requireReceipt(): boolean {
+    return this.config.requireReceipt;
   }
 
   get strictFailClosed(): boolean {
@@ -146,6 +167,10 @@ export class OKedClient {
 
   async approve(request: ApprovalRequest): Promise<ApprovalResponse> {
     const signal = AbortSignal.timeout(this.config.timeout);
+    // A fresh nonce per request goes into the receipt's subject, so a receipt
+    // for an earlier, identical action can never be replayed for this one.
+    const nonce = randomUUID();
+    const source = this.config.source || "sdk";
     const doFetch = () =>
       fetch(`${this.config.backendUrl}/api/v1/approve`, {
         method: "POST",
@@ -158,10 +183,13 @@ export class OKedClient {
           description: request.description,
           tier: request.tier,
           fields: request.fields,
+          nonce,
+          client: this.config.client,
           metadata: {
             tool_input: request.tool_input,
             session_id: request.session_id,
             cwd: request.cwd,
+            source: this.config.source,
           },
         }),
         signal,
@@ -205,7 +233,7 @@ export class OKedClient {
       throw new Error(`OKed backend error ${res.status}: ${body}`);
     }
 
-    let result: { approval_id: string | null; decision: string; status: string };
+    let result: { approval_id: string | null; decision: string; status: string; receipt?: unknown };
     try {
       // The backend sends headers at once and streams whitespace heartbeats
       // while it waits, so the wait for a human happens here, in the body.
@@ -215,10 +243,23 @@ export class OKedClient {
       throw err;
     }
 
+    // Nobody acts on a decision we cannot prove: an invalid receipt throws
+    // OKedReceiptError (every integration denies), and so does a missing one
+    // when requireReceipt is on.
+    const receipt = await checkReceipt(
+      result,
+      { action: request.action, description: request.description, toolInput: request.tool_input, source, nonce },
+      {
+        required: this.config.requireReceipt,
+        trust: { keys: this.config.receiptKeys, keysUrl: this.config.receiptKeysUrl },
+      },
+    );
+
     return {
       approved: result.decision === "approved",
       approval_id: result.approval_id,
       decision: result.decision as ApprovalResponse["decision"],
+      ...(receipt ? { receipt } : {}),
     };
   }
 
@@ -328,7 +369,17 @@ function isRetriableConnectError(err: unknown): boolean {
   );
 }
 
-export { OKedAuthError, OKedBackendUnreachableError } from "./errors.js";
+export { OKedAuthError, OKedBackendUnreachableError, OKedReceiptError } from "./errors.js";
+export { checkReceipt, keysFor, keysUrlAllowed, OKED_RECEIPT_KEYS_URL } from "./receipt.js";
+export { PINNED_RECEIPT_KEYS } from "./receipt-keys.js";
+export {
+  verifyReceipt,
+  verifyChain,
+  shortReceiptId,
+  type SignedReceipt,
+  type ReceiptBody,
+  type ReceiptKey,
+} from "@oked/receipt-core";
 export { TIER_ORDER, degradedDecision } from "./degraded.js";
 export { classify } from "./classify.js";
 export { describe, describeFields } from "./describe.js";
@@ -343,7 +394,7 @@ export type {
 export type { Rendered } from "./describe.js";
 export { CLASSIFIER_VERSION } from "./kinds.js";
 export type { OperationKind } from "./kinds.js";
-export { loadOKedConfig, OKED_CONFIG_PATH } from "./config.js";
+export { loadOKedConfig, OKED_CONFIG_PATH, OKED_RECEIPT_KEYS_PATH } from "./config.js";
 export type { PersistedConfig } from "./config.js";
 export type {
   RiskTier,

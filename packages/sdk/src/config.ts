@@ -10,11 +10,16 @@ export interface PersistedConfig {
   rulesCacheTtlSeconds?: number;
   /** Min interval (seconds) between heartbeats. See OKedConfig.heartbeatIntervalMs. */
   heartbeatIntervalSeconds?: number;
+  /** Deny any decision that arrives without a valid receipt. See OKedConfig.requireReceipt. */
+  requireReceipt?: boolean;
+  /** Where to fetch receipt keys. See OKedConfig.receiptKeysUrl. */
+  receiptKeysUrl?: string;
 }
 
 export const OKED_CONFIG_PATH = join(homedir(), ".oked", "config.json");
 export const OKED_RULES_CACHE_PATH = join(homedir(), ".oked", "rules-cache.json");
 export const OKED_HEARTBEAT_PATH = join(homedir(), ".oked", "heartbeat.json");
+export const OKED_RECEIPT_KEYS_PATH = join(homedir(), ".oked", "receipt-keys.json");
 
 /**
  * Read ~/.oked/config.json if present. Returns {} on any error (missing file,
@@ -36,6 +41,8 @@ export function loadOKedConfig(): PersistedConfig {
     if (typeof parsed.heartbeatIntervalSeconds === "number" && parsed.heartbeatIntervalSeconds >= 0) {
       out.heartbeatIntervalSeconds = parsed.heartbeatIntervalSeconds;
     }
+    if (typeof parsed.requireReceipt === "boolean") out.requireReceipt = parsed.requireReceipt;
+    if (typeof parsed.receiptKeysUrl === "string" && parsed.receiptKeysUrl) out.receiptKeysUrl = parsed.receiptKeysUrl;
     return out;
   } catch {
     return {};

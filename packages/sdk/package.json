@@ -12,6 +12,7 @@
     }
   },
   "scripts": {
+    "prebuild": "npm run build --workspace=@oked/receipt-core",
     "build": "tsc",
     "dev": "tsc --watch",
     "test": "tsx --test test/*.test.ts",
@@ -42,6 +43,9 @@
   },
   "publishConfig": {
     "access": "public"
+  },
+  "dependencies": {
+    "@oked/receipt-core": "0.3.6"
   },
   "devDependencies": {
     "@types/node": "^22.13.10",

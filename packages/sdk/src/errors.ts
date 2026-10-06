@@ -10,6 +10,11 @@
  *                                past a timer is NOT an outage: approve()
  *                                returns { decision: "timeout" } for it.
  *
+ *  - OKedReceiptError         -> the decision came with a receipt that does not
+ *                                verify (or with none, when requireReceipt is
+ *                                on). Always deny: a decision we cannot prove
+ *                                is not a decision. Never an outage.
+ *
  * An explicit user *deny* is NOT an error: approve() returns normally with
  * { approved: false, decision: "denied" } and must always be honored.
  */
@@ -29,5 +34,15 @@ export class OKedBackendUnreachableError extends Error {
     super(message);
     this.name = "OKedBackendUnreachableError";
     this.cause = cause;
+  }
+}
+
+export class OKedReceiptError extends Error {
+  /** e.g. ["bad_signature"], ["subject_mismatch"], ["missing"] */
+  readonly problems: string[];
+  constructor(reason: string, problems: string[]) {
+    super(`OKed receipt not valid: ${reason}`);
+    this.name = "OKedReceiptError";
+    this.problems = problems;
   }
 }

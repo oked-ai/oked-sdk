@@ -268,4 +268,41 @@ const UNREACHABLE = "http://127.0.0.1:1";
   }
 }
 
+// Cases 9-10: an approval OKed cannot prove must not run. (Neither case needs
+// a key lookup, so nothing is written to ~/.oked.)
+{
+  const { createServer } = await import("node:http");
+  let reply = {};
+  const server = createServer((_req, res) => {
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ approval_id: "ap_2", decision: "approved", status: "approved", ...reply }));
+  });
+  await new Promise((r) => server.listen(0, "127.0.0.1", r));
+  const port = server.address().port;
+  const register = () => {
+    const { api, handlers } = makeStubApi({
+      apiKey: "ok_test",
+      backendUrl: `http://127.0.0.1:${port}`,
+      timeoutMs: 3000,
+    });
+    plugin.register(api);
+    return handlers.get("before_tool_call");
+  };
+  const event = { toolName: "bash", params: { command: "rm random_table.sql" } };
+  const ctx = { toolName: "bash", sessionKey: "agent:main:main" };
+  try {
+    reply = { receipt: { body: null, alg: "Ed25519", kid: "x", sig: "x" } };
+    await assertDenied(register(), event, ctx, /receipt did not verify \(malformed\).*do NOT retry/i);
+    console.log("OK plugin: an approval with a broken receipt is blocked");
+
+    reply = {};
+    process.env.OKED_REQUIRE_RECEIPT = "1";
+    await assertDenied(register(), event, ctx, /receipt did not verify \(missing\)/i);
+    console.log("OK plugin: requireReceipt blocks an approval that has no receipt");
+  } finally {
+    delete process.env.OKED_REQUIRE_RECEIPT;
+    server.close();
+  }
+}
+
 console.log("\nAll smoke tests passed.");

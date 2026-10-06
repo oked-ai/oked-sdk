@@ -24,12 +24,14 @@
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   OKedClient,
   describe as describeAction,
   degradedDecision,
   OKedAuthError,
   OKedBackendUnreachableError,
+  OKedReceiptError,
   TIER_ORDER,
   type RiskTier,
 } from "@oked/sdk";
@@ -152,6 +154,17 @@ export class OkedDeniedError extends Error {
   }
 }
 
+// This package's version, read from its package.json at runtime (dist/*.js
+// sits one dir below it) so receipts name the exact client that asked.
+const CLIENT_ID = (() => {
+  try {
+    const pkgPath = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "package.json");
+    return `@oked/openclaw@${JSON.parse(fs.readFileSync(pkgPath, "utf-8")).version}`;
+  } catch {
+    return "@oked/openclaw";
+  }
+})();
+
 const PLUGIN_ID = "oked";
 
 const plugin = {
@@ -171,6 +184,8 @@ const plugin = {
       ...(cfg.strictFailClosed !== undefined
         ? { strictFailClosed: cfg.strictFailClosed }
         : {}),
+      client: CLIENT_ID,
+      source: "openclaw",
     });
 
     if (!oked.apiKey) {
@@ -288,7 +303,13 @@ const plugin = {
             `Stop and ask the user what to do instead.`;
         }
       } catch (err) {
-        if (err instanceof OKedAuthError) {
+        if (err instanceof OKedReceiptError) {
+          // A decision we cannot prove is not a decision - always deny.
+          log?.error?.(`[oked] approval receipt for ${toolName} did not verify: ${err.problems.join(", ")}.`);
+          outcome =
+            `OKed: the approval receipt did not verify (${err.problems.join(", ")}), so this action is denied. ` +
+            `Do NOT retry. Stop and report this to the user.`;
+        } else if (err instanceof OKedAuthError) {
           // Auth misconfig is not an outage - always deny.
           log?.error?.(`[oked] invalid API key for ${toolName}.`);
           outcome =

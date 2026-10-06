@@ -8,8 +8,12 @@ import {
   degradedDecision,
   OKedAuthError,
   OKedBackendUnreachableError,
+  OKedReceiptError,
+  shortReceiptId,
 } from "@oked/sdk";
 import type { HookInput, HookOutput } from "@oked/sdk";
+import { CLIENT_ID } from "./version.js";
+import { appendReceipt } from "./receipts.js";
 
 function makeOutput(
   decision: "allow" | "deny" | "ask",
@@ -49,7 +53,7 @@ async function main(): Promise<void> {
   // Classify risk
   const tier = classify(toolName, toolInput);
 
-  const client = new OKedClient();
+  const client = new OKedClient({ client: CLIENT_ID, source: "claude-code" });
 
   // Presence ping (throttled to once/day on disk, never throws). Fired before
   // the safe/warning fast-path return so installs that only ever run safe
@@ -112,13 +116,17 @@ async function main(): Promise<void> {
       cwd: input.cwd,
     });
 
+    // Keep our own copy of every verified receipt (approve, deny or timeout).
+    if (result.receipt) appendReceipt(result.receipt);
+    const receiptNote = result.receipt ? ` (receipt ${shortReceiptId(result.receipt.body.receipt_id)})` : "";
+
     if (result.approved) {
-      log(`Approved (${result.approval_id})`);
+      log(`Approved (${result.approval_id})${receiptNote}`);
       process.stdout.write(
-        JSON.stringify(makeOutput("allow", `Approved via OKed`))
+        JSON.stringify(makeOutput("allow", `Approved via OKed${receiptNote}`))
       );
     } else {
-      log(`Denied (${result.approval_id})`);
+      log(`Denied (${result.approval_id})${receiptNote}`);
       process.stdout.write(
         JSON.stringify(
           makeOutput("deny", `Denied via OKed: ${description}`)
@@ -126,7 +134,15 @@ async function main(): Promise<void> {
       );
     }
   } catch (err) {
-    if (err instanceof OKedAuthError) {
+    if (err instanceof OKedReceiptError) {
+      // A decision we cannot prove is not a decision - always deny.
+      log(`Approval receipt did not verify (${err.problems.join(", ")}) - action denied`);
+      process.stdout.write(
+        JSON.stringify(
+          makeOutput("deny", `OKed: the approval receipt did not verify (${err.problems.join(", ")}); action denied`)
+        )
+      );
+    } else if (err instanceof OKedAuthError) {
       // Auth misconfig is not an outage - always deny.
       log(`Invalid API key - action denied`);
       process.stdout.write(
