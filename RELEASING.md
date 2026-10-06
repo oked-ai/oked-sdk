@@ -2,14 +2,15 @@
 
 All `@oked/*` packages are versioned **in lockstep** — they always share the same version
 number and are published together. We use **manual git tags**; pushing a `vX.Y.Z` tag triggers
-`.github/workflows/publish.yml`, which publishes every package with npm provenance via OIDC
-trusted publishing (no stored token).
+`.github/workflows/publish.yml`, which publishes every package via OIDC trusted publishing (no
+stored token). Packages are published **without** npm provenance because the repo is private.
 
 ## One-time setup (already done — keep for reference)
 
 - An npm account with 2FA and a free `oked` organization (backs the `@oked` scope).
-- The **GitHub repo must be public** — npm provenance (sigstore) refuses private source repos
-  (`422 ... Unsupported GitHub Actions source repository visibility: "private"`).
+- The repo is **private**, so `npm publish` must not pass `--provenance`: npm (sigstore) refuses
+  provenance from private source repos (`422 ... Unsupported GitHub Actions source repository
+  visibility: "private"`). If the repo is made public again, `--provenance` can be restored.
 - A **Trusted Publisher** configured on npmjs for **each** of the 5 packages. Every field must
   match the workflow exactly:
   - Organization or user: `oked-ai`
@@ -53,8 +54,7 @@ redundant `prepublishOnly` rebuild (whose `prebuild` needs the repo root). Requi
    git tag vX.Y.Z
    git push origin main --tags
    ```
-6. Watch the `Publish` workflow. When green, each package page on npmjs shows the
-   green provenance panel ("Built and signed on GitHub Actions").
+6. Watch the `Publish` workflow. When green, all 5 packages show the new version on npm.
 
 ### Release channels (dist-tags)
 

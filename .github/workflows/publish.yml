@@ -56,13 +56,14 @@ jobs:
             fi
           fi
           echo "publishing ${{ matrix.package }}@$PKG_VERSION under dist-tag $DIST_TAG"
-      # OIDC trusted publishing + provenance requires npm >= 11.5.1.
+      # OIDC trusted publishing requires npm >= 11.5.1.
       # Node 22 ships npm 10.x, so upgrade before publishing.
       - run: npm install -g npm@latest
       - run: npm ci
       - run: npm run build
-      # Plain single-package publish from the package dir engages OIDC and
-      # signs provenance (requires a public repo). dist is already built above,
+      # Plain single-package publish from the package dir engages OIDC.
+      # No --provenance: npm only accepts provenance from public source repos,
+      # and this repo is private. dist is already built above,
       # so --ignore-scripts skips the redundant prepublishOnly rebuild (whose
       # prebuild uses --workspace=@oked/sdk and only works from the repo root).
-      - run: cd packages/${{ matrix.package }} && npm publish --access public --provenance --ignore-scripts --tag ${{ steps.ver.outputs.dist_tag }}
+      - run: cd packages/${{ matrix.package }} && npm publish --access public --ignore-scripts --tag ${{ steps.ver.outputs.dist_tag }}
