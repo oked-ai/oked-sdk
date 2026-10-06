@@ -881,3 +881,16 @@ describe("Bash — npm publish", () => {
     assert.equal(f!.Body, "npm publish --dry-run --otp ***");
   });
 });
+
+describe("desktop app folder access (ccd_directory)", () => {
+  it("change_directory names the folder", () => {
+    const f = describeFields("mcp__ccd_directory__change_directory", { path: "/Users/someone/Dev/project" });
+    assert.equal(f!.Title, "Move session to folder");
+    assert.ok(f!.Target!.endsWith("Dev/project"));
+  });
+
+  it("request_directory with and without a path", () => {
+    assert.equal(describeFields("mcp__ccd_directory__request_directory", { path: "/tmp/x" })!.Title, "Give session access to folder");
+    assert.equal(describeFields("mcp__ccd_directory__request_directory", {})!.Title, "Ask you to pick a folder for this session");
+  });
+});

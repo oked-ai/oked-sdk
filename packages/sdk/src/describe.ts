@@ -913,6 +913,16 @@ function summarizeMcp(toolName: string, input: Record<string, unknown>): Rendere
   const server = parts[1] || "unknown";
   const tool = parts[2] || "";
 
+  if (parts.includes("ccd_directory") && (tool === "change_directory" || tool === "request_directory")) {
+    const dir = typeof input.path === "string" && input.path.trim() ? shortenPath(input.path.trim()) : undefined;
+    if (tool === "change_directory") {
+      return { title: "Move session to folder", target: dir, footnote: "Claude can read and change files in this folder", kind: "folder_access" };
+    }
+    return dir
+      ? { title: "Give session access to folder", target: dir, footnote: "Claude can read and change files in this folder", kind: "folder_access" }
+      : { title: "Ask you to pick a folder for this session", kind: "folder_access" };
+  }
+
   const browser = parts.slice(1, -1).find((p) => p === "Claude_Browser" || p === "claude-in-chrome");
   if (browser) return summarizeBrowser(parts[parts.length - 1] || "", input, browser);
 

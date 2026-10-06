@@ -1230,9 +1230,32 @@ function classifyBrowserTool(tool: string, toolInput: Record<string, unknown>, s
   return "review";
 }
 
+/**
+ * Desktop app folder access (`ccd_directory`): change_directory moves the
+ * session to a folder, request_directory adds a folder to it. The app already
+ * shows its own approval for the exact folder (except in bypass permissions
+ * mode), so a second OKed prompt is approval fatigue. Log it (`warning`), but
+ * keep `review` for a broad or sensitive grant: the filesystem root, the home
+ * folder or one of its parents, secret stores and system folders. Without a
+ * path, request_directory opens a native picker the user drives: `safe`.
+ */
+function classifyDirectoryGrant(tool: string, toolInput: Record<string, unknown>): RiskTier {
+  const dir = typeof toolInput.path === "string" ? toolInput.path.trim() : "";
+  if (!dir) return tool === "request_directory" ? "safe" : "review";
+  const home = os.homedir();
+  const resolved = path.resolve(dir.replace(/^~(?=\/|$)/, home).replace(/^\$\{?HOME\}?(?=\/|$)/, home));
+  const isHomeOrParent = home === resolved || home.startsWith(resolved.endsWith(path.sep) ? resolved : resolved + path.sep);
+  if (isHomeOrParent || isSensitiveWritePath(resolved)) return "review";
+  return "warning";
+}
+
 function classifyMcpTool(toolName: string, toolInput: Record<string, unknown> = {}): RiskTier {
   const parts = toolName.split("__");
   const tool = parts[parts.length - 1] || "";
+
+  if (parts.includes("ccd_directory") && (tool === "change_directory" || tool === "request_directory")) {
+    return classifyDirectoryGrant(tool, toolInput);
+  }
 
   const browserServer = parts.slice(1, -1).find((p) => BROWSER_MCP_SERVERS.has(p));
   if (browserServer) return classifyBrowserTool(tool, toolInput, browserServer);
