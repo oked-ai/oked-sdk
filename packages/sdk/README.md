@@ -46,7 +46,7 @@ Pass to `new OKedClient(config)`:
 | `backendUrl` | `string` | `https://api.oked.ai` | Override the OKed backend URL. |
 | `timeout` | `number` | `630000` | Per-approval timeout in ms (10.5 minutes, just above the backend's 10 minute expiry, so the backend's `timeout` answer arrives first). If you raise it, raise the harness hook timeout to match: it must stay above this value so the fail-safe deny is written before the hook process is killed. |
 | `strictFailClosed` | `boolean` | `false` | When true, backend outages deny every tier. When false, outages deny only `high_stakes` and allow lower tiers. |
-| `requireReceipt` | `boolean` | `false` (`true` from 0.5.0) | Deny any decision that arrives without a valid signed receipt. A receipt that is present but invalid always denies. Env `OKED_REQUIRE_RECEIPT=1`. |
+| `requireReceipt` | `boolean` | `false` (`true` from 0.6.0) | Deny any decision that arrives without a valid signed receipt. A receipt that is present but invalid always denies. Env `OKED_REQUIRE_RECEIPT=1`. |
 | `receiptKeysUrl` | `string` | `https://api.oked.ai/.well-known/oked-receipt-keys.json` | Where to fetch a receipt key the SDK has not seen. Independent of `backendUrl`; https only, except loopback. |
 | `receiptKeys` | `ReceiptKey[]` | | Verify with exactly these keys and never fetch (self-hosted backends, tests). |
 | `client` | `string` | | Your integration's name and version, e.g. `my-agent@1.2.0`. Recorded in receipts. |

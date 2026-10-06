@@ -67,7 +67,7 @@ export interface OKedConfig {
   /**
    * Deny any decision that arrives without a valid receipt. A receipt that is
    * present but does not verify always denies, whatever this says. Default
-   * false in 0.4.0, true from 0.5.0. Env OKED_REQUIRE_RECEIPT=1.
+   * false in 0.5.0, true from 0.6.0. Env OKED_REQUIRE_RECEIPT=1.
    */
   requireReceipt: boolean;
   /**
@@ -79,7 +79,7 @@ export interface OKedConfig {
   receiptKeysUrl: string;
   /** Verify with exactly these keys and never fetch (tests, self-hosted backends). */
   receiptKeys?: ReceiptKey[];
-  /** The integration asking, e.g. "@oked/claude-code@0.4.0". Recorded in receipts. */
+  /** The integration asking, e.g. "@oked/claude-code@0.5.0". Recorded in receipts. */
   client?: string;
   /** Where the request comes from, e.g. "claude-code". Part of the receipt's subject. Default "sdk". */
   source?: string;

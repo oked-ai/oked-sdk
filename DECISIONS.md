@@ -25,7 +25,7 @@ and OpenClaw sends none, so the SDK sends a fresh `nonce` per request and the su
 is `{ type, operator_id, request_id, source, action, description, tool_input,
 client_nonce }`. The SDK recomputes it from what it sent.
 
-**`requireReceipt` is off by default in 0.4.0.** As the PRD says (on from 0.5.0). An
+**`requireReceipt` is off by default in 0.5.0, the first release with receipts.** As the PRD says (on from 0.6.0). An
 invalid receipt always denies; only a missing one is tolerated while it is off.
 
 **Keys: pinned, then cached, then a fixed URL.** The PRD says keys are fetched once,

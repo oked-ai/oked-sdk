@@ -82,7 +82,7 @@ A receipt is a JSON envelope:
     "requester": {
       "operator_id": "11111111-1111-4111-8111-111111111111",
       "api_key_id": "44444444-4444-4444-8444-444444444444",
-      "client": "@oked/claude-code@0.4.0"
+      "client": "@oked/claude-code@0.5.0"
     },
     "same_person": true,
     "prev_receipt_digest": "sha256:…"
@@ -186,7 +186,7 @@ degraded-mode allow.
 
 | Setting | Effect |
 |---|---|
-| `requireReceipt` (env `OKED_REQUIRE_RECEIPT=1`) | A decision with no receipt also denies. Off by default in 0.4.0, on by default from 0.5.0. |
+| `requireReceipt` (env `OKED_REQUIRE_RECEIPT=1`) | A decision with no receipt also denies. Off by default in 0.5.0, on by default from 0.6.0. |
 | `receiptKeysUrl` (env `OKED_RECEIPT_KEYS_URL`) | Where to fetch a key the SDK has not seen. Default is OKed's published set, independent of `backendUrl`; https only, except loopback for local development. |
 | `receiptKeys` | Verify with exactly these keys and never fetch (self-hosted backends, tests). |
 

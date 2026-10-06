@@ -25,7 +25,7 @@ export interface ReceiptDecider {
 export interface ReceiptRequester {
   operator_id: string | null;
   api_key_id: string | null;
-  /** The integration that asked, e.g. "@oked/claude-code@0.4.0". Null for older clients. */
+  /** The integration that asked, e.g. "@oked/claude-code@0.5.0". Null for older clients. */
   client: string | null;
 }
 

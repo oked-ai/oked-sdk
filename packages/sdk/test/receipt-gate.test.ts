@@ -139,7 +139,7 @@ describe("approve() receipt gate", () => {
     await assert.rejects(() => ask(client()), (e: any) => e instanceof OKedReceiptError && e.problems.includes("decision_mismatch"));
   });
 
-  it("no receipt: allowed while requireReceipt is off (0.4.0 default)", async () => {
+  it("no receipt: allowed while requireReceipt is off (0.5.0 default)", async () => {
     mode = "none";
     const r = await ask(client());
     assert.equal(r.approved, true);
