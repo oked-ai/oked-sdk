@@ -1,5 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { describeFields, describe as describeOne } from "../src/describe.js";
 
 describe("Bash — SQL via host language", () => {
@@ -842,5 +844,40 @@ describe("browser MCP tools", () => {
     ] });
     assert.equal(f!.Title, "Run 2 browser steps");
     assert.equal(f!.Body, "Open page in browser: http://localhost:3000\nLeft click in browser: Clicks Save");
+  });
+});
+
+describe("Bash — npm publish", () => {
+  const repo = fileURLToPath(new URL("../../..", import.meta.url));
+
+  it("reads name@version from the cwd's package.json", () => {
+    const f = describeFields("Bash", { command: "npm publish --access public" }, { cwd: `${repo}/packages/sdk` });
+    const pkg = JSON.parse(readFileSync(`${repo}/packages/sdk/package.json`, "utf8"));
+    assert.equal(f!.Title, "Publish package to npm");
+    assert.equal(f!.Target, `@oked/sdk@${pkg.version}`);
+    assert.equal(f!.Subline, "tag latest · public access");
+  });
+
+  it("follows a leading cd and headlines the publish in a compound command", () => {
+    const f = describeFields("Bash", { command: "cd packages/sdk && npm run build && npm publish --tag next" }, { cwd: repo });
+    assert.equal(f!.Title, "Publish package to npm");
+    assert.match(f!.Target!, /^@oked\/sdk@/);
+    assert.equal(f!.Subline, "tag next");
+    assert.equal(f!.Body, "cd packages/sdk && npm run build && npm publish --tag next");
+  });
+
+  it("--workspace resolves each package; --workspaces lists all public ones", () => {
+    const one = describeFields("Bash", { command: "npm publish -w packages/claude-code -w packages/sdk" }, { cwd: repo });
+    assert.equal(one!.Title, "Publish 2 packages to npm");
+    assert.match(one!.Target!, /^@oked\/claude-code@.*\n@oked\/sdk@/);
+    const all = describeFields("Bash", { command: "npm publish --workspaces" }, { cwd: repo });
+    assert.match(all!.Title, /^Publish \d+ packages to npm$/);
+    assert.match(all!.Target!, /@oked\/sdk@/);
+  });
+
+  it("marks dry runs and redacts --otp", () => {
+    const f = describeFields("Bash", { command: "npm publish --dry-run --otp 123456" });
+    assert.equal(f!.Title, "Publish package to npm (dry run)");
+    assert.equal(f!.Body, "npm publish --dry-run --otp ***");
   });
 });
