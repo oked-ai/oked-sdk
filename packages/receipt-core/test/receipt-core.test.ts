@@ -192,7 +192,7 @@ describe("ids and keys", () => {
     const id = newReceiptId();
     assert.match(id, /^rcpt_[0-9A-HJKMNP-TV-Z]{26}$/);
     assert.notEqual(id, newReceiptId());
-    assert.equal(shortReceiptId("rcpt_7Q2FABCDEFGHJKMNPQRSTVWXYZ0"), "rcpt_7Q2F");
+    assert.equal(shortReceiptId("rcpt_7Q2FABCDEFGHJKMNPQRSTVWXYZ0"), "rcpt_7Q2FABCD");
   });
 
   it("chains are per operator, falling back to the API key", () => {

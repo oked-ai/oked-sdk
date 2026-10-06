@@ -708,6 +708,31 @@ describe("classify — SQL inside wrappers", () => {
     assert.equal(classify("Bash", { command: cmd }), "high_stakes");
   });
 
+  it("python heredoc that edits a file whose text mentions SQL is not a SQL statement", () => {
+    const cmd = [
+      `python3 - <<'EOF'`,
+      `p='src/classify.ts'`,
+      `s=open(p).read()`,
+      `old="""// SQL words like DELETE FROM and DROP TABLE in comments"""`,
+      `new="""// Claude Code built-ins that only steer the session"""`,
+      `open(p,'w').write(s.replace(old,new))`,
+      `EOF`,
+    ].join("\n");
+    assert.notEqual(classify("Bash", { command: cmd }), "high_stakes");
+    const f = describeFields("Bash", { command: cmd });
+    assert.ok(!/SQL|table/i.test(f?.Title ?? ""), f?.Title);
+  });
+
+  it("python -c with SQL words but no DB access is not high_stakes", () => {
+    const cmd = `python3 -c "print('DELETE FROM users')"`;
+    assert.notEqual(classify("Bash", { command: cmd }), "high_stakes");
+  });
+
+  it("python heredoc with a DB library and SQL in a variable → high_stakes", () => {
+    const cmd = [`python3 - <<'EOF'`, `import sqlite3`, `q = 'DROP TABLE users'`, `sqlite3.connect('x.db').cursor().execute(q)`, `EOF`].join("\n");
+    assert.equal(classify("Bash", { command: cmd }), "high_stakes");
+  });
+
   it("python3 -c without SQL → safe (opaque code execution is not prompt-worthy)", () => {
     const tier = classify("Bash", { command: `python3 -c "print(1)"` });
     assert.equal(tier, "safe");
