@@ -520,8 +520,25 @@ function extractSqlFromScriptBody(body: string): string | null {
 // to gate SQL extraction so SQL words appearing in *argument data* (a `gh pr
 // create --body` mentioning "TRUNCATE", a path like `better-sqlite3`) don't get
 // misread as a statement to run.
-const SQL_CONSUMER_RE =
-  /(?:^|\||&&|;|\$\(|`)\s*(?:\w+=\S+\s+)*(?:sudo\s+)?(?:psql|mysql|mariadb|sqlite3?|node|python\d?|ruby|perl|deno|bun)\b/;
+const SQL_CLI_CONSUMER_RE =
+  /(?:^|\||&&|;|\$\(|`)\s*(?:\w+=\S+\s+)*(?:sudo\s+)?(?:psql|mysql|mariadb|sqlite3?)\b/;
+const INTERPRETER_CONSUMER_RE =
+  /(?:^|\||&&|;|\$\(|`)\s*(?:\w+=\S+\s+)*(?:sudo\s+)?(?:node|python\d?|ruby|perl|deno|bun)\b/;
+
+// A database client library named in a script body. A script that has SQL
+// words but no .execute()-style call and no DB library cannot run SQL: it is
+// text processing (a Python script that edits a source file whose comments
+// say "DELETE FROM", for example), so it must not be shown as a SQL statement.
+const DB_LIBRARY_RE =
+  /\b(?:sqlite3|better-sqlite3|psycopg2?|pymysql|MySQLdb|mysql2?|sqlalchemy|duckdb|knex|prisma|pg|sequel|DBI)\b/;
+
+// SQL to run from an interpreter body (node -e, python -c, `python - <<EOF`).
+function sqlFromInterpreterBody(body: string): string | null {
+  if (!SQL_KEYWORDS_RE.test(body)) return null;
+  const extracted = extractSqlFromScriptBody(body);
+  if (extracted) return extracted;
+  return DB_LIBRARY_RE.test(body) ? body : null;
+}
 
 export function findSqlInCommand(cmd: string): string | null {
   // Inline interpreter flags: node -e, python -c, ruby -e, perl -e. Anchored to
@@ -529,9 +546,8 @@ export function findSqlInCommand(cmd: string): string | null {
   const inline = cmd.match(/(?:^|\||&&|;|\$\()\s*(?:\w+=\S+\s+)*(?:sudo\s+)?(?:node|python\d?|ruby|perl|deno|bun)\s+-[ec]\s+(?:"([\s\S]+?)"|'([\s\S]+?)')\s*$/);
   if (inline) {
     const body = inline[1] ?? inline[2];
-    if (body && SQL_KEYWORDS_RE.test(body)) {
-      return extractSqlFromScriptBody(body) ?? body;
-    }
+    const sql = body ? sqlFromInterpreterBody(body) : null;
+    if (sql) return sql;
   }
 
   // psql -c "..." / mysql -e "..." / sqlite3 db "..." — outer-quoted statement.
@@ -550,8 +566,12 @@ export function findSqlInCommand(cmd: string): string | null {
   if (hd) {
     const body = hd[2];
     const context = cmd.slice(0, hd.index) + cmd.slice((hd.index ?? 0) + hd[0].length);
-    if (body && SQL_CONSUMER_RE.test(context) && SQL_KEYWORDS_RE.test(body)) {
+    if (body && SQL_CLI_CONSUMER_RE.test(context) && SQL_KEYWORDS_RE.test(body)) {
       return extractSqlFromScriptBody(body) ?? body;
+    }
+    if (body && INTERPRETER_CONSUMER_RE.test(context)) {
+      const sql = sqlFromInterpreterBody(body);
+      if (sql) return sql;
     }
   }
 
