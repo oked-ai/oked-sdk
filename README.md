@@ -59,11 +59,11 @@ Agent: Read ./src/app.ts             ->  OK allowed (safe)
 1. **Before execution.** The hook receives each tool call before it runs. Runs outside the agent process so it cannot be bypassed.
 2. **Effect-based scoring.** Classification looks at the *kind of effect* an action has, not the specific command, and defaults to no prompt: reads, queries, copying a file, running a command, and `/tmp` scratch deletes all pass instantly. Only destructive, irreversible, or outward-facing effects move to approval. Tiers: `safe` | `warning` | `review` | `high_stakes`.
 3. **Push to your phone.** Approval lands in Telegram or as a Web Push notification with full context: what the agent wants to do and why it was flagged.
-4. **Every decision logged.** Each request, classification, and decision is persisted with a timestamp. Full audit trail, exportable any time.
+4. **Every decision signed.** Each decision comes with a receipt signed by OKed: who decided, how they were verified, the exact action, and when, hash-chained so a deleted or edited receipt is detectable. The SDK verifies it before the action runs; anyone can check an export offline with `npx @oked/verify`. See [docs/receipts.md](./docs/receipts.md).
 
 ### Degraded-mode behavior
 
-Explicit denials are always honored. Invalid API keys and unexpected hook errors deny the action. If the OKed backend is unreachable, OKed denies `high_stakes` actions and, by default, allows lower tiers so a temporary outage does not stop every agent workflow. Set `OKED_STRICT_FAIL_CLOSED=1` or `strictFailClosed: true` to deny every sensitive action during backend outages.
+Explicit denials are always honored. Invalid API keys, receipts that do not verify, and unexpected hook errors deny the action. A request nobody answers in time is a timeout, which denies. If the OKed backend is unreachable, OKed denies `high_stakes` actions and, by default, allows lower tiers so a temporary outage does not stop every agent workflow. Set `OKED_STRICT_FAIL_CLOSED=1` or `strictFailClosed: true` to deny every sensitive action during backend outages.
 
 ## SDK example
 
@@ -85,7 +85,7 @@ if (!approved) throw new Error('denied')
 await createPayment(amount, recipient)
 ```
 
-The call returns `{ approved, approval_id, decision }`, where `decision` is `"approved" | "denied" | "timeout"`. Default timeout is 10 minutes; a timeout is treated as a denial.
+The call returns `{ approved, approval_id, decision, receipt }`, where `decision` is `"approved" | "denied" | "timeout"` and `receipt` is the signed receipt, already verified against the exact action you sent. Default timeout is 10 minutes; a timeout is treated as a denial.
 
 ## Packages
 
@@ -96,6 +96,8 @@ The call returns `{ approved, approval_id, decision }`, where `decision` is `"ap
 | [`@oked/claude-agent-sdk`](./packages/claude-agent-sdk) | Ready-made `PreToolUse` hook callback for the Claude Agent SDK. Wire into `options.hooks`. |
 | [`@oked/openclaw`](./packages/openclaw) | Zero-code integration for OpenClaw via the `before_tool_call` plugin. |
 | [`@oked/openclaw-cli`](./packages/openclaw-cli) | Installer CLI (`oked-openclaw`) that wraps `openclaw plugins install` and wires the plugin into `openclaw.json`. |
+| [`@oked/receipt-core`](./packages/receipt-core) | The signed receipt format: canonical JSON, digests, Ed25519 signing and verification, chain checks. Shared by the backend, the SDK and the verifier. |
+| [`@oked/verify`](./packages/verify) | `npx @oked/verify <export.zip>`: checks receipts offline for auditors. |
 
 ## Develop
 

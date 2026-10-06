@@ -22,6 +22,7 @@ oked init
 |---|---|
 | `oked init` | Install or update the project hook and pair this device. |
 | `oked status` | Show install state and ping the backend. |
+| `oked receipts verify [file]` | Check this machine's copy of approval receipts (default `~/.oked/receipts.jsonl`): every signature, and the chain links between neighbouring receipts. |
 | `oked uninstall` | Remove the project hook entry (other hooks are preserved). |
 
 ## What gets intercepted
@@ -58,9 +59,13 @@ to `safe` — running a command is not, by itself, something we interrupt you fo
 | `OKED_BACKEND_URL` | no | Override the hosted backend URL. |
 | `OKED_STRICT_FAIL_CLOSED` | no | Set to `1` or `true` to deny every sensitive action when the backend is unreachable. |
 
+## Receipts
+
+Every decision comes with a receipt signed by OKed (who decided, how they were verified, the exact command, when). The hook verifies it before allowing the action, shows its short id (`Approved via OKed (receipt rcpt_7Q2F)`), and keeps your own copy in `~/.oked/receipts.jsonl`. Check that file any time with `oked receipts verify`. Set `OKED_REQUIRE_RECEIPT=1` to deny any decision without a valid receipt (the default from 0.6.0). See [docs/receipts.md](../../docs/receipts.md).
+
 ## Degraded-mode behavior
 
-Explicit denials and invalid API keys deny the action. If the backend is unreachable, OKed denies `high_stakes` actions and, by default, allows lower tiers so a temporary outage does not stop every Claude Code workflow. If no API key is configured, the hook returns `ask` so Claude Code's native permission flow can handle the decision. Set `OKED_STRICT_FAIL_CLOSED=1` to deny every sensitive action during backend outages.
+Explicit denials, invalid API keys and approval receipts that do not verify deny the action. If the backend is unreachable, OKed denies `high_stakes` actions and, by default, allows lower tiers so a temporary outage does not stop every Claude Code workflow. If no API key is configured, the hook returns `ask` so Claude Code's native permission flow can handle the decision. Set `OKED_STRICT_FAIL_CLOSED=1` to deny every sensitive action during backend outages.
 
 ## License
 
