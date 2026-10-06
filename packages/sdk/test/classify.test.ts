@@ -1136,3 +1136,39 @@ describe("desktop app folder access (ccd_directory)", () => {
     assert.equal(classify("mcp__ccd_directory__change_directory", {}), "review");
   });
 });
+
+describe("Claude Code built-in session tools", () => {
+  it("session-only tools are safe", () => {
+    for (const t of ["TaskStop", "KillShell", "TaskOutput", "BashOutput", "TaskCreate", "TaskUpdate", "TodoWrite",
+      "ToolSearch", "Skill", "AskUserQuestion", "EnterPlanMode", "ExitPlanMode", "ListAgents", "CronList",
+      "ScheduleWakeup", "LSP", "ReportFindings", "SendUserFile", "PushNotification"]) {
+      assert.equal(classify(t, { task_id: "bkm34a6nc" }), "safe", t);
+    }
+  });
+
+  it("small-effect tools are logged", () => {
+    for (const t of ["EnterWorktree", "CronCreate", "CronDelete", "SendMessage", "WebFetch"]) {
+      assert.equal(classify(t, {}), "warning", t);
+    }
+  });
+
+  it("ExitWorktree: keep is safe, remove is logged, discarding changes is high_stakes", () => {
+    assert.equal(classify("ExitWorktree", { action: "keep" }), "safe");
+    assert.equal(classify("ExitWorktree", { action: "remove" }), "warning");
+    assert.equal(classify("ExitWorktree", { action: "remove", discard_changes: true }), "high_stakes");
+  });
+
+  it("Monitor is classified by its command", () => {
+    assert.equal(classify("Monitor", { command: "tail -f app.log | grep --line-buffered ERROR", description: "x", timeout_ms: 1000 }), "safe");
+    assert.equal(classify("Monitor", { command: "git push --force origin main", description: "x", timeout_ms: 1000 }), "high_stakes");
+    assert.equal(classify("Monitor", { ws: { url: "wss://example.com" }, description: "x", timeout_ms: 1000 }), "warning");
+  });
+
+  it("Artifact: publish asks, delete is high_stakes, reads are safe", () => {
+    assert.equal(classify("Artifact", { file_path: "/tmp/a.html" }), "review");
+    assert.equal(classify("Artifact", { action: "publish", file_path: "/tmp/a.html" }), "review");
+    assert.equal(classify("Artifact", { action: "delete", url: "https://claude.ai/artifact/x" }), "high_stakes");
+    assert.equal(classify("Artifact", { action: "read", url: "https://claude.ai/artifact/x" }), "safe");
+    assert.equal(classify("Artifact", { action: "list" }), "safe");
+  });
+});

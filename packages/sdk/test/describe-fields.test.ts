@@ -894,3 +894,34 @@ describe("desktop app folder access (ccd_directory)", () => {
     assert.equal(describeFields("mcp__ccd_directory__request_directory", {})!.Title, "Ask you to pick a folder for this session");
   });
 });
+
+describe("Claude Code built-in session tools", () => {
+  it("TaskStop says what it does", () => {
+    const f = describeFields("TaskStop", { task_id: "bkm34a6nc" });
+    assert.equal(f!.Title, "Stop background task");
+    assert.equal(f!.Target, "bkm34a6nc");
+  });
+
+  it("ExitWorktree with discard warns about lost work", () => {
+    const f = describeFields("ExitWorktree", { action: "remove", discard_changes: true });
+    assert.equal(f!.Title, "Delete worktree and discard its changes");
+  });
+
+  it("CronCreate shows the schedule and prompt", () => {
+    const f = describeFields("CronCreate", { cron: "7 * * * *", prompt: "check the deploy" });
+    assert.equal(f!.Title, "Schedule a recurring prompt");
+    assert.equal(f!.Target, "7 * * * *");
+    assert.equal(f!.Body, "check the deploy");
+  });
+
+  it("Monitor uses its description, not the generic shell rendering", () => {
+    const f = describeFields("Monitor", { command: "tail -f a.log", description: "errors in a.log", timeout_ms: 1000 });
+    assert.equal(f!.Title, "Watch: errors in a.log");
+    assert.equal(f!.Body, "tail -f a.log");
+  });
+
+  it("Artifact publish and delete", () => {
+    assert.equal(describeFields("Artifact", { file_path: "/tmp/report.html" })!.Title, "Publish page to claude.ai");
+    assert.equal(describeFields("Artifact", { action: "delete", url: "https://claude.ai/artifact/x" })!.Title, "Delete page from claude.ai");
+  });
+});

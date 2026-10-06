@@ -43,6 +43,7 @@ export type OperationKind =
   | "mcp_send" | "mcp_submit_form" | "mcp_fill" | "mcp_submit" | "mcp_query"
   | "browser_navigate" | "browser_interact" | "browser_script" | "browser_dev_server"
   | "folder_access"
+  | "session_control" | "worktree" | "schedule" | "agent_message" | "web_fetch" | "monitor" | "artifact"
   // Agents
   | "agent_launch"
   // Shell composite / fallbacks

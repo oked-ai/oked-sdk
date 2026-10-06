@@ -86,6 +86,9 @@ function summarize(toolName: string, toolInput: Record<string, unknown>, ctx: De
       return summarizeAgent(toolInput);
   }
 
+  const session = summarizeSessionTool(toolName, toolInput);
+  if (session) return session;
+
   if (toolName.startsWith("mcp__")) {
     return summarizeMcp(toolName, toolInput);
   }
@@ -1122,6 +1125,82 @@ function prettyServer(server: string): string {
 // ───────────────────────────────────────────────────────────────────────
 // Fallback
 // ───────────────────────────────────────────────────────────────────────
+
+/**
+ * Claude Code built-ins. Their names (`TaskStop`, `CronCreate`, …) and raw
+ * fields (`task_id: bkm34a6nc`) mean nothing on an approval card, so say what
+ * the step does. Returns null for other tools.
+ */
+function summarizeSessionTool(toolName: string, input: Record<string, unknown>): Rendered | null {
+  const str = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : undefined);
+  switch (toolName) {
+    case "TaskStop":
+    case "KillShell":
+      return {
+        title: "Stop background task",
+        target: str(input.task_id) ?? str(input.shell_id),
+        footnote: "Only a task this session started",
+        kind: "session_control",
+      };
+    case "EnterWorktree":
+      return { title: "Create a git worktree for this session", target: str(input.name), kind: "worktree" };
+    case "ExitWorktree":
+      if (input.action !== "remove") return { title: "Leave worktree (keep it on disk)", kind: "worktree" };
+      return input.discard_changes === true
+        ? { title: "Delete worktree and discard its changes", footnote: "Uncommitted files and unmerged commits are lost", kind: "worktree" }
+        : { title: "Delete worktree", footnote: "Refused if it has unsaved changes", kind: "worktree" };
+    case "CronCreate": {
+      const prompt = str(input.prompt);
+      return {
+        title: input.recurring === false ? "Schedule a one-time prompt" : "Schedule a recurring prompt",
+        target: str(input.cron),
+        body: prompt ? truncateBody(prompt) : undefined,
+        kind: "schedule",
+      };
+    }
+    case "CronDelete":
+      return { title: "Delete scheduled prompt", target: str(input.id) ?? str(input.job_id), kind: "schedule" };
+    case "SendMessage": {
+      const message = str(input.message);
+      return {
+        title: str(input.to) ? `Send message to agent "${truncate(str(input.to)!, 40)}"` : "Send message to agent",
+        body: message ? truncateBody(message) : undefined,
+        kind: "agent_message",
+      };
+    }
+    case "WebFetch": {
+      const url = str(input.url);
+      return { title: "Fetch web page", target: url ? truncate(url, 80) : undefined, kind: "web_fetch" };
+    }
+    case "Monitor": {
+      const cmd = str(input.command);
+      const ws = str((input.ws as { url?: unknown } | undefined)?.url);
+      return {
+        title: str(input.description) ? `Watch: ${truncate(str(input.description)!, 60)}` : "Start background watcher",
+        target: ws ? truncate(ws, 80) : undefined,
+        body: cmd ? truncateBody(cmd) : undefined,
+        kind: "monitor",
+      };
+    }
+    case "Artifact": {
+      const action = str(input.action) ?? "publish";
+      const target = str(input.url) ?? (str(input.file_path) ? shortenPath(str(input.file_path)!) : undefined);
+      if (action === "delete") {
+        return { title: "Delete page from claude.ai", target, footnote: "The link stops working for everyone", kind: "artifact" };
+      }
+      if (action === "publish") {
+        return {
+          title: str(input.url) ? "Update page on claude.ai" : "Publish page to claude.ai",
+          target,
+          footnote: "Private to you until you share it",
+          kind: "artifact",
+        };
+      }
+      return { title: `${action.replace(/_/g, " ")} page on claude.ai`.replace(/^./, (c) => c.toUpperCase()), target, kind: "artifact" };
+    }
+  }
+  return null;
+}
 
 function summarizeFallback(toolName: string, toolInput: Record<string, unknown>): Rendered {
   const keys = Object.keys(toolInput);
