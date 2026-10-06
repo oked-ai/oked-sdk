@@ -685,11 +685,12 @@ function classifyBashCommand(command: string, ephemeralVars: Set<string> = new S
   //                SHELL-pattern scan, so a shell token embedded as code/data in
   //                an interpreter body (`rm`, `curl -d`, a `>` redirect — e.g. a
   //                reddit post fed to `node -e '…samples…'`) does not trip a
-  //                destructive/outward rule. (SQL keywords in that data can still
+  //                destructive/outward rule. Quoted curl request bodies (`-d
+  //                '{"command":"git push --force"}'`) are blanked the same way. (SQL keywords in that data can still
   //                surface via `intact` — that is the accepted shell-only-opacity
   //                trade-off; see classifyStageShellEffects.)
   const intact = stripHeredocBodies(command).trim();
-  const stripped = stripInlineScriptBodies(intact).trim();
+  const stripped = stripCurlDataBodies(stripInlineScriptBodies(intact)).trim();
 
   // High-stakes scan on the FULL (body-stripped) command, before any splitting.
   // These patterns use \b and several intentionally span an operator (e.g.
@@ -949,6 +950,58 @@ export function stripInlineScriptBodies(command: string): string {
     INLINE_SCRIPT_RE.lastIndex = last;      // resume after the closing quote
   }
   out += command.slice(last);
+  return out;
+}
+
+// curl request-body flags whose quoted value is payload sent to a server,
+// never run locally.
+const CURL_DATA_FLAG_RE = /^(?:-d|--data(?:-raw|-binary|-urlencode|-ascii)?|--json|-F|--form)(?:\s+|=)(['"])/;
+
+/**
+ * Blank the interior of quoted curl request bodies, keeping the quotes and the
+ * flag so the per-stage curl rules still see a POST. A JSON payload that
+ * mentions `git push --force` or `rm -rf` is data, and must not trip the
+ * full-command high-stakes scan. Only applies inside a curl stage (from `curl`
+ * to the next unquoted `;`, `|`, `&` or newline).
+ */
+export function stripCurlDataBodies(command: string): string {
+  let out = "";
+  let inCurl = false;
+  let i = 0;
+  while (i < command.length) {
+    const ch = command[i];
+    if (ch === "'" || ch === '"') {
+      // Copy a quoted span verbatim (it isn't a body we're blanking).
+      let j = i + 1;
+      while (j < command.length && command[j] !== ch) {
+        if (ch === '"' && command[j] === "\\") j++;
+        j++;
+      }
+      out += command.slice(i, j + 1);
+      i = j + 1;
+      continue;
+    }
+    if (/[;|&\n]/.test(ch)) inCurl = false;
+    else if (!inCurl && /^curl\b/.test(command.slice(i)) && (i === 0 || /[\s(;|&]/.test(command[i - 1]))) {
+      inCurl = true;
+    } else if (inCurl && /\s/.test(ch)) {
+      const m = command.slice(i + 1).match(CURL_DATA_FLAG_RE);
+      if (m) {
+        const quote = m[1];
+        const bodyStart = i + 1 + m[0].length;
+        let j = bodyStart;
+        while (j < command.length && command[j] !== quote) {
+          if (quote === '"' && command[j] === "\\") j++;
+          j++;
+        }
+        out += command.slice(i, bodyStart) + quote;
+        i = j + 1;
+        continue;
+      }
+    }
+    out += ch;
+    i++;
+  }
   return out;
 }
 

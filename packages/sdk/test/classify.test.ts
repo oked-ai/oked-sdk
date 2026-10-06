@@ -1076,3 +1076,30 @@ describe("effect-category model — permissive default (round 5)", () => {
     }
   });
 });
+
+describe("curl request bodies are data, not commands", () => {
+  it("a JSON payload mentioning a force-push doesn't make the POST high_stakes", () => {
+    // Regression: an agent creating a test approval on the local OKed backend
+    // was gated as an irreversible force-push because the payload's
+    // tool_input contained the string "git push --force origin main".
+    const cmd = `SP=/tmp/x; (curl -s -N -X POST http://localhost:3000/api/v1/approve -H "Authorization: Bearer k" -H "Content-Type: application/json" -d '{"description":"Force-push to main","tool_input":{"command":"git push --force origin main"}}' > $SP/out 2>&1 &); sleep 2; curl -s http://localhost:3000/api/internal/pending | head -c 300`;
+    assert.equal(classify("Bash", { command: cmd }), "warning");
+  });
+
+  it("covers --data, --json and double-quoted bodies", () => {
+    assert.equal(bash(`curl -X POST http://localhost:3000/x --data "rm -rf /"`), "warning");
+    assert.equal(bash(`curl http://localhost:3000/x --json '{"c":"git reset --hard"}'`), "warning");
+  });
+
+  it("a remote POST is still high_stakes", () => {
+    assert.equal(bash(`curl -X POST https://api.example.com/x -d '{"c":"git push --force"}'`), "high_stakes");
+  });
+
+  it("a real force-push after the curl still counts", () => {
+    assert.equal(bash(`curl -X POST http://localhost:3000/x -d '{}' && git push --force origin main`), "high_stakes");
+  });
+
+  it("only curl bodies are blanked", () => {
+    assert.equal(bash(`bash -c 'git push --force origin main'`), "high_stakes");
+  });
+});

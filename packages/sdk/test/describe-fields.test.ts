@@ -222,6 +222,15 @@ describe("Bash — multi-file rm", () => {
     assert.equal(f!.Title, "POST request to localhost");
   });
 
+  it("curl POST shows the endpoint path as target and the payload as body", () => {
+    const f = describeFields("Bash", {
+      command: `SP=/private/tmp/claude-501/some/long/scratchpad; (curl -s -N -X POST http://localhost:3000/api/v1/approve -H "Content-Type: application/json" -d '{"description":"Force-push to main"}' > $SP/out 2>&1 &)`,
+    });
+    assert.equal(f!.Title, "POST request to localhost");
+    assert.equal(f!.Target, "/api/v1/approve");
+    assert.equal(f!.Body, '{"description":"Force-push to main"}');
+  });
+
   it("a request body without -X is described as a POST", () => {
     const f = describeFields("Bash", { command: "curl --json '{}' https://api.example.com/x" });
     assert.equal(f!.Title, "POST request to api.example.com");
