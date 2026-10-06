@@ -128,11 +128,40 @@ function summarizeMutatingCurl(cmd: string): Rendered | null {
   const host = url ? extractHost(url) : "URL";
   const kind: OperationKind =
     method === "DELETE" ? "http_delete" : method === "PUT" ? "http_put" : "http_post";
+  // The endpoint path and the payload say what the request does; the raw
+  // command's head is often just setup (`SP=/long/scratch/path; (curl …`) and
+  // eats the whole preview before reaching either.
+  const endpoint = url ? extractPath(url) : undefined;
+  const payload = extractCurlPayload(cmd);
   return {
     title: `${method} request to ${host}`,
-    body: cmd.length > COMMAND_INLINE_MAX ? truncateBody(cmd) : undefined,
+    target: endpoint,
+    body: payload !== undefined
+      ? truncateBody(payload)
+      : cmd.length > COMMAND_INLINE_MAX ? truncateBody(cmd) : undefined,
     kind,
   };
+}
+
+/** Path (+ query) of a URL, or undefined for a bare origin. */
+function extractPath(url: string): string | undefined {
+  try {
+    const u = new URL(url);
+    const p = u.pathname + u.search;
+    return p && p !== "/" ? truncate(p, 80) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** The value of the first curl request-body flag (-d, --data*, --json, -F, --form). */
+function extractCurlPayload(cmd: string): string | undefined {
+  const m = cmd.match(
+    /\s(?:-d|--data(?:-raw|-binary|-urlencode|-ascii)?|--json|-F|--form)(?:\s+|=)(?:'([^']*)'|"((?:[^"\\]|\\.)*)"|([^\s'"|;&]+))/,
+  );
+  if (!m) return undefined;
+  const v = m[1] ?? m[2] ?? m[3];
+  return v ? v : undefined;
 }
 
 function summarizeBash(command: string, sizeBytes?: number): Rendered {
