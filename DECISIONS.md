@@ -33,8 +33,7 @@ cached next to `~/.oked/config.json`, and new keys accepted only from the well-k
 over TLS. That URL is fixed to `https://api.oked.ai/...` (not derived from
 `OKED_BACKEND_URL`, so a lookalike backend cannot supply its own key), with
 `OKED_RECEIPT_KEYS_URL` / `receiptKeys` for self-hosting and loopback http for local
-development. `PINNED_RECEIPT_KEYS` is empty until the production key exists; add it
-before 0.5.0.
+development. `PINNED_RECEIPT_KEYS` holds the production key `oked-2026-10`.
 
 **`source` and `client` are new request fields.** No client sent `metadata.source`
 before, so old rows say `"sdk"`. The integrations now send `source` (`claude-code`,

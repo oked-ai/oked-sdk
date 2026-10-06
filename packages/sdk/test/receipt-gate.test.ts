@@ -18,7 +18,8 @@ import {
 const home = mkdtempSync(join(tmpdir(), "oked-receipt-gate-"));
 process.env.HOME = home;
 process.env.USERPROFILE = home;
-const { OKedClient, OKedReceiptError, keysUrlAllowed } = await import("../src/index.js");
+const { OKedClient, OKedReceiptError, keysUrlAllowed, PINNED_RECEIPT_KEYS } = await import("../src/index.js");
+const { createPublicKey } = await import("node:crypto");
 
 const { seed, publicKey } = generateSigningSeed();
 const signer = signerFromSeed(seed, "gate-test");
@@ -160,6 +161,17 @@ describe("approve() receipt gate", () => {
     assert.equal((await ask(c())).approved, true);
     assert.equal((await ask(c())).approved, true);
     assert.equal(keyFetches - before, 1);
+  });
+
+  it("every pinned production key is a well-formed Ed25519 key", () => {
+    assert.ok(PINNED_RECEIPT_KEYS.length > 0);
+    for (const k of PINNED_RECEIPT_KEYS) {
+      assert.equal(k.alg, "Ed25519");
+      assert.equal(Buffer.from(k.public_key, "base64url").length, 32, k.kid);
+      assert.equal(createPublicKey({ key: { kty: "OKP", crv: "Ed25519", x: k.public_key }, format: "jwk" }).asymmetricKeyType, "ed25519");
+      assert.ok(!Number.isNaN(Date.parse(k.not_before)), k.kid);
+    }
+    assert.equal(new Set(PINNED_RECEIPT_KEYS.map((k) => k.kid)).size, PINNED_RECEIPT_KEYS.length, "kids are unique");
   });
 
   it("only accepts keys over TLS, or from this machine", () => {
