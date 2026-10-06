@@ -27,8 +27,8 @@ jobs:
           - claude-agent-sdk
           - openclaw
           - openclaw-cli
-          # receipt-core and verify join this list once their npm Trusted
-          # Publishers exist (see RELEASING.md "Adding a new package").
+          - receipt-core
+          - verify
     steps:
       - uses: actions/checkout@v6
       # Do NOT set registry-url here: it makes setup-node write an .npmrc with
