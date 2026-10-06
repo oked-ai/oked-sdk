@@ -1,6 +1,8 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { classify } from "../src/classify.js";
+import os from "os";
+import path from "path";
 
 const bash = (command: string) => classify("Bash", { command });
 
@@ -1111,5 +1113,26 @@ describe("curl request bodies are data, not commands", () => {
 
   it("only curl bodies are blanked", () => {
     assert.equal(bash(`bash -c 'git push --force origin main'`), "high_stakes");
+  });
+});
+
+describe("desktop app folder access (ccd_directory)", () => {
+  const home = os.homedir();
+  it("a project folder is logged, not prompted (the app asks the user itself)", () => {
+    assert.equal(classify("mcp__ccd_directory__change_directory", { path: `${home}/Dev/project` }), "warning");
+    assert.equal(classify("mcp__ccd_directory__request_directory", { path: "~/Downloads" }), "warning");
+  });
+
+  it("request_directory without a path opens the user's own folder picker", () => {
+    assert.equal(classify("mcp__ccd_directory__request_directory", {}), "safe");
+  });
+
+  it("broad or sensitive folders stay review", () => {
+    assert.equal(classify("mcp__ccd_directory__change_directory", { path: "/" }), "review");
+    assert.equal(classify("mcp__ccd_directory__request_directory", { path: "~" }), "review");
+    assert.equal(classify("mcp__ccd_directory__request_directory", { path: path.dirname(home) }), "review");
+    assert.equal(classify("mcp__ccd_directory__request_directory", { path: "~/.ssh" }), "review");
+    assert.equal(classify("mcp__ccd_directory__request_directory", { path: "/etc" }), "review");
+    assert.equal(classify("mcp__ccd_directory__change_directory", {}), "review");
   });
 });
