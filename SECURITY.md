@@ -38,7 +38,8 @@ integration acts on the decision.
   change those can also change the hook itself, so protect `~/.oked` and your
   agent's settings the way you protect the API key.
 - **Fail closed.** A receipt that fails any check denies the action
-  (`OKedReceiptError`), and so does a missing one when `requireReceipt` is on.
+  (`OKedReceiptError`), and so does an approval with no receipt (the default since 0.6.0;
+  `OKED_REQUIRE_RECEIPT=0` turns that off for a backend that does not sign receipts).
 - **Honest limit.** OKed holds the signing key. Your own copy of receipts
   (`~/.oked/receipts.jsonl`) and signed chain heads you save are how you would
   detect OKed rewriting a chain.

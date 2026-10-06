@@ -61,7 +61,7 @@ to `safe` — running a command is not, by itself, something we interrupt you fo
 
 ## Receipts
 
-Every decision comes with a receipt signed by OKed (who decided, how they were verified, the exact command, when). The hook verifies it before allowing the action, shows its short id (`Approved via OKed (receipt rcpt_7Q2F)`), and keeps your own copy in `~/.oked/receipts.jsonl`. Check that file any time with `oked receipts verify`. Set `OKED_REQUIRE_RECEIPT=1` to deny any decision without a valid receipt (the default from 0.6.0). See [docs/receipts.md](../../docs/receipts.md).
+Every decision comes with a receipt signed by OKed (who decided, how they were verified, the exact command, when). The hook verifies it before allowing the action, shows its short id (`Approved via OKed (receipt rcpt_7Q2F)`), and keeps your own copy in `~/.oked/receipts.jsonl`. Check that file any time with `oked receipts verify`. Since 0.6.0 the hook denies any approval that comes without a valid receipt. Set `OKED_REQUIRE_RECEIPT=0` only for a backend that does not sign receipts. See [docs/receipts.md](../../docs/receipts.md).
 
 ## Degraded-mode behavior
 

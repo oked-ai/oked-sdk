@@ -25,7 +25,7 @@ const { seed, publicKey } = generateSigningSeed();
 const signer = signerFromSeed(seed, "gate-test");
 const key: ReceiptKey = { kid: "gate-test", alg: "Ed25519", public_key: publicKey, not_before: "2026-01-01T00:00:00.000Z", not_after: null };
 
-type Mode = "valid" | "tamper" | "other-action" | "replay" | "none" | "decision-mismatch";
+type Mode = "valid" | "tamper" | "other-action" | "replay" | "none" | "none-denied" | "decision-mismatch";
 
 describe("approve() receipt gate", () => {
   let server: Server;
@@ -87,13 +87,14 @@ describe("approve() receipt gate", () => {
           approvalId = (lastValid as any).body.request_id;
         }
         if (mode === "valid") lastValid = receipt;
+        const decision = mode === "none-denied" ? "denied" : "approved";
         res.writeHead(200, { "Content-Type": "application/json" });
         res.end(
           JSON.stringify({
             approval_id: approvalId,
-            decision: "approved",
-            status: "approved",
-            ...(mode === "none" ? {} : { receipt }),
+            decision,
+            status: decision,
+            ...(mode === "none" || mode === "none-denied" ? {} : { receipt }),
           }),
         );
       });
@@ -139,18 +140,28 @@ describe("approve() receipt gate", () => {
     await assert.rejects(() => ask(client()), (e: any) => e instanceof OKedReceiptError && e.problems.includes("decision_mismatch"));
   });
 
-  it("no receipt: allowed while requireReceipt is off (0.5.0 default)", async () => {
+  it("an approval with no receipt is denied by default (0.6.0)", async () => {
     mode = "none";
+    await assert.rejects(
+      () => ask(client()),
+      (e: any) => e instanceof OKedReceiptError && e.problems.includes("missing"),
+    );
+  });
+
+  it("OKED_REQUIRE_RECEIPT=0 or requireReceipt: false allows it (backends that do not sign yet)", async () => {
+    mode = "none";
+    assert.equal((await ask(client({ requireReceipt: false }))).approved, true);
+    process.env.OKED_REQUIRE_RECEIPT = "0";
     const r = await ask(client());
     assert.equal(r.approved, true);
     assert.equal(r.receipt, undefined);
   });
 
-  it("no receipt with requireReceipt on: the decision becomes a deny", async () => {
-    mode = "none";
-    await assert.rejects(() => ask(client({ requireReceipt: true })), OKedReceiptError);
-    process.env.OKED_REQUIRE_RECEIPT = "1";
-    await assert.rejects(() => ask(client()), OKedReceiptError);
+  it("a deny without a receipt stays a plain deny, not a receipt error", async () => {
+    mode = "none-denied";
+    const r = await ask(client());
+    assert.equal(r.approved, false);
+    assert.equal(r.decision, "denied");
   });
 
   it("fetches an unknown kid once from the keys URL, then uses the disk cache", async () => {
