@@ -39,8 +39,8 @@ oversight). It does not by itself make anyone compliant.
   Telegram account or the dashboard session, not the person holding it.
   Passkey step-up (assurance `passkey`) is planned.
 - **That the action then ran, or what it returned.** A receipt covers the
-  decision. The integration enforces it: with `requireReceipt` on, the action
-  only runs once a valid receipt for it exists.
+  decision. The integration enforces it: by default (since 0.6.0) an approved
+  action only runs once a valid receipt for it exists.
 - **Independence from OKed itself.** OKed holds the signing key, so OKed
   alone could in principle rewrite a chain and sign it again. Two things make
   that detectable today: your own copy of the receipts (the Claude Code hook
@@ -186,7 +186,7 @@ degraded-mode allow.
 
 | Setting | Effect |
 |---|---|
-| `requireReceipt` (env `OKED_REQUIRE_RECEIPT=1`) | A decision with no receipt also denies. Off by default in 0.5.0, on by default from 0.6.0. |
+| `requireReceipt` (env `OKED_REQUIRE_RECEIPT`) | An approval with no receipt also denies. On by default since 0.6.0 (it was off in 0.5.0). Set `false` / `OKED_REQUIRE_RECEIPT=0` only for a backend that does not sign receipts. A deny or a timeout without a receipt stays a deny. |
 | `receiptKeysUrl` (env `OKED_RECEIPT_KEYS_URL`) | Where to fetch a key the SDK has not seen. Default is OKed's published set, independent of `backendUrl`; https only, except loopback for local development. |
 | `receiptKeys` | Verify with exactly these keys and never fetch (self-hosted backends, tests). |
 

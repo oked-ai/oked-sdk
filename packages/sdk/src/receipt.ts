@@ -87,7 +87,8 @@ export async function keysFor(kid: string, trust: ReceiptTrust): Promise<Receipt
  * Check the receipt that came with a decision before anyone acts on it: a
  * valid signature by a published OKed key, for this request id, this
  * decision, and the exact action and nonce we sent. Throws OKedReceiptError
- * on any mismatch. A missing receipt throws only when `required`.
+ * on any mismatch. A missing receipt throws only for an approval, when
+ * `required`: a deny or timeout without one is a deny anyway.
  */
 export async function checkReceipt(
   result: { approval_id: string | null; decision: string; receipt?: unknown },
@@ -95,7 +96,7 @@ export async function checkReceipt(
   opts: { required: boolean; trust: ReceiptTrust },
 ): Promise<SignedReceipt | undefined> {
   if (result.receipt === undefined || result.receipt === null) {
-    if (opts.required) throw new OKedReceiptError("missing", ["missing"]);
+    if (opts.required && result.decision === "approved") throw new OKedReceiptError("missing", ["missing"]);
     return undefined;
   }
   const receipt = result.receipt as SignedReceipt;

@@ -20,8 +20,8 @@ export interface ApprovalResponse {
   /**
    * The signed receipt for this decision, already verified: OKed's signature,
    * this request, this decision, and the exact action and nonce sent. Absent
-   * only when the backend sent none and requireReceipt is off, or when the
-   * request timed out on our side.
+   * for a deny or timeout that came without one (e.g. a client-side timeout),
+   * or when requireReceipt is off and the backend sent none.
    */
   receipt?: SignedReceipt;
 }
@@ -65,9 +65,10 @@ export interface OKedConfig {
    */
   heartbeatIntervalMs: number;
   /**
-   * Deny any decision that arrives without a valid receipt. A receipt that is
-   * present but does not verify always denies, whatever this says. Default
-   * false in 0.5.0, true from 0.6.0. Env OKED_REQUIRE_RECEIPT=1.
+   * Deny an approval that arrives without a receipt. A receipt that is present
+   * but does not verify always denies, whatever this says. Default true (since
+   * 0.6.0); set false, or env OKED_REQUIRE_RECEIPT=0, only for a backend that
+   * does not sign receipts.
    */
   requireReceipt: boolean;
   /**

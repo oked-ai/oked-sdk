@@ -25,8 +25,11 @@ and OpenClaw sends none, so the SDK sends a fresh `nonce` per request and the su
 is `{ type, operator_id, request_id, source, action, description, tool_input,
 client_nonce }`. The SDK recomputes it from what it sent.
 
-**`requireReceipt` is off by default in 0.5.0, the first release with receipts.** As the PRD says (on from 0.6.0). An
-invalid receipt always denies; only a missing one is tolerated while it is off.
+**`requireReceipt` was off by default in 0.5.0 and is on from 0.6.0.** As the PRD says. An
+invalid receipt always denies. A missing receipt denies only an approval: a deny or a
+timeout without one is a deny already, and keeps its own message (the backend's
+long-poll error path answers `timeout` with no receipt). The PRD says a missing receipt
+"turns any decision into a deny"; the outcome is the same.
 
 **Keys: pinned, then cached, then a fixed URL.** The PRD says keys are fetched once,
 cached next to `~/.oked/config.json`, and new keys accepted only from the well-known URL
