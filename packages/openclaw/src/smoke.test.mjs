@@ -295,10 +295,16 @@ const UNREACHABLE = "http://127.0.0.1:1";
     await assertDenied(register(), event, ctx, /receipt did not verify \(malformed\).*do NOT retry/i);
     console.log("OK plugin: an approval with a broken receipt is blocked");
 
+    // Default since 0.6.0: an approval with no receipt is blocked.
     reply = {};
-    process.env.OKED_REQUIRE_RECEIPT = "1";
+    delete process.env.OKED_REQUIRE_RECEIPT;
     await assertDenied(register(), event, ctx, /receipt did not verify \(missing\)/i);
-    console.log("OK plugin: requireReceipt blocks an approval that has no receipt");
+    console.log("OK plugin: by default, an approval that has no receipt is blocked");
+
+    // OKED_REQUIRE_RECEIPT=0 turns the requirement off (backends that do not sign yet).
+    process.env.OKED_REQUIRE_RECEIPT = "0";
+    assert.equal(await register()(event, ctx), undefined, "OKED_REQUIRE_RECEIPT=0 should allow");
+    console.log("OK plugin: OKED_REQUIRE_RECEIPT=0 allows an approval that has no receipt");
   } finally {
     delete process.env.OKED_REQUIRE_RECEIPT;
     server.close();

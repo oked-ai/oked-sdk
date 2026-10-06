@@ -45,8 +45,9 @@ describe("OKedClient.approve held requests", () => {
     server.close();
   });
 
+  // These tests are about the transport, not receipts: the stub sends none.
   const client = (timeout: number) =>
-    new OKedClient({ apiKey: "k", backendUrl: `http://127.0.0.1:${port}`, timeout });
+    new OKedClient({ apiKey: "k", backendUrl: `http://127.0.0.1:${port}`, timeout, requireReceipt: false });
   const ask = (c: OKedClient) => c.approve({ action: "Bash", description: "x", tier: "review" });
 
   it("no headers before our abort -> decision timeout, not an outage", async () => {

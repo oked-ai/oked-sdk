@@ -10,7 +10,7 @@ export interface PersistedConfig {
   rulesCacheTtlSeconds?: number;
   /** Min interval (seconds) between heartbeats. See OKedConfig.heartbeatIntervalMs. */
   heartbeatIntervalSeconds?: number;
-  /** Deny any decision that arrives without a valid receipt. See OKedConfig.requireReceipt. */
+  /** Deny an approval that arrives without a receipt (default true). See OKedConfig.requireReceipt. */
   requireReceipt?: boolean;
   /** Where to fetch receipt keys. See OKedConfig.receiptKeysUrl. */
   receiptKeysUrl?: string;

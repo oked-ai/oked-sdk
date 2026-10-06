@@ -137,7 +137,10 @@ export class OKedClient {
           ? persisted.heartbeatIntervalSeconds * 1000
           : undefined) ??
         86_400_000,
-      requireReceipt: config?.requireReceipt ?? envRequireReceipt() ?? persisted.requireReceipt ?? false,
+      // On by default from 0.6.0: an approval only counts with a valid receipt.
+      // OKED_REQUIRE_RECEIPT=0 (or requireReceipt: false) for a backend that
+      // does not sign receipts yet, e.g. an older self-hosted one.
+      requireReceipt: config?.requireReceipt ?? envRequireReceipt() ?? persisted.requireReceipt ?? true,
       receiptKeysUrl:
         config?.receiptKeysUrl ||
         process.env.OKED_RECEIPT_KEYS_URL ||
@@ -244,8 +247,8 @@ export class OKedClient {
     }
 
     // Nobody acts on a decision we cannot prove: an invalid receipt throws
-    // OKedReceiptError (every integration denies), and so does a missing one
-    // when requireReceipt is on.
+    // OKedReceiptError (every integration denies), and so does an approval
+    // with no receipt while requireReceipt is on (the default).
     const receipt = await checkReceipt(
       result,
       { action: request.action, description: request.description, toolInput: request.tool_input, source, nonce },
