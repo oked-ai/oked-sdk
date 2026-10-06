@@ -56,6 +56,68 @@ const SAFE_TOOL_ALIASES = new Set([
   "find",
 ]);
 
+// Claude Code built-ins that only steer the session itself (its background
+// tasks, todo list, plan mode, tool loading, questions to the user) or show
+// something to the user. They touch no files, network or other process, so a
+// prompt is pure approval fatigue.
+const SAFE_SESSION_TOOLS = new Set([
+  "TaskStop",
+  "KillShell",
+  "TaskOutput",
+  "BashOutput",
+  "TaskCreate",
+  "TaskUpdate",
+  "TodoWrite",
+  "ToolSearch",
+  "Skill",
+  "AskUserQuestion",
+  "EnterPlanMode",
+  "ExitPlanMode",
+  "ListAgents",
+  "CronList",
+  "ScheduleWakeup",
+  "LSP",
+  "ReportFindings",
+  "SendUserFile",
+  "PushNotification",
+]);
+
+// Claude Code built-ins with a small effect: a new worktree, a session-only
+// scheduled prompt, a message to another agent, a web page fetch. Logged, not
+// prompted; whatever they lead to (the scheduled prompt's tool calls, the other
+// agent's actions) is gated on its own.
+const WARNING_SESSION_TOOLS = new Set([
+  "EnterWorktree",
+  "CronCreate",
+  "CronDelete",
+  "SendMessage",
+  "WebFetch",
+]);
+
+/** Built-ins whose tier depends on their input. Returns null for other tools. */
+function classifySessionTool(toolName: string, toolInput: Record<string, unknown>): RiskTier | null {
+  switch (toolName) {
+    // "keep" leaves everything on disk. "remove" refuses when there is
+    // unsaved work, unless discard_changes deletes it for good.
+    case "ExitWorktree":
+      if (toolInput.action !== "remove") return "safe";
+      return toolInput.discard_changes === true ? "high_stakes" : "warning";
+    // Monitor runs a shell command (classified like Bash) or reads a WebSocket.
+    case "Monitor":
+      if (typeof toolInput.command === "string") return classifyBashCommand(toolInput.command);
+      return "warning";
+    // Artifact: publishing puts content on claude.ai; delete is permanent;
+    // read / list / open / quickstart / pin only look or arrange.
+    case "Artifact": {
+      const action = typeof toolInput.action === "string" ? toolInput.action : "publish";
+      if (action === "delete") return "high_stakes";
+      if (action === "publish") return "review";
+      return "safe";
+    }
+  }
+  return null;
+}
+
 // Tools that are always review-tier risk (modify local files)
 const REVIEW_TOOLS = new Set<string>([]);
 
@@ -327,6 +389,10 @@ export function classify(
   if (SAFE_TOOL_ALIASES.has(toolName.toLowerCase())) return "safe";
   if (HIGH_STAKES_TOOLS.has(toolName)) return "high_stakes";
   if (REVIEW_TOOLS.has(toolName)) return "review";
+  if (SAFE_SESSION_TOOLS.has(toolName)) return "safe";
+  if (WARNING_SESSION_TOOLS.has(toolName)) return "warning";
+  const sessionTier = classifySessionTool(toolName, toolInput);
+  if (sessionTier !== null) return sessionTier;
 
   // File-editing tools: a write/edit can't act on its own — whatever later
   // executes it is classified separately — so it's `warning` (logged, no
