@@ -1,0 +1,22 @@
+[
+  {
+    "name": "RFC 8785 3.2.4 example",
+    "input": "{\"numbers\":[333333333.33333329,1E30,4.50,2e-3,0.000000000000000000000000001],\"string\":\"\\u20ac$\\u000F\\u000aA'\\u0042\\u0022\\u005c\\\\\\\"\\/\",\"literals\":[null,true,false]}",
+    "canonical": "{\"literals\":[null,true,false],\"numbers\":[333333333.3333333,1e+30,4.5,0.002,1e-27],\"string\":\"\u20ac$\\u000f\\nA'B\\\"\\\\\\\\\\\"/\"}"
+  },
+  {
+    "name": "RFC 8785 3.2.3 key sorting by UTF-16 code unit",
+    "input": "{\"\\u20ac\":\"Euro Sign\",\"\\r\":\"Carriage Return\",\"\\ufb33\":\"Hebrew Letter Dalet With Dagesh\",\"1\":\"One\",\"\\ud83d\\ude00\":\"Emoji: Grinning Face\",\"\\u0080\":\"Control\",\"\\u00f6\":\"Latin Small Letter O With Diaeresis\"}",
+    "canonical": "{\"\\r\":\"Carriage Return\",\"1\":\"One\",\"\u0080\":\"Control\",\"\u00f6\":\"Latin Small Letter O With Diaeresis\",\"\u20ac\":\"Euro Sign\",\"\ud83d\ude00\":\"Emoji: Grinning Face\",\"\ufb33\":\"Hebrew Letter Dalet With Dagesh\"}"
+  },
+  {
+    "name": "nested objects and arrays, no whitespace",
+    "input": "{ \"b\": [ 1, { \"z\": null, \"a\": true } ], \"a\": \"x\" }",
+    "canonical": "{\"a\":\"x\",\"b\":[1,{\"a\":true,\"z\":null}]}"
+  },
+  {
+    "name": "negative zero and integers",
+    "input": "[-0, 0, 1, -1, 100, 1.5e3]",
+    "canonical": "[0,0,1,-1,100,1500]"
+  }
+]

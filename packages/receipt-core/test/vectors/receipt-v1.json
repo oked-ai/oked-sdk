@@ -1,0 +1,137 @@
+{
+  "note": "Golden vectors for OKed receipt v1. The seed is test-only and public; never use it to sign real receipts.",
+  "key": {
+    "seed": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8",
+    "kid": "test-2026-10",
+    "public_key": "A6EHv_POEL4dcN0Y50vAmWfk1jCbpQ1fHdyGZBJVMbg",
+    "not_before": "2026-10-01T00:00:00.000Z",
+    "not_after": null
+  },
+  "subject": {
+    "type": "tool_call",
+    "operator_id": "11111111-1111-4111-8111-111111111111",
+    "request_id": "22222222-2222-4222-8222-222222222222",
+    "source": "claude-code",
+    "action": "Bash",
+    "description": "Force-push to main",
+    "tool_input": {
+      "command": "git push --force origin main",
+      "description": "Force-push to main"
+    },
+    "client_nonce": "33333333-3333-4333-8333-333333333333"
+  },
+  "subject_jcs": "{\"action\":\"Bash\",\"client_nonce\":\"33333333-3333-4333-8333-333333333333\",\"description\":\"Force-push to main\",\"operator_id\":\"11111111-1111-4111-8111-111111111111\",\"request_id\":\"22222222-2222-4222-8222-222222222222\",\"source\":\"claude-code\",\"tool_input\":{\"command\":\"git push --force origin main\",\"description\":\"Force-push to main\"},\"type\":\"tool_call\"}",
+  "subject_digest": "sha256:00ccc1fe466e1c0d923049111fce85db5a6e4a7ed42141946ba24490fa089427",
+  "shown": {
+    "classifier_version": "v2",
+    "tier": "high_stakes",
+    "title": "Force-push to main",
+    "target": "origin/main",
+    "annotation": null,
+    "subline": null,
+    "body": "git push --force origin main",
+    "footnote": null
+  },
+  "display_digest": "sha256:59b461ac6f6934d6426c4b7f4ea9bd7e977aa8b753da8799c601375b54a3666b",
+  "receipts": [
+    {
+      "envelope": {
+        "body": {
+          "v": 1,
+          "receipt_id": "rcpt_0000000000000000000000000A",
+          "chain_id": "op_11111111-1111-4111-8111-111111111111",
+          "seq": 1,
+          "issued_at": "2026-10-05T09:31:02.000Z",
+          "issuer": "api.oked.ai",
+          "operator_id": "11111111-1111-4111-8111-111111111111",
+          "request_id": "22222222-2222-4222-8222-222222222222",
+          "subject_type": "tool_call",
+          "subject_digest": "sha256:00ccc1fe466e1c0d923049111fce85db5a6e4a7ed42141946ba24490fa089427",
+          "display_digest": "sha256:59b461ac6f6934d6426c4b7f4ea9bd7e977aa8b753da8799c601375b54a3666b",
+          "summary": "Force-push to main",
+          "risk_tier": "high_stakes",
+          "decision": "approved",
+          "decided_at": "2026-10-05T09:31:01.000Z",
+          "decider": {
+            "kind": "human",
+            "operator_id": "11111111-1111-4111-8111-111111111111",
+            "display_name": "Oren",
+            "assurance": "channel",
+            "channel": "telegram",
+            "rule_id": null,
+            "reason": null
+          },
+          "requester": {
+            "operator_id": "11111111-1111-4111-8111-111111111111",
+            "api_key_id": "44444444-4444-4444-8444-444444444444",
+            "client": "@oked/claude-code@0.4.0"
+          },
+          "same_person": true,
+          "prev_receipt_digest": null
+        },
+        "alg": "Ed25519",
+        "kid": "test-2026-10",
+        "sig": "6ulqPZoT3l75XXzYQqQyLqJYkvnrppB8ZA81F15woL66lAEQNsdlt6TI_PUPKsRuDp_Ghf-ANWWECBh6tpZ_DQ"
+      },
+      "body_jcs": "{\"chain_id\":\"op_11111111-1111-4111-8111-111111111111\",\"decided_at\":\"2026-10-05T09:31:01.000Z\",\"decider\":{\"assurance\":\"channel\",\"channel\":\"telegram\",\"display_name\":\"Oren\",\"kind\":\"human\",\"operator_id\":\"11111111-1111-4111-8111-111111111111\",\"reason\":null,\"rule_id\":null},\"decision\":\"approved\",\"display_digest\":\"sha256:59b461ac6f6934d6426c4b7f4ea9bd7e977aa8b753da8799c601375b54a3666b\",\"issued_at\":\"2026-10-05T09:31:02.000Z\",\"issuer\":\"api.oked.ai\",\"operator_id\":\"11111111-1111-4111-8111-111111111111\",\"prev_receipt_digest\":null,\"receipt_id\":\"rcpt_0000000000000000000000000A\",\"request_id\":\"22222222-2222-4222-8222-222222222222\",\"requester\":{\"api_key_id\":\"44444444-4444-4444-8444-444444444444\",\"client\":\"@oked/claude-code@0.4.0\",\"operator_id\":\"11111111-1111-4111-8111-111111111111\"},\"risk_tier\":\"high_stakes\",\"same_person\":true,\"seq\":1,\"subject_digest\":\"sha256:00ccc1fe466e1c0d923049111fce85db5a6e4a7ed42141946ba24490fa089427\",\"subject_type\":\"tool_call\",\"summary\":\"Force-push to main\",\"v\":1}",
+      "body_digest": "sha256:b8e83e852daa2bbc63410b357927540f74c02e9877f597bfbe426398e9de76c4"
+    },
+    {
+      "envelope": {
+        "body": {
+          "v": 1,
+          "receipt_id": "rcpt_0000000000000000000000000B",
+          "chain_id": "op_11111111-1111-4111-8111-111111111111",
+          "seq": 2,
+          "issued_at": "2026-10-05T09:41:02.000Z",
+          "issuer": "api.oked.ai",
+          "operator_id": "11111111-1111-4111-8111-111111111111",
+          "request_id": "55555555-5555-4555-8555-555555555555",
+          "subject_type": "tool_call",
+          "subject_digest": "sha256:569437d21bf281c8bccc6bb56c6fe79ea1fa89b081af2610dc64afb099743b02",
+          "display_digest": "sha256:59b461ac6f6934d6426c4b7f4ea9bd7e977aa8b753da8799c601375b54a3666b",
+          "summary": "Force-push to main",
+          "risk_tier": "high_stakes",
+          "decision": "timed_out",
+          "decided_at": "2026-10-05T09:41:01.000Z",
+          "decider": {
+            "kind": "system",
+            "operator_id": null,
+            "display_name": null,
+            "assurance": "none",
+            "channel": null,
+            "rule_id": null,
+            "reason": "timeout"
+          },
+          "requester": {
+            "operator_id": "11111111-1111-4111-8111-111111111111",
+            "api_key_id": "44444444-4444-4444-8444-444444444444",
+            "client": "@oked/claude-code@0.4.0"
+          },
+          "same_person": false,
+          "prev_receipt_digest": "sha256:b8e83e852daa2bbc63410b357927540f74c02e9877f597bfbe426398e9de76c4"
+        },
+        "alg": "Ed25519",
+        "kid": "test-2026-10",
+        "sig": "xJHsHnCnafwXS6eafcWEdZX3_osd8ETNPIvfyJcBLKJtte9627E5WsOAIVFgqIOBQTfoJqIFOHLhZSess207AA"
+      },
+      "body_jcs": "{\"chain_id\":\"op_11111111-1111-4111-8111-111111111111\",\"decided_at\":\"2026-10-05T09:41:01.000Z\",\"decider\":{\"assurance\":\"none\",\"channel\":null,\"display_name\":null,\"kind\":\"system\",\"operator_id\":null,\"reason\":\"timeout\",\"rule_id\":null},\"decision\":\"timed_out\",\"display_digest\":\"sha256:59b461ac6f6934d6426c4b7f4ea9bd7e977aa8b753da8799c601375b54a3666b\",\"issued_at\":\"2026-10-05T09:41:02.000Z\",\"issuer\":\"api.oked.ai\",\"operator_id\":\"11111111-1111-4111-8111-111111111111\",\"prev_receipt_digest\":\"sha256:b8e83e852daa2bbc63410b357927540f74c02e9877f597bfbe426398e9de76c4\",\"receipt_id\":\"rcpt_0000000000000000000000000B\",\"request_id\":\"55555555-5555-4555-8555-555555555555\",\"requester\":{\"api_key_id\":\"44444444-4444-4444-8444-444444444444\",\"client\":\"@oked/claude-code@0.4.0\",\"operator_id\":\"11111111-1111-4111-8111-111111111111\"},\"risk_tier\":\"high_stakes\",\"same_person\":false,\"seq\":2,\"subject_digest\":\"sha256:569437d21bf281c8bccc6bb56c6fe79ea1fa89b081af2610dc64afb099743b02\",\"subject_type\":\"tool_call\",\"summary\":\"Force-push to main\",\"v\":1}",
+      "body_digest": "sha256:ba1b0113d3caf478081308e74c781133eb81fdd31ca88d88fd9a6ae27437b3ca"
+    }
+  ],
+  "chain_head": {
+    "body": {
+      "v": 1,
+      "type": "chain_head",
+      "chain_id": "op_11111111-1111-4111-8111-111111111111",
+      "operator_id": "11111111-1111-4111-8111-111111111111",
+      "seq": 2,
+      "digest": "sha256:ba1b0113d3caf478081308e74c781133eb81fdd31ca88d88fd9a6ae27437b3ca",
+      "issued_at": "2026-10-05T09:45:00.000Z",
+      "issuer": "api.oked.ai"
+    },
+    "alg": "Ed25519",
+    "kid": "test-2026-10",
+    "sig": "-IFPjHChPD1MDqZNXAYC4o-PQS0JIncyhiJAMsi95yn449TFKDPn7kQ9JTGypl-gsDGTl717ZT0whmJo1xHTCA"
+  }
+}

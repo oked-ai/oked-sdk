@@ -4,6 +4,8 @@ import type { ApprovalRequest, ApprovalResponse, OKedConfig } from "./types.js";
 import type { Rule } from "./rules.js";
 import { loadOKedConfig, OKED_RULES_CACHE_PATH, OKED_HEARTBEAT_PATH } from "./config.js";
 import { OKedAuthError, OKedBackendUnreachableError } from "./errors.js";
+import { randomUUID } from "crypto";
+import { checkReceipt, OKED_RECEIPT_KEYS_URL } from "./receipt.js";
 import { hostname } from "os";
 
 /**
@@ -14,8 +16,11 @@ import { hostname } from "os";
  * kills the hook process must set their own limit ABOVE this one, so our
  * fail-safe deny is written before the harness pulls the plug. See
  * HOOK_TIMEOUT_SECONDS in @oked/claude-code.
+ *
+ * 30s above the backend's own 10 minute expiry, so the backend's "timeout"
+ * answer normally arrives before our abort fires (backend < SDK < harness).
  */
-export const DEFAULT_APPROVAL_TIMEOUT_MS = 600_000;
+export const DEFAULT_APPROVAL_TIMEOUT_MS = 630_000;
 
 function envStrictFailClosed(): boolean | undefined {
   const raw = process.env.OKED_STRICT_FAIL_CLOSED;
@@ -28,6 +33,12 @@ function envRulesCacheTtlMs(): number | undefined {
   if (raw === undefined) return undefined;
   const n = Number(raw);
   return Number.isFinite(n) && n >= 0 ? n * 1000 : undefined;
+}
+
+function envRequireReceipt(): boolean | undefined {
+  const raw = process.env.OKED_REQUIRE_RECEIPT;
+  if (raw === undefined) return undefined;
+  return raw === "1" || raw.toLowerCase() === "true";
 }
 
 function envHeartbeatIntervalMs(): number | undefined {
@@ -126,7 +137,20 @@ export class OKedClient {
           ? persisted.heartbeatIntervalSeconds * 1000
           : undefined) ??
         86_400_000,
+      requireReceipt: config?.requireReceipt ?? envRequireReceipt() ?? persisted.requireReceipt ?? false,
+      receiptKeysUrl:
+        config?.receiptKeysUrl ||
+        process.env.OKED_RECEIPT_KEYS_URL ||
+        persisted.receiptKeysUrl ||
+        OKED_RECEIPT_KEYS_URL,
+      receiptKeys: config?.receiptKeys,
+      client: config?.client,
+      source: config?.source,
     };
+  }
+
+  get requireReceipt(): boolean {
+    return this.config.requireReceipt;
   }
 
   get strictFailClosed(): boolean {
@@ -143,6 +167,10 @@ export class OKedClient {
 
   async approve(request: ApprovalRequest): Promise<ApprovalResponse> {
     const signal = AbortSignal.timeout(this.config.timeout);
+    // A fresh nonce per request goes into the receipt's subject, so a receipt
+    // for an earlier, identical action can never be replayed for this one.
+    const nonce = randomUUID();
+    const source = this.config.source || "sdk";
     const doFetch = () =>
       fetch(`${this.config.backendUrl}/api/v1/approve`, {
         method: "POST",
@@ -155,10 +183,13 @@ export class OKedClient {
           description: request.description,
           tier: request.tier,
           fields: request.fields,
+          nonce,
+          client: this.config.client,
           metadata: {
             tool_input: request.tool_input,
             session_id: request.session_id,
             cwd: request.cwd,
+            source: this.config.source,
           },
         }),
         signal,
@@ -177,9 +208,12 @@ export class OKedClient {
         }
       }
     } catch (err) {
-      // Network failure or the request-level timeout firing (AbortError).
-      // Both mean we never got a decision from the backend -> treat as an
-      // outage so degraded-mode can apply.
+      // The backend accepted the request and then held it past a timer: no
+      // human decided in time. That is a timeout (deny), not an outage, so it
+      // must never fall through to degraded-mode allow.
+      if (isHeldRequestTimeout(err)) return HELD_TIMEOUT;
+      // Connect failure: we never reached the backend -> treat as an outage
+      // so degraded-mode can apply.
       throw new OKedBackendUnreachableError(
         err instanceof Error ? `OKed backend unreachable: ${err.message}` : "OKed backend unreachable",
         err,
@@ -191,22 +225,41 @@ export class OKedClient {
       if (res.status === 401 || res.status === 403) {
         throw new OKedAuthError(`OKed backend error ${res.status}: ${body}`, res.status);
       }
+      // A gateway that gave up waiting on a held long-poll: same as above.
+      if (res.status === 504) return HELD_TIMEOUT;
       if (res.status >= 500) {
         throw new OKedBackendUnreachableError(`OKed backend error ${res.status}: ${body}`);
       }
       throw new Error(`OKed backend error ${res.status}: ${body}`);
     }
 
-    const result = (await res.json()) as {
-      approval_id: string;
-      decision: string;
-      status: string;
-    };
+    let result: { approval_id: string | null; decision: string; status: string; receipt?: unknown };
+    try {
+      // The backend sends headers at once and streams whitespace heartbeats
+      // while it waits, so the wait for a human happens here, in the body.
+      result = (await res.json()) as typeof result;
+    } catch (err) {
+      if (isHeldRequestTimeout(err)) return HELD_TIMEOUT;
+      throw err;
+    }
+
+    // Nobody acts on a decision we cannot prove: an invalid receipt throws
+    // OKedReceiptError (every integration denies), and so does a missing one
+    // when requireReceipt is on.
+    const receipt = await checkReceipt(
+      result,
+      { action: request.action, description: request.description, toolInput: request.tool_input, source, nonce },
+      {
+        required: this.config.requireReceipt,
+        trust: { keys: this.config.receiptKeys, keysUrl: this.config.receiptKeysUrl },
+      },
+    );
 
     return {
       approved: result.decision === "approved",
       approval_id: result.approval_id,
       decision: result.decision as ApprovalResponse["decision"],
+      ...(receipt ? { receipt } : {}),
     };
   }
 
@@ -287,6 +340,22 @@ export class OKedClient {
   }
 }
 
+const HELD_TIMEOUT: ApprovalResponse = { approved: false, approval_id: null, decision: "timeout" };
+
+/**
+ * True when a request reached the backend and then sat past a timer: our own
+ * abort (TimeoutError), or undici's 300s headers/body timeouts, which fire
+ * regardless of the abort signal on a silent long-poll.
+ */
+function isHeldRequestTimeout(err: unknown): boolean {
+  if (!err || typeof err !== "object") return false;
+  // AbortSignal.timeout() rejects with a DOMException, which is not an Error
+  // instance on every Node version, so match on the name alone.
+  if ((err as { name?: string }).name === "TimeoutError") return true;
+  const code = (err as { cause?: { code?: string } }).cause?.code ?? (err as { code?: string }).code;
+  return code === "UND_ERR_HEADERS_TIMEOUT" || code === "UND_ERR_BODY_TIMEOUT";
+}
+
 function isRetriableConnectError(err: unknown): boolean {
   if (!(err instanceof Error)) return false;
   if (err.name === "AbortError") return false;
@@ -300,7 +369,17 @@ function isRetriableConnectError(err: unknown): boolean {
   );
 }
 
-export { OKedAuthError, OKedBackendUnreachableError } from "./errors.js";
+export { OKedAuthError, OKedBackendUnreachableError, OKedReceiptError } from "./errors.js";
+export { checkReceipt, keysFor, keysUrlAllowed, OKED_RECEIPT_KEYS_URL } from "./receipt.js";
+export { PINNED_RECEIPT_KEYS } from "./receipt-keys.js";
+export {
+  verifyReceipt,
+  verifyChain,
+  shortReceiptId,
+  type SignedReceipt,
+  type ReceiptBody,
+  type ReceiptKey,
+} from "@oked/receipt-core";
 export { TIER_ORDER, degradedDecision } from "./degraded.js";
 export { classify } from "./classify.js";
 export { describe, describeFields } from "./describe.js";
@@ -315,7 +394,7 @@ export type {
 export type { Rendered } from "./describe.js";
 export { CLASSIFIER_VERSION } from "./kinds.js";
 export type { OperationKind } from "./kinds.js";
-export { loadOKedConfig, OKED_CONFIG_PATH } from "./config.js";
+export { loadOKedConfig, OKED_CONFIG_PATH, OKED_RECEIPT_KEYS_PATH } from "./config.js";
 export type { PersistedConfig } from "./config.js";
 export type {
   RiskTier,

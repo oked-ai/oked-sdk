@@ -2,7 +2,6 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync, chmodSync } from "fs";
 import { homedir, hostname } from "os";
 import { join, dirname } from "path";
-import { fileURLToPath } from "url";
 import { spawn } from "child_process";
 import { createInterface } from "readline";
 import { OKedClient, loadOKedConfig, OKED_CONFIG_PATH } from "@oked/sdk";
@@ -13,19 +12,11 @@ import {
   ensureHookTimeout,
 } from "./hook-config.js";
 
+import { CLIENT_VERSION } from "./version.js";
+import { OKED_RECEIPTS_LOG, verifyReceiptsFile } from "./receipts.js";
+
 const DEFAULT_BACKEND_URL =
   process.env.OKED_BACKEND_URL || "https://api.oked.ai";
-// Derived from this package's package.json at runtime so the version the
-// backend sees (client_version) can never drift from what's actually shipped.
-// From dist/cli.js, package.json sits one dir up at the package root.
-const CLIENT_VERSION: string = (() => {
-  try {
-    const pkgPath = join(dirname(fileURLToPath(import.meta.url)), "..", "package.json");
-    return JSON.parse(readFileSync(pkgPath, "utf-8")).version ?? "0.0.0";
-  } catch {
-    return "0.0.0";
-  }
-})();
 
 function getSettingsPath(): string {
   return join(process.cwd(), ".claude", "settings.json");
@@ -344,6 +335,31 @@ function uninstall(): void {
   console.log("OKed hooks removed from this project.");
 }
 
+async function receipts(): Promise<void> {
+  if (process.argv[3] !== "verify") {
+    console.log("Usage: oked receipts verify [file]");
+    console.log(`  file defaults to ${OKED_RECEIPTS_LOG}`);
+    return;
+  }
+  const file = process.argv[4] || OKED_RECEIPTS_LOG;
+  const report = await verifyReceiptsFile(file);
+  console.log(`${file}: ${report.total} receipt(s), ${report.valid} valid`);
+  for (const bad of report.invalid) {
+    console.log(`  line ${bad.line} ${bad.receipt_id ?? "(no id)"}: ${bad.problems.join(", ")}`);
+  }
+  for (const line of report.unparsable) console.log(`  line ${line}: not valid JSON`);
+  for (const chain of report.chains) {
+    const gaps = chain.gaps.length
+      ? `, ${chain.gaps.length} gap(s) (expected when other devices share this chain)`
+      : "";
+    console.log(`  chain ${chain.chain_id}: seq ${chain.first_seq}..${chain.last_seq}${gaps}`);
+    for (const b of chain.breaks) console.log(`    BROKEN at seq ${b.seq}: ${b.reason}`);
+  }
+  const ok = report.invalid.length === 0 && report.unparsable.length === 0 && report.chains.every((c) => c.breaks.length === 0);
+  console.log(ok ? "OK" : "PROBLEMS FOUND");
+  if (!ok) process.exitCode = 1;
+}
+
 // CLI entry point
 const command = process.argv[2];
 
@@ -357,6 +373,12 @@ switch (command) {
   case "uninstall":
     uninstall();
     break;
+  case "receipts":
+    receipts().catch((err) => {
+      console.error(err instanceof Error ? err.message : err);
+      process.exitCode = 1;
+    });
+    break;
   default:
     console.log("Usage: oked <command>");
     console.log("");
@@ -364,5 +386,6 @@ switch (command) {
     console.log("  init        Install OKed hooks in current project and pair this device");
     console.log("  status      Show current config and connection status");
     console.log("  uninstall   Remove OKed hooks from current project");
+    console.log("  receipts verify [file]  Check this machine's approval receipts");
     break;
 }

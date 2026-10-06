@@ -12,8 +12,8 @@
  * via `OKED_API_KEY` (or `~/.oked/config.json`); see README.
  *
  * Failure semantics mirror the other OKed integrations: fail safe. Auth
- * errors deny; backend-unreachable degrades per tier (`degradedDecision`);
- * any unexpected error denies. Never let an agent proceed when in doubt.
+ * errors and receipts that do not verify deny; backend-unreachable degrades
+ * per tier (`degradedDecision`); any unexpected error denies. Never let an agent proceed when in doubt.
  */
 import {
   OKedClient,
@@ -23,9 +23,24 @@ import {
   degradedDecision,
   OKedAuthError,
   OKedBackendUnreachableError,
+  OKedReceiptError,
   DEFAULT_APPROVAL_TIMEOUT_MS,
 } from "@oked/sdk";
 import type { HookCallback, PreToolUseHookInput } from "@anthropic-ai/claude-agent-sdk";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
+// This package's version, read from its package.json at runtime (dist/*.js
+// sits one dir below it) so receipts name the exact client that asked.
+const CLIENT_ID = (() => {
+  try {
+    const pkgPath = join(dirname(fileURLToPath(import.meta.url)), "..", "package.json");
+    return `@oked/claude-agent-sdk@${JSON.parse(readFileSync(pkgPath, "utf-8")).version}`;
+  } catch {
+    return "@oked/claude-agent-sdk";
+  }
+})();
 
 function log(msg: string): void {
   process.stderr.write(`[OKed] ${msg}\n`);
@@ -64,7 +79,7 @@ export const okedPreToolUseHook: HookCallback = async (rawInput) => {
 
   const tier = classify(toolName, toolInput);
 
-  const client = new OKedClient();
+  const client = new OKedClient({ client: CLIENT_ID, source: "claude-agent-sdk" });
 
   // Presence ping (throttled to once/day on disk, never throws). Fired before
   // the safe/warning return so installs that only run safe actions still
@@ -110,6 +125,11 @@ export const okedPreToolUseHook: HookCallback = async (rawInput) => {
     log(`Denied (${result.approval_id})`);
     return deny(`Denied via OKed: ${description}`);
   } catch (err) {
+    if (err instanceof OKedReceiptError) {
+      // A decision we cannot prove is not a decision — always deny.
+      log(`Approval receipt did not verify (${err.problems.join(", ")}) - action denied`);
+      return deny(`OKed: the approval receipt did not verify (${err.problems.join(", ")}); action denied`);
+    }
     if (err instanceof OKedAuthError) {
       // Auth misconfig is not an outage — always deny.
       log("Invalid API key - action denied");
