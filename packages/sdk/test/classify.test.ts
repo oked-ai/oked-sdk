@@ -360,16 +360,22 @@ describe("browser MCP tools", () => {
     assert.equal(classify("mcp__remote-devices__Claude_Browser__get_page_text", {}), "safe");
   });
 
-  it("computer: observing actions are safe, input actions are review", () => {
+  it("computer: observing actions are safe", () => {
     assert.equal(classify("mcp__Claude_Browser__computer", { action: "screenshot" }), "safe");
     assert.equal(classify("mcp__Claude_Browser__computer", { action: "scroll" }), "safe");
-    assert.equal(classify("mcp__Claude_Browser__computer", { action: "left_click" }), "review");
-    assert.equal(classify("mcp__claude-in-chrome__computer", { action: "type", text: "hi" }), "review");
   });
 
-  it("form fills, script execution and uploads are review", () => {
-    assert.equal(classify("mcp__Claude_Browser__form_input", { ref: "ref_1", value: "x" }), "review");
-    assert.equal(classify("mcp__Claude_Browser__javascript_tool", { text: "1" }), "review");
+  it("page interactions in the built-in browser are logged, not prompted", () => {
+    assert.equal(classify("mcp__Claude_Browser__computer", { action: "left_click" }), "warning");
+    assert.equal(classify("mcp__Claude_Browser__form_input", { ref: "ref_1", value: "x" }), "warning");
+    assert.equal(classify("mcp__Claude_Browser__javascript_tool", { text: "1" }), "warning");
+    assert.equal(classify("mcp__remote-devices__Claude_Browser__computer", { action: "type", text: "hi" }), "warning");
+  });
+
+  it("page interactions in the user's real Chrome stay review", () => {
+    assert.equal(classify("mcp__claude-in-chrome__computer", { action: "type", text: "hi" }), "review");
+    assert.equal(classify("mcp__claude-in-chrome__form_input", { ref: "ref_1", value: "x" }), "review");
+    assert.equal(classify("mcp__claude-in-chrome__javascript_tool", { text: "1" }), "review");
     assert.equal(classify("mcp__claude-in-chrome__file_upload", {}), "review");
   });
 
@@ -381,6 +387,10 @@ describe("browser MCP tools", () => {
     assert.equal(classify("mcp__Claude_Browser__browser_batch", { actions: [
       { name: "navigate", input: { url: "https://example.com" } },
       { name: "computer", input: { action: "left_click" } },
+    ] }), "warning");
+    assert.equal(classify("mcp__Claude_Browser__browser_batch", { actions: [
+      { name: "navigate", input: { url: "https://example.com" } },
+      { name: "preview_start", input: { name: "dev" } },
     ] }), "review");
     assert.equal(classify("mcp__Claude_Browser__browser_batch", { actions: [] }), "review");
   });

@@ -1194,7 +1194,15 @@ const SAFE_BROWSER_TOOLS = new Set([
 // `computer` actions that only observe or move the viewport.
 const SAFE_COMPUTER_ACTIONS = new Set(["screenshot", "zoom", "scroll", "scroll_to", "hover", "wait"]);
 
-function classifyBrowserTool(tool: string, toolInput: Record<string, unknown>): RiskTier {
+// Page interactions (clicks, typing, form fills, in-page JS). In the desktop
+// app's built-in browser pane these act in an isolated browser, mostly against
+// the user's own dev servers, so they're logged (`warning`) rather than
+// prompted: a prompt per click is pure approval fatigue. In Claude in Chrome
+// they act inside the user's real logged-in sessions (mail, banking, …), so
+// they stay `review`.
+const BROWSER_INTERACTION_TOOLS = new Set(["computer", "form_input", "javascript_tool"]);
+
+function classifyBrowserTool(tool: string, toolInput: Record<string, unknown>, server: string): RiskTier {
   if (SAFE_BROWSER_TOOLS.has(tool)) return "safe";
   // preview_start with `url` just opens a tab. With `name` it launches the
   // dev-server command from .claude/launch.json, which is arbitrary command
@@ -1202,8 +1210,9 @@ function classifyBrowserTool(tool: string, toolInput: Record<string, unknown>): 
   if (tool === "preview_start") {
     return typeof toolInput.url === "string" && toolInput.name === undefined ? "safe" : "review";
   }
-  if (tool === "computer") {
-    return SAFE_COMPUTER_ACTIONS.has(toolInput.action as string) ? "safe" : "review";
+  if (tool === "computer" && SAFE_COMPUTER_ACTIONS.has(toolInput.action as string)) return "safe";
+  if (BROWSER_INTERACTION_TOOLS.has(tool)) {
+    return server === "claude-in-chrome" ? "review" : "warning";
   }
   // A batch is as risky as its riskiest step.
   if (tool === "browser_batch") {
@@ -1214,7 +1223,7 @@ function classifyBrowserTool(tool: string, toolInput: Record<string, unknown>): 
       const name = (a as { name?: unknown })?.name;
       const input = (a as { input?: unknown })?.input;
       if (typeof name !== "string" || name === "browser_batch") return "review";
-      tier = maxTier(tier, classifyBrowserTool(name, (input && typeof input === "object" ? input : {}) as Record<string, unknown>));
+      tier = maxTier(tier, classifyBrowserTool(name, (input && typeof input === "object" ? input : {}) as Record<string, unknown>, server));
     }
     return tier;
   }
@@ -1225,9 +1234,8 @@ function classifyMcpTool(toolName: string, toolInput: Record<string, unknown> = 
   const parts = toolName.split("__");
   const tool = parts[parts.length - 1] || "";
 
-  if (parts.slice(1, -1).some((p) => BROWSER_MCP_SERVERS.has(p))) {
-    return classifyBrowserTool(tool, toolInput);
-  }
+  const browserServer = parts.slice(1, -1).find((p) => BROWSER_MCP_SERVERS.has(p));
+  if (browserServer) return classifyBrowserTool(tool, toolInput, browserServer);
 
   // Read-only retrieval verbs.
   if (tool.startsWith("list_") || tool.startsWith("get_") || tool.startsWith("search_") ||

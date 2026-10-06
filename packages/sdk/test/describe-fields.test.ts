@@ -808,3 +808,39 @@ describe("ssh and gh pr create — labels + kinds", () => {
     assert.equal(f!.Kind, "git_pr_create");
   });
 });
+
+describe("browser MCP tools", () => {
+  it("computer click leads with the action and uses action_summary as target", () => {
+    const f = describeFields("mcp__Claude_Browser__computer", { action: "left_click", coordinate: [1, 2], action_summary: "Opens the Filters menu" });
+    assert.equal(f!.Title, "Left click in browser");
+    assert.equal(f!.Target, "Opens the Filters menu");
+  });
+
+  it("typing shows the text, Chrome is named", () => {
+    const f = describeFields("mcp__claude-in-chrome__computer", { action: "type", text: "hello" });
+    assert.equal(f!.Title, "Type in Chrome");
+    assert.equal(f!.Body, "hello");
+  });
+
+  it("javascript_tool shows the code", () => {
+    const f = describeFields("mcp__Claude_Browser__javascript_tool", { action: "javascript_exec", text: "document.title" });
+    assert.equal(f!.Title, "Run JavaScript in browser");
+    assert.equal(f!.Body, "document.title");
+  });
+
+  it("preview_start: url opens a page, name starts a dev server", () => {
+    assert.equal(describeFields("mcp__Claude_Browser__preview_start", { url: "http://localhost:3000" })!.Target, "http://localhost:3000");
+    const f = describeFields("mcp__Claude_Browser__preview_start", { name: "web" });
+    assert.equal(f!.Title, 'Start dev server "web"');
+    assert.ok(f!.Footnote!.includes("launch.json"));
+  });
+
+  it("browser_batch lists its steps", () => {
+    const f = describeFields("mcp__Claude_Browser__browser_batch", { actions: [
+      { name: "navigate", input: { url: "http://localhost:3000" } },
+      { name: "computer", input: { action: "left_click", action_summary: "Clicks Save" } },
+    ] });
+    assert.equal(f!.Title, "Run 2 browser steps");
+    assert.equal(f!.Body, "Open page in browser: http://localhost:3000\nLeft click in browser: Clicks Save");
+  });
+});

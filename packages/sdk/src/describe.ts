@@ -713,10 +713,79 @@ function summarizeAgent(input: Record<string, unknown>): Rendered {
   return { title: "Launch sub-agent", body: short, kind: "agent_launch" };
 }
 
+/**
+ * Built-in browser pane / Claude in Chrome. The tool names (`computer`,
+ * `javascript_tool`, …) say nothing on their own, so lead with what the step
+ * does and use the agent's own `action_summary` as the target when present.
+ */
+function summarizeBrowser(tool: string, input: Record<string, unknown>, server: string): Rendered {
+  const where = server === "claude-in-chrome" ? "in Chrome" : "in browser";
+  const str = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : undefined);
+  const summary = str(input.action_summary);
+
+  switch (tool) {
+    case "navigate": {
+      const url = str(input.url);
+      return { title: `Open page ${where}`, target: url ? truncate(url, 80) : undefined, kind: "browser_navigate" };
+    }
+    case "preview_start": {
+      const url = str(input.url);
+      if (url) return { title: `Open page ${where}`, target: truncate(url, 80), kind: "browser_navigate" };
+      const name = str(input.name);
+      return {
+        title: name ? `Start dev server "${truncate(name, 40)}"` : "Start dev server",
+        footnote: "Runs the command configured in .claude/launch.json",
+        kind: "browser_dev_server",
+      };
+    }
+    case "computer": {
+      const action = str(input.action) || "action";
+      const text = str(input.text);
+      return {
+        title: `${action.replace(/_/g, " ")} ${where}`.replace(/^./, (c) => c.toUpperCase()),
+        target: summary,
+        body: text ? truncateBody(text) : undefined,
+        kind: "browser_interact",
+      };
+    }
+    case "form_input": {
+      const value = input.value;
+      return {
+        title: `Fill form field ${where}`,
+        target: summary,
+        body: value !== undefined ? truncateBody(String(value)) : undefined,
+        kind: "browser_interact",
+      };
+    }
+    case "javascript_tool": {
+      const code = str(input.text);
+      return { title: `Run JavaScript ${where}`, body: code ? truncateBody(code) : undefined, kind: "browser_script" };
+    }
+    case "browser_batch": {
+      const actions = Array.isArray(input.actions) ? input.actions : [];
+      const steps = actions.map((a) => {
+        const name = str((a as { name?: unknown })?.name) || "step";
+        const inp = ((a as { input?: unknown })?.input ?? {}) as Record<string, unknown>;
+        const r = summarizeBrowser(name, inp, server);
+        return r.target ? `${r.title}: ${r.target}` : r.title;
+      });
+      return {
+        title: `Run ${actions.length} browser step${actions.length === 1 ? "" : "s"}`,
+        body: steps.length ? truncateBody(steps.join("\n")) : undefined,
+        kind: "browser_interact",
+      };
+    }
+  }
+  return { title: `${tool.replace(/_/g, " ")} ${where}`.replace(/^./, (c) => c.toUpperCase()), target: summary, kind: "unknown_tool" };
+}
+
 function summarizeMcp(toolName: string, input: Record<string, unknown>): Rendered {
   const parts = toolName.split("__");
   const server = parts[1] || "unknown";
   const tool = parts[2] || "";
+
+  const browser = parts.slice(1, -1).find((p) => p === "Claude_Browser" || p === "claude-in-chrome");
+  if (browser) return summarizeBrowser(parts[parts.length - 1] || "", input, browser);
 
   if (tool === "send_email") return summarizeEmail(input);
   if (tool === "send_message") return summarizeMessage(input, server);
