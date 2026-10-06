@@ -344,6 +344,52 @@ describe("MCP tools", () => {
   });
 });
 
+describe("browser MCP tools", () => {
+  it("preview_start with url is safe, with name (runs launch.json command) is review", () => {
+    assert.equal(classify("mcp__Claude_Browser__preview_start", { url: "http://localhost:3000" }), "safe");
+    assert.equal(classify("mcp__Claude_Browser__preview_start", { name: "dev" }), "review");
+    assert.equal(classify("mcp__Claude_Browser__preview_start", {}), "review");
+  });
+
+  it("navigation and page reads are safe on both browsers", () => {
+    assert.equal(classify("mcp__Claude_Browser__navigate", { url: "https://example.com" }), "safe");
+    assert.equal(classify("mcp__Claude_Browser__find", { query: "Sign in" }), "safe");
+    assert.equal(classify("mcp__Claude_Browser__resize_window", { preset: "mobile" }), "safe");
+    assert.equal(classify("mcp__Claude_Browser__tabs_create", {}), "safe");
+    assert.equal(classify("mcp__claude-in-chrome__tabs_context_mcp", {}), "safe");
+    assert.equal(classify("mcp__remote-devices__Claude_Browser__get_page_text", {}), "safe");
+  });
+
+  it("computer: observing actions are safe, input actions are review", () => {
+    assert.equal(classify("mcp__Claude_Browser__computer", { action: "screenshot" }), "safe");
+    assert.equal(classify("mcp__Claude_Browser__computer", { action: "scroll" }), "safe");
+    assert.equal(classify("mcp__Claude_Browser__computer", { action: "left_click" }), "review");
+    assert.equal(classify("mcp__claude-in-chrome__computer", { action: "type", text: "hi" }), "review");
+  });
+
+  it("form fills, script execution and uploads are review", () => {
+    assert.equal(classify("mcp__Claude_Browser__form_input", { ref: "ref_1", value: "x" }), "review");
+    assert.equal(classify("mcp__Claude_Browser__javascript_tool", { text: "1" }), "review");
+    assert.equal(classify("mcp__claude-in-chrome__file_upload", {}), "review");
+  });
+
+  it("browser_batch takes the riskiest step", () => {
+    assert.equal(classify("mcp__Claude_Browser__browser_batch", { actions: [
+      { name: "navigate", input: { url: "https://example.com" } },
+      { name: "computer", input: { action: "screenshot" } },
+    ] }), "safe");
+    assert.equal(classify("mcp__Claude_Browser__browser_batch", { actions: [
+      { name: "navigate", input: { url: "https://example.com" } },
+      { name: "computer", input: { action: "left_click" } },
+    ] }), "review");
+    assert.equal(classify("mcp__Claude_Browser__browser_batch", { actions: [] }), "review");
+  });
+
+  it("non-browser servers with the same tool names keep the generic rules", () => {
+    assert.equal(classify("mcp__other__navigate", {}), "review");
+  });
+});
+
 describe("SQL CREATE is warning, DROP is high_stakes", () => {
   it("CREATE TABLE → warning", () => {
     assert.equal(bash('psql -c "CREATE TABLE users (id INT)"'), "warning");

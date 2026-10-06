@@ -351,7 +351,7 @@ export function classify(
 
   // MCP tools: mcp__<server>__<tool>
   if (toolName.startsWith("mcp__")) {
-    return classifyMcpTool(toolName);
+    return classifyMcpTool(toolName, toolInput);
   }
 
   // Shell-exec-style tools from other agents (Codex CLI's `exec`, OpenClaw,
@@ -1104,9 +1104,77 @@ function splitArgs(s: string): string[] {
   return out;
 }
 
-function classifyMcpTool(toolName: string): RiskTier {
+// Browser MCP servers: the desktop app's built-in browser pane (also reached
+// as mcp__remote-devices__Claude_Browser__* from cloud sessions) and the
+// Claude in Chrome extension. Their tool names don't follow the verb-prefix
+// convention below, so they get an explicit table keyed on the tool name.
+const BROWSER_MCP_SERVERS = new Set(["Claude_Browser", "claude-in-chrome"]);
+
+// Browser tools that only look at, open, or arrange pages (no clicks, typing,
+// form fills, script execution, or uploads). Navigation is a read, like
+// WebSearch. Anything not listed here falls through to `review`.
+const SAFE_BROWSER_TOOLS = new Set([
+  "navigate",
+  "find",
+  "read_page",
+  "get_page_text",
+  "read_console_messages",
+  "read_network_requests",
+  "tabs_context",
+  "tabs_context_mcp",
+  "tabs_create",
+  "tabs_create_mcp",
+  "tabs_select",
+  "tabs_close",
+  "tabs_close_mcp",
+  "resize_window",
+  "preview_list",
+  "preview_logs",
+  "preview_stop",
+  "gif_creator",
+  "shortcuts_list",
+  "list_connected_browsers",
+  "select_browser",
+  "switch_browser",
+]);
+
+// `computer` actions that only observe or move the viewport.
+const SAFE_COMPUTER_ACTIONS = new Set(["screenshot", "zoom", "scroll", "scroll_to", "hover", "wait"]);
+
+function classifyBrowserTool(tool: string, toolInput: Record<string, unknown>): RiskTier {
+  if (SAFE_BROWSER_TOOLS.has(tool)) return "safe";
+  // preview_start with `url` just opens a tab. With `name` it launches the
+  // dev-server command from .claude/launch.json, which is arbitrary command
+  // execution, so it stays `review`.
+  if (tool === "preview_start") {
+    return typeof toolInput.url === "string" && toolInput.name === undefined ? "safe" : "review";
+  }
+  if (tool === "computer") {
+    return SAFE_COMPUTER_ACTIONS.has(toolInput.action as string) ? "safe" : "review";
+  }
+  // A batch is as risky as its riskiest step.
+  if (tool === "browser_batch") {
+    const actions = toolInput.actions;
+    if (!Array.isArray(actions) || actions.length === 0) return "review";
+    let tier: RiskTier = "safe";
+    for (const a of actions) {
+      const name = (a as { name?: unknown })?.name;
+      const input = (a as { input?: unknown })?.input;
+      if (typeof name !== "string" || name === "browser_batch") return "review";
+      tier = maxTier(tier, classifyBrowserTool(name, (input && typeof input === "object" ? input : {}) as Record<string, unknown>));
+    }
+    return tier;
+  }
+  return "review";
+}
+
+function classifyMcpTool(toolName: string, toolInput: Record<string, unknown> = {}): RiskTier {
   const parts = toolName.split("__");
   const tool = parts[parts.length - 1] || "";
+
+  if (parts.slice(1, -1).some((p) => BROWSER_MCP_SERVERS.has(p))) {
+    return classifyBrowserTool(tool, toolInput);
+  }
 
   // Read-only retrieval verbs.
   if (tool.startsWith("list_") || tool.startsWith("get_") || tool.startsWith("search_") ||
