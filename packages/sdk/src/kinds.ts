@@ -41,6 +41,7 @@ export type OperationKind =
   | "mcp_delete" | "mcp_update" | "mcp_create"
   | "mcp_post" | "mcp_publish"
   | "mcp_send" | "mcp_submit_form" | "mcp_fill" | "mcp_submit" | "mcp_query"
+  | "browser_navigate" | "browser_interact" | "browser_script" | "browser_dev_server"
   // Agents
   | "agent_launch"
   // Shell composite / fallbacks
