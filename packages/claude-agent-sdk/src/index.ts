@@ -87,8 +87,8 @@ export const okedPreToolUseHook: HookCallback = async (rawInput) => {
     return ask();
   }
 
-  const description = describe(toolName, toolInput);
-  const fields = describeFields(toolName, toolInput) ?? undefined;
+  const description = describe(toolName, toolInput, { cwd: input.cwd });
+  const fields = describeFields(toolName, toolInput, { cwd: input.cwd }) ?? undefined;
   log(`${toolName}: "${description}" - ${tier}`);
   log("Requesting approval... (check your phone)");
 

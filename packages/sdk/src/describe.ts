@@ -8,6 +8,8 @@
  * backwards-compatible single-line consumers (audit logs, SMS).
  */
 
+import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { basename, isAbsolute, join, resolve } from "node:path";
 import { extractShellWriteOps } from "./classify.js";
 
 const BODY_PREVIEW_MAX = 200;
@@ -26,12 +28,19 @@ export interface Rendered {
   kind: OperationKind;  // stable analytics category
 }
 
+/** Optional caller context. `cwd` lets describers read local files (e.g. the
+ *  package.json behind `npm publish`) to show what an action will touch. */
+export interface DescribeContext {
+  cwd?: string;
+}
+
 export function describe(
   toolName: string,
-  toolInput: Record<string, unknown>
+  toolInput: Record<string, unknown>,
+  ctx: DescribeContext = {}
 ): string {
   // Single-line consumers (audit logs, SMS) get title + target inlined.
-  const r = summarize(toolName, toolInput);
+  const r = summarize(toolName, toolInput, ctx);
   if (r.target) {
     // Reorder phrasing for "Delete X recursively" / "Force push branch to remote"
     if (r.title === "Delete file recursively") return `Delete ${r.target} recursively`;
@@ -45,9 +54,10 @@ export function describe(
 
 export function describeFields(
   toolName: string,
-  toolInput: Record<string, unknown>
+  toolInput: Record<string, unknown>,
+  ctx: DescribeContext = {}
 ): Record<string, string> | null {
-  const r = summarize(toolName, toolInput);
+  const r = summarize(toolName, toolInput, ctx);
   const out: Record<string, string> = { Title: r.title, Kind: r.kind };
   if (r.target) out.Target = r.target;
   if (r.annotation) out.Annotation = r.annotation;
@@ -61,11 +71,11 @@ export function describeFields(
 // Top-level dispatch
 // ───────────────────────────────────────────────────────────────────────
 
-function summarize(toolName: string, toolInput: Record<string, unknown>): Rendered {
+function summarize(toolName: string, toolInput: Record<string, unknown>, ctx: DescribeContext): Rendered {
   const fileSizeBytes = typeof toolInput._file_size_bytes === "number" ? toolInput._file_size_bytes : undefined;
   switch (toolName) {
     case "Bash":
-      return summarizeBash((toolInput.command as string) || "", fileSizeBytes);
+      return summarizeBash((toolInput.command as string) || "", fileSizeBytes, ctx.cwd);
     case "Write":
       return summarizeWrite(toolInput);
     case "Edit":
@@ -164,7 +174,7 @@ function extractCurlPayload(cmd: string): string | undefined {
   return v ? v : undefined;
 }
 
-function summarizeBash(command: string, sizeBytes?: number): Rendered {
+function summarizeBash(command: string, sizeBytes?: number, cwd?: string): Rendered {
   const cmd = (command || "").trim();
   if (!cmd) return { title: "Run empty command", kind: "unknown_bash" };
 
@@ -182,6 +192,11 @@ function summarizeBash(command: string, sizeBytes?: number): Rendered {
   // though the prompt is driven by the POST.
   const mutatingCurl = summarizeMutatingCurl(cmd);
   if (mutatingCurl) return mutatingCurl;
+
+  // npm publish is irreversible (a version can never be re-published), so it
+  // headlines even inside a compound `cd pkg && npm run build && npm publish`.
+  const npmPublish = summarizeNpmPublish(cmd, cwd);
+  if (npmPublish) return npmPublish;
 
   const shellWrite = summarizeShellWrite(cmd);
   if (shellWrite) return shellWrite;
@@ -318,7 +333,6 @@ function summarizeBash(command: string, sizeBytes?: number): Rendered {
   if (npmScript) return { title: `Run npm script ${npmScript[1]}`, kind: "npm_run" };
   if (/\bnpm\s+install\b/.test(cmd)) return { title: "Install npm dependencies", kind: "npm_install" };
   if (/\bnpm\s+test\b/.test(cmd)) return { title: "Run npm tests", kind: "npm_test" };
-  if (/\bnpm\s+publish\b/.test(cmd)) return { title: "Publish package to npm", kind: "npm_publish" };
   if (/\bnpm\s+unpublish\b/.test(cmd)) return { title: "Unpublish package from npm", kind: "npm_unpublish" };
   if (/\bnpx\s+.*\s+deploy\b/.test(cmd)) return { title: "Deploy via npx", body: truncateBody(cmd), kind: "npx_deploy" };
 
@@ -336,6 +350,121 @@ function summarizeBash(command: string, sizeBytes?: number): Rendered {
   // Long or short — generic command
   if (cmd.length > COMMAND_INLINE_MAX) return { title: "Run command", body: truncateBody(cmd), kind: "unknown_bash" };
   return { title: cmd, kind: "unknown_bash" };
+}
+
+/**
+ * `npm publish` → which package and version, dist-tag, access, registry.
+ * Name/version come from the package.json the publish will read: the cwd,
+ * adjusted by a preceding `cd`, a `--workspace`, or a folder argument.
+ */
+function summarizeNpmPublish(cmd: string, cwd?: string): Rendered | null {
+  const m = cmd.match(/(?:^|[\n;&|(]|\$\()\s*(?:\w+=\S+\s+)*(?:sudo\s+)?npm\s+publish\b([^\n;&|)]*)/);
+  if (!m) return null;
+
+  const tokens = m[1].trim().split(/\s+/).filter(Boolean).map(stripQuotes);
+  const flags: Record<string, string | true> = {};
+  const workspaces: string[] = [];
+  let positional: string | undefined;
+  const VALUE_FLAGS = new Set(["--tag", "--access", "--registry", "--otp", "--workspace", "-w"]);
+  for (let i = 0; i < tokens.length; i++) {
+    const t = tokens[i];
+    if (t.startsWith("-")) {
+      const eq = t.indexOf("=");
+      const name = eq > 0 ? t.slice(0, eq) : t;
+      let value: string | true = eq > 0 ? t.slice(eq + 1) : true;
+      if (value === true && VALUE_FLAGS.has(name) && i + 1 < tokens.length) value = tokens[++i];
+      if ((name === "--workspace" || name === "-w") && typeof value === "string") workspaces.push(value);
+      else flags[name] = value;
+    } else if (positional === undefined) {
+      positional = t;
+    }
+  }
+
+  // Directory the publish runs in: cwd, then the last `cd X` before it.
+  let baseDir = cwd;
+  const before = cmd.slice(0, m.index ?? 0);
+  const cds = [...before.matchAll(/(?:^|[\n;&|(])\s*cd\s+("[^"]+"|'[^']+'|\S+)/g)];
+  if (cds.length) {
+    const dir = stripQuotes(cds[cds.length - 1][1]);
+    baseDir = isAbsolute(dir) ? dir : baseDir ? resolve(baseDir, dir) : undefined;
+  }
+
+  const allWorkspaces = flags["--workspaces"] === true || flags["-ws"] === true;
+  let pkgDirs: string[] = [];
+  let tarball: string | undefined;
+  if (positional && /\.(tgz|tar\.gz)$/.test(positional)) tarball = positional;
+  else if (allWorkspaces) pkgDirs = baseDir ? listWorkspaceDirs(baseDir) : [];
+  else if (workspaces.length) pkgDirs = workspaces.map((w) => (baseDir ? resolve(baseDir, w) : w));
+  else if (positional) pkgDirs = [baseDir ? resolve(baseDir, positional) : positional];
+  else if (baseDir) pkgDirs = [baseDir];
+
+  const labels = pkgDirs.map((d) => readPackageLabel(d) ?? shortenPath(d));
+  const isPrivate = pkgDirs.some((d) => readPackageJson(d)?.private === true);
+
+  let target: string | undefined;
+  if (tarball) target = basename(tarball);
+  else if (labels.length) target = labels.join("\n");
+  else if (allWorkspaces) target = "all workspaces";
+  else if (workspaces.length) target = workspaces.join("\n");
+
+  const details: string[] = [];
+  details.push(`tag ${typeof flags["--tag"] === "string" ? flags["--tag"] : "latest"}`);
+  if (typeof flags["--access"] === "string") details.push(`${flags["--access"]} access`);
+  if (typeof flags["--registry"] === "string") details.push(`registry ${extractHost(flags["--registry"])}`);
+  if (flags["--provenance"] === true) details.push("with provenance");
+
+  const dryRun = flags["--dry-run"] === true;
+  const count = tarball ? 1 : Math.max(labels.length, 1);
+  const title = count > 1 ? `Publish ${count} packages to npm` : "Publish package to npm";
+  // Never echo a one-time password onto the approval card.
+  const shown = cmd.replace(/(--otp(?:=|\s+))\S+/g, "$1***");
+  return {
+    title: dryRun ? `${title} (dry run)` : title,
+    target,
+    subline: details.join(" · "),
+    body: shown.trim() === "npm publish" ? undefined : truncateBody(shown),
+    footnote: isPrivate ? "package.json is marked private, npm will refuse to publish it" : undefined,
+    kind: "npm_publish",
+  };
+}
+
+function readPackageJson(dir: string): Record<string, unknown> | null {
+  try {
+    return JSON.parse(readFileSync(join(dir, "package.json"), "utf8"));
+  } catch {
+    return null;
+  }
+}
+
+function readPackageLabel(dir: string): string | null {
+  const pkg = readPackageJson(dir);
+  if (!pkg || typeof pkg.name !== "string") return null;
+  return typeof pkg.version === "string" ? `${pkg.name}@${pkg.version}` : pkg.name;
+}
+
+/** Expand the root package.json `workspaces` (plain dirs and `dir/*` globs). */
+function listWorkspaceDirs(root: string): string[] {
+  const pkg = readPackageJson(root);
+  const ws = Array.isArray(pkg?.workspaces)
+    ? pkg!.workspaces
+    : (pkg?.workspaces as { packages?: unknown } | undefined)?.packages;
+  if (!Array.isArray(ws)) return [];
+  const dirs: string[] = [];
+  for (const pattern of ws) {
+    if (typeof pattern !== "string") continue;
+    if (pattern.endsWith("/*")) {
+      const parent = resolve(root, pattern.slice(0, -2));
+      try {
+        for (const e of readdirSync(parent, { withFileTypes: true })) {
+          if (e.isDirectory() && existsSync(join(parent, e.name, "package.json"))) dirs.push(join(parent, e.name));
+        }
+      } catch { /* missing dir */ }
+    } else if (!pattern.includes("*")) {
+      dirs.push(resolve(root, pattern));
+    }
+  }
+  // npm skips private workspaces under --workspaces.
+  return dirs.filter((d) => readPackageJson(d)?.private !== true);
 }
 
 function summarizeShellWrite(cmd: string): Rendered | null {
