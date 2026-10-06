@@ -21,9 +21,13 @@ export function newReceiptId(): string {
   return `rcpt_${out}`;
 }
 
-/** The short form shown in Telegram and the dashboard, e.g. `rcpt_7Q2F`. */
+/**
+ * The short form shown in Telegram and the dashboard, e.g. `rcpt_7Q2FABCD`.
+ * 8 characters (40 bits) so two receipts in one chain do not share a label
+ * until about a million receipts. 4 characters collided at about 1,200.
+ */
 export function shortReceiptId(receiptId: string): string {
-  return receiptId.slice(0, 9);
+  return receiptId.slice(0, 13);
 }
 
 /** Chain key: per operator, or per API key for a key with no operator. */
