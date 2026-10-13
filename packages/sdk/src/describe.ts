@@ -934,9 +934,12 @@ function summarizeBrowser(tool: string, input: Record<string, unknown>, server: 
 function summarizeMcp(toolName: string, input: Record<string, unknown>): Rendered {
   const parts = toolName.split("__");
   // claude.ai connectors have a UUID as the server name. The UUID means nothing to the approver.
+  // Desktop app tools have internal server names (ccd_host, ccd_pr).
   const server = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(parts[1] || "")
     ? "claude.ai connector"
-    : parts[1] || "unknown";
+    : /^ccd_/.test(parts[1] || "")
+      ? "Claude desktop app"
+      : parts[1] || "unknown";
   const tool = parts[2] || "";
 
   if (parts.includes("ccd_directory") && (tool === "change_directory" || tool === "request_directory")) {
@@ -1016,7 +1019,7 @@ function summarizeMcp(toolName: string, input: Record<string, unknown>): Rendere
   if (tool.startsWith("list_") || tool.startsWith("get_") || tool.startsWith("search_")) {
     return { title: `${toWords(tool)} via ${server}`, kind: "unknown_tool" };
   }
-  return { title: `${toWords(tool)} via ${server}`.replace(/^./, (c) => c.toUpperCase()), kind: "unknown_tool" };
+  return { title: `${toSentence(tool)} via ${server}`, kind: "unknown_tool" };
 }
 
 function identifyTarget(input: Record<string, unknown>): string | null {
@@ -1262,6 +1265,14 @@ function formatByteCount(bytes: number): string {
 
 function toWords(snake: string): string {
   return snake.replace(/_/g, " ").split(" ").map((w) => (w.length <= 3 ? w.toUpperCase() : w)).join(" ");
+}
+
+// "set_auto_merge" -> "Set auto merge", "bind_pr" -> "Bind PR": the first word
+// is a verb, so it is not read as an acronym.
+function toSentence(snake: string): string {
+  const [first = "", ...rest] = snake.split("_");
+  const head = first.charAt(0).toUpperCase() + first.slice(1).toLowerCase();
+  return rest.length ? `${head} ${toWords(rest.join("_"))}` : head;
 }
 
 function shortenPath(filePath: string): string {

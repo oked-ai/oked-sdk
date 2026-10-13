@@ -1317,10 +1317,12 @@ function classifyDirectoryGrant(tool: string, toolInput: Record<string, unknown>
 
 /**
  * Desktop app (`ccd_*`) tools that only change what the app shows or how it
- * tracks this session: panes, split view, the sidebar, the PR bar. They touch
- * no file, repo or external service, so they auto-allow. The app's tools with
- * a real effect stay out of this table: set_auto_merge (GitHub merges the PR),
- * set_setting, permission or session changes, worktree discards.
+ * tracks this session: panes, split view, the sidebar, the PR bar, archiving.
+ * sync_with_base_branch merges the base branch into the session's worktree on
+ * the host, the same as a Bash `git merge` or `git pull` (both safe); a push
+ * after it is gated on its own. The app's tools with a real effect stay out
+ * of this table: set_auto_merge (GitHub merges the PR), set_setting,
+ * permission or model changes, worktree clean-up and discards.
  */
 const CCD_SAFE_TOOLS = new Map<string, ReadonlySet<string>>([
   ["ccd_pr", new Set(["bind_pr", "unbind_pr"])],
@@ -1331,8 +1333,8 @@ const CCD_SAFE_TOOLS = new Map<string, ReadonlySet<string>>([
     "create_group", "create_section", "rename_group", "rename_section",
     "move_sessions", "set_pinned", "set_unread", "set_view",
   ])],
-  ["ccd_host", new Set(["open_in_editor", "reveal_path", "request_keep_awake"])],
-  ["ccd_session_mgmt", new Set(["set_session_title"])],
+  ["ccd_host", new Set(["open_in_editor", "reveal_path", "request_keep_awake", "sync_with_base_branch"])],
+  ["ccd_session_mgmt", new Set(["set_session_title", "archive_session", "unarchive_session"])],
 ]);
 
 // claude.ai connectors reach Claude Code as mcp__<uuid>__<tool>, so the server
@@ -1375,6 +1377,9 @@ function classifyMcpTool(toolName: string, toolInput: Record<string, unknown> = 
     return classifyDirectoryGrant(tool, toolInput);
   }
   if (parts.slice(1, -1).some((p) => CCD_SAFE_TOOLS.get(p)?.has(tool))) return "safe";
+  // The PR bar's CI monitor switches. auto_fix lets the session push fixes,
+  // but each push is gated on its own. Log it, no prompt.
+  if (parts.includes("ccd_pr") && tool === "set_monitor") return "warning";
   if (parts.length === 3 && isClaudeDocsWrite(parts[1] || "", tool, toolInput)) return "warning";
 
   const browserServer = parts.slice(1, -1).find((p) => BROWSER_MCP_SERVERS.has(p));

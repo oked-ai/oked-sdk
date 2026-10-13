@@ -957,4 +957,8 @@ describe("claude.ai connectors (UUID server names)", () => {
     assert.equal(f.Title, "Share file via claude.ai connector");
     assert.ok(!JSON.stringify(f).includes("9cd8ee23"));
   });
+
+  it("names the desktop app, not its internal server name", () => {
+    assert.equal(describeFields("mcp__ccd_pr__set_auto_merge", {})!.Title, "Set auto merge via Claude desktop app");
+  });
 });

@@ -344,6 +344,16 @@ describe("MCP tools", () => {
     assert.equal(classify("mcp__ccd_window__open_session_in", {}), "safe");
     assert.equal(classify("mcp__ccd_sidebar__set_pinned", {}), "safe");
     assert.equal(classify("mcp__ccd_host__reveal_path", {}), "safe");
+    assert.equal(classify("mcp__ccd_session_mgmt__archive_session", {}), "safe");
+  });
+
+  it("syncing the worktree with its base branch is safe, like git merge", () => {
+    assert.equal(classify("mcp__ccd_host__sync_with_base_branch", {}), "safe");
+    assert.equal(classify("Bash", { command: "git merge origin/main" }), "safe");
+  });
+
+  it("the PR bar CI monitor switch is logged, not prompted", () => {
+    assert.equal(classify("mcp__ccd_pr__set_monitor", { auto_fix: true, url: "https://github.com/o/r/pull/1" }), "warning");
   });
 
   it("desktop app tools with a real effect still need approval", () => {
@@ -351,6 +361,8 @@ describe("MCP tools", () => {
     assert.equal(classify("mcp__ccd_settings__set_setting", {}), "review");
     assert.equal(classify("mcp__ccd_session_mgmt__set_session_permission_mode", {}), "review");
     assert.equal(classify("mcp__ccd_host__discard_kept_worktree", {}), "review");
+    assert.equal(classify("mcp__ccd_host__clean_up_worktrees", {}), "review");
+    assert.equal(classify("mcp__ccd_session_mgmt__set_session_model", {}), "review");
     // The table is keyed by server: the same tool name on another server is not covered.
     assert.equal(classify("mcp__github__bind_pr", {}), "review");
     assert.equal(classify("mcp__constructor__bind_pr", {}), "review");
