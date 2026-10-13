@@ -67,6 +67,12 @@ Every decision comes with a receipt signed by OKed (who decided, how they were v
 
 Explicit denials, invalid API keys and approval receipts that do not verify deny the action. If the backend is unreachable, OKed denies `high_stakes` actions and, by default, allows lower tiers so a temporary outage does not stop every Claude Code workflow. If no API key is configured, the hook returns `ask` so Claude Code's native permission flow can handle the decision. Set `OKED_STRICT_FAIL_CLOSED=1` to deny every sensitive action during backend outages.
 
+The backend counts as unreachable when the connection fails, when it answers with HTTP 5xx, when the hosting platform answers in its place (for example Railway "Application not found"), or when the reply is not JSON. "Too many pending approvals" (HTTP 429) is not an outage: the hook denies the action and asks you to decide the waiting approvals first. Every deny reason shows the real error and its HTTP status.
+
+## Decision log
+
+The hook writes one JSON line to `~/.oked/hook.log` (mode 600) for each decision that is not an allow: time, decision, tool, tier, reason, approval ID, receipt ID and error (name, message, HTTP status). The log never holds the tool input or the command. Above 1 MB, it moves to `hook.log.1`. Set `OKED_HOOK_LOG` to use another file.
+
 ## License
 
 [MIT](./LICENSE)
