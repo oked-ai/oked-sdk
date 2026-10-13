@@ -950,3 +950,15 @@ describe("Claude Code built-in session tools", () => {
     assert.equal(describeFields("Artifact", { action: "delete", url: "https://claude.ai/artifact/x" })!.Title, "Delete page from claude.ai");
   });
 });
+
+describe("claude.ai connectors (UUID server names)", () => {
+  it("names the connector, not its UUID", () => {
+    const f = describeFields("mcp__9cd8ee23-93a8-4bb9-8972-d241324d686c__share_file", {})!;
+    assert.equal(f.Title, "Share file via claude.ai connector");
+    assert.ok(!JSON.stringify(f).includes("9cd8ee23"));
+  });
+
+  it("names the desktop app, not its internal server name", () => {
+    assert.equal(describeFields("mcp__ccd_pr__set_auto_merge", {})!.Title, "Set auto merge via Claude desktop app");
+  });
+});
