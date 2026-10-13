@@ -933,7 +933,10 @@ function summarizeBrowser(tool: string, input: Record<string, unknown>, server: 
 
 function summarizeMcp(toolName: string, input: Record<string, unknown>): Rendered {
   const parts = toolName.split("__");
-  const server = parts[1] || "unknown";
+  // claude.ai connectors have a UUID as the server name. The UUID means nothing to the approver.
+  const server = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(parts[1] || "")
+    ? "claude.ai connector"
+    : parts[1] || "unknown";
   const tool = parts[2] || "";
 
   if (parts.includes("ccd_directory") && (tool === "change_directory" || tool === "request_directory")) {
@@ -1013,7 +1016,7 @@ function summarizeMcp(toolName: string, input: Record<string, unknown>): Rendere
   if (tool.startsWith("list_") || tool.startsWith("get_") || tool.startsWith("search_")) {
     return { title: `${toWords(tool)} via ${server}`, kind: "unknown_tool" };
   }
-  return { title: `${toWords(tool)} via ${server}`, kind: "unknown_tool" };
+  return { title: `${toWords(tool)} via ${server}`.replace(/^./, (c) => c.toUpperCase()), kind: "unknown_tool" };
 }
 
 function identifyTarget(input: Record<string, unknown>): string | null {

@@ -336,6 +336,49 @@ describe("MCP tools", () => {
     assert.equal(classify("mcp__ccd_session__dismiss_task", {}), "safe");
   });
 
+  it("desktop app tools that only change the app view or PR tracking are safe", () => {
+    assert.equal(classify("mcp__ccd_pr__bind_pr", { url: "https://github.com/o/r/pull/1" }), "safe");
+    assert.equal(classify("mcp__ccd_pr__unbind_pr", {}), "safe");
+    assert.equal(classify("mcp__ccd_view__show_pane", { pane: "diff" }), "safe");
+    assert.equal(classify("mcp__ccd_session__spawn_task", { title: "t", prompt: "p", tldr: "x" }), "safe");
+    assert.equal(classify("mcp__ccd_window__open_session_in", {}), "safe");
+    assert.equal(classify("mcp__ccd_sidebar__set_pinned", {}), "safe");
+    assert.equal(classify("mcp__ccd_host__reveal_path", {}), "safe");
+  });
+
+  it("desktop app tools with a real effect still need approval", () => {
+    assert.equal(classify("mcp__ccd_pr__set_auto_merge", { enabled: true }), "review");
+    assert.equal(classify("mcp__ccd_settings__set_setting", {}), "review");
+    assert.equal(classify("mcp__ccd_session_mgmt__set_session_permission_mode", {}), "review");
+    assert.equal(classify("mcp__ccd_host__discard_kept_worktree", {}), "review");
+    // The table is keyed by server: the same tool name on another server is not covered.
+    assert.equal(classify("mcp__github__bind_pr", {}), "review");
+    assert.equal(classify("mcp__constructor__bind_pr", {}), "review");
+  });
+
+  const docs = "mcp__1a59c906-04da-521d-bda7-7f71b9f9e01c";
+
+  it("a tool named only by a read verb is safe", () => {
+    assert.equal(classify(`${docs}__guide`, { items: ["topic.index"] }), "safe");
+    assert.equal(classify(`${docs}__read`, {}), "safe");
+    assert.equal(classify("mcp__github__list", {}), "safe");
+    // A bare `query` can run any SQL on a database server.
+    assert.equal(classify("mcp__postgres__query", { sql: "DELETE FROM users" }), "review");
+  });
+
+  it("Claude Docs writes to the user's own docs are logged, not prompted", () => {
+    assert.equal(classify(`${docs}__batch`, { container: { kind: "project", create: { name: "Plan" } }, batch: [] }), "warning");
+    assert.equal(classify(`${docs}__batch`, { container: { kind: "doc", id: "d1" }, batch: [{ op: "replace" }] }), "warning");
+    assert.equal(classify(`${docs}__update`, { ref: { object: "node", id: "n1" }, payload: "text" }), "warning");
+  });
+
+  it("the Docs rule needs a UUID server and the Docs input shape", () => {
+    assert.equal(classify("mcp__jobs__batch", { container: { kind: "project" }, batch: [] }), "review");
+    assert.equal(classify(`${docs}__batch`, { jobs: [] }), "review");
+    assert.equal(classify(`${docs}__update`, { id: "x", data: {} }), "review");
+    assert.equal(classify(`${docs}__delete`, { ref: { object: "file", id: "f1" } }), "review");
+  });
+
   it("send/create/update MCP tools require review", () => {
     assert.equal(classify("mcp__gmail__send_email", {}), "review");
     assert.equal(classify("mcp__linear__update_issue", {}), "review");

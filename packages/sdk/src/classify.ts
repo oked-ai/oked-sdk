@@ -1315,6 +1315,58 @@ function classifyDirectoryGrant(tool: string, toolInput: Record<string, unknown>
   return "warning";
 }
 
+/**
+ * Desktop app (`ccd_*`) tools that only change what the app shows or how it
+ * tracks this session: panes, split view, the sidebar, the PR bar. They touch
+ * no file, repo or external service, so they auto-allow. The app's tools with
+ * a real effect stay out of this table: set_auto_merge (GitHub merges the PR),
+ * set_setting, permission or session changes, worktree discards.
+ */
+const CCD_SAFE_TOOLS = new Map<string, ReadonlySet<string>>([
+  ["ccd_pr", new Set(["bind_pr", "unbind_pr"])],
+  ["ccd_view", new Set(["show_pane", "close_pane", "set_transcript_view"])],
+  ["ccd_session", new Set(["spawn_task"])],
+  ["ccd_window", new Set(["open_session_in", "close_split", "set_sidebar_collapsed"])],
+  ["ccd_sidebar", new Set([
+    "create_group", "create_section", "rename_group", "rename_section",
+    "move_sessions", "set_pinned", "set_unread", "set_view",
+  ])],
+  ["ccd_host", new Set(["open_in_editor", "reveal_path", "request_keep_awake"])],
+  ["ccd_session_mgmt", new Set(["set_session_title"])],
+]);
+
+// claude.ai connectors reach Claude Code as mcp__<uuid>__<tool>, so the server
+// name does not say which connector it is.
+const CONNECTOR_SERVER_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+// Tool names that are a read verb alone (the prefix rules below need "read_").
+const SAFE_BARE_TOOLS = new Set(["read", "get", "list", "search", "find", "view", "guide", "help"]);
+
+function isRecord(v: unknown): v is Record<string, unknown> {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+
+/**
+ * Claude Docs connector writes: `batch` (create a doc or apply edits to one)
+ * and `update` (edit a tab, rename, change a stored value). They change the
+ * user's own docs on claude.ai, which are private until the user shares them.
+ * Log them (`warning`), no prompt. The input shape identifies the connector,
+ * because its server name is a UUID and the tool names are generic. Sharing
+ * and deletes are not in this rule.
+ */
+function isClaudeDocsWrite(server: string, tool: string, input: Record<string, unknown>): boolean {
+  if (!CONNECTOR_SERVER_RE.test(server)) return false;
+  if (tool === "batch") {
+    return isRecord(input.container) && typeof input.container.kind === "string" &&
+      (input.batch === undefined || Array.isArray(input.batch));
+  }
+  if (tool === "update") {
+    return isRecord(input.ref) && typeof input.ref.object === "string" && typeof input.ref.id === "string" &&
+      input.payload !== undefined;
+  }
+  return false;
+}
+
 function classifyMcpTool(toolName: string, toolInput: Record<string, unknown> = {}): RiskTier {
   const parts = toolName.split("__");
   const tool = parts[parts.length - 1] || "";
@@ -1322,11 +1374,14 @@ function classifyMcpTool(toolName: string, toolInput: Record<string, unknown> = 
   if (parts.includes("ccd_directory") && (tool === "change_directory" || tool === "request_directory")) {
     return classifyDirectoryGrant(tool, toolInput);
   }
+  if (parts.slice(1, -1).some((p) => CCD_SAFE_TOOLS.get(p)?.has(tool))) return "safe";
+  if (parts.length === 3 && isClaudeDocsWrite(parts[1] || "", tool, toolInput)) return "warning";
 
   const browserServer = parts.slice(1, -1).find((p) => BROWSER_MCP_SERVERS.has(p));
   if (browserServer) return classifyBrowserTool(tool, toolInput, browserServer);
 
   // Read-only retrieval verbs.
+  if (SAFE_BARE_TOOLS.has(tool)) return "safe";
   if (tool.startsWith("list_") || tool.startsWith("get_") || tool.startsWith("search_") ||
       tool.startsWith("read_") || tool.startsWith("fetch_") || tool.startsWith("query_") ||
       tool.startsWith("find_") || tool.startsWith("view_") || tool.startsWith("show_") ||
