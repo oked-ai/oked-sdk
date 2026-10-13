@@ -20,7 +20,7 @@ oked init
 
 | Command | What it does |
 |---|---|
-| `oked init` | Install or update the project hook and pair this device. |
+| `oked init` | Install or update the project hook and pair this device. It also updates an existing `oked-hook` entry in your user settings (`~/.claude/settings.json`), for example to a new timeout. Run it again after you update the package. |
 | `oked status` | Show install state and ping the backend. |
 | `oked receipts verify [file]` | Check this machine's copy of approval receipts (default `~/.oked/receipts.jsonl`): every signature, and the chain links between neighbouring receipts. |
 | `oked uninstall` | Remove the project hook entry (other hooks are preserved). |
@@ -66,6 +66,12 @@ Every decision comes with a receipt signed by OKed (who decided, how they were v
 ## Degraded-mode behavior
 
 Explicit denials, invalid API keys and approval receipts that do not verify deny the action. If the backend is unreachable, OKed denies `high_stakes` actions and, by default, allows lower tiers so a temporary outage does not stop every Claude Code workflow. If no API key is configured, the hook returns `ask` so Claude Code's native permission flow can handle the decision. Set `OKED_STRICT_FAIL_CLOSED=1` to deny every sensitive action during backend outages.
+
+The backend counts as unreachable when the connection fails, when it answers with HTTP 5xx, when the hosting platform answers in its place (for example Railway "Application not found"), or when the reply is not JSON. "Too many pending approvals" (HTTP 429) is not an outage: the hook denies the action and asks you to decide the waiting approvals first. Every deny reason shows the real error and its HTTP status.
+
+## Decision log
+
+The hook writes one JSON line to `~/.oked/hook.log` (mode 600) for each deny and ask, and for each degraded allow (`"degraded": true`: an action that ran without a person's decision because the backend was unreachable). Each line has the time, decision, tool, tier, reason, approval ID, receipt ID and error (name, message, HTTP status). The log never holds the tool input or the command. Above 1 MB, it moves to `hook.log.1`. Set `OKED_HOOK_LOG` to use another file.
 
 ## License
 

@@ -8,12 +8,15 @@ import {
   degradedDecision,
   OKedAuthError,
   OKedBackendUnreachableError,
+  OKedHttpError,
   OKedReceiptError,
+  OKedTooManyPendingError,
   shortReceiptId,
 } from "@oked/sdk";
 import type { HookInput, HookOutput } from "@oked/sdk";
 import { CLIENT_ID } from "./version.js";
 import { appendReceipt } from "./receipts.js";
+import { logDecision, errorInfo, type DecisionLogEntry } from "./hook-log.js";
 
 function makeOutput(
   decision: "allow" | "deny" | "ask",
@@ -30,6 +33,23 @@ function makeOutput(
 
 function log(msg: string): void {
   process.stderr.write(`[OKed] ${msg}\n`);
+}
+
+type Context = Omit<DecisionLogEntry, "ts" | "decision" | "reason" | "client">;
+
+/**
+ * Writes the hook output. Every deny and ask, and every degraded allow, also
+ * goes to ~/.oked/hook.log.
+ */
+function respond(decision: "allow" | "deny" | "ask", reason: string | undefined, ctx: Context): void {
+  process.stdout.write(JSON.stringify(makeOutput(decision, reason)));
+  if (decision !== "allow" || ctx.degraded) logDecision({ decision, reason: reason ?? "", client: CLIENT_ID, ...ctx });
+}
+
+/** "Name: message", one line, short. For deny reasons. */
+function errorText(err: unknown): string {
+  const e = errorInfo(err);
+  return `${e.name}: ${e.message}`;
 }
 
 async function main(): Promise<void> {
@@ -93,10 +113,12 @@ async function main(): Promise<void> {
     // which applies the rule authoritatively (escalate / auto-decide + audit).
   }
 
+  const ctx: Context = { tool: toolName, tier };
+
   // Check if API key is configured
   if (!client.apiKey) {
     log("not paired - run `oked init` to pair this device. Falling back to Claude's built-in prompt.");
-    process.stdout.write(JSON.stringify(makeOutput("ask")));
+    respond("ask", "OKed: this device is not paired. Run `oked init`.", ctx);
     return;
   }
 
@@ -120,79 +142,64 @@ async function main(): Promise<void> {
     if (result.receipt) appendReceipt(result.receipt);
     const receiptNote = result.receipt ? ` (receipt ${shortReceiptId(result.receipt.body.receipt_id)})` : "";
 
+    const decided: Context = {
+      ...ctx,
+      approval_id: result.approval_id,
+      receipt_id: result.receipt?.body.receipt_id ?? null,
+    };
     if (result.approved) {
       log(`Approved (${result.approval_id})${receiptNote}`);
-      process.stdout.write(
-        JSON.stringify(makeOutput("allow", `Approved via OKed${receiptNote}`))
-      );
+      respond("allow", `Approved via OKed${receiptNote}`, decided);
+    } else if (result.decision === "timeout") {
+      log(`No decision in time (${result.approval_id})${receiptNote}`);
+      respond("deny", `OKed: no decision within the approval window (timed out): ${description}`, decided);
     } else {
       log(`Denied (${result.approval_id})${receiptNote}`);
-      process.stdout.write(
-        JSON.stringify(
-          makeOutput("deny", `Denied via OKed: ${description}`)
-        )
-      );
+      respond("deny", `Denied via OKed: ${description}`, decided);
     }
   } catch (err) {
+    const failed: Context = { ...ctx, error: errorInfo(err) };
     if (err instanceof OKedReceiptError) {
       // A decision we cannot prove is not a decision - always deny.
       log(`Approval receipt did not verify (${err.problems.join(", ")}) - action denied`);
-      process.stdout.write(
-        JSON.stringify(
-          makeOutput("deny", `OKed: the approval receipt did not verify (${err.problems.join(", ")}); action denied`)
-        )
-      );
+      respond("deny", `OKed: the approval receipt did not verify (${err.problems.join(", ")}); action denied`, failed);
     } else if (err instanceof OKedAuthError) {
       // Auth misconfig is not an outage - always deny.
-      log(`Invalid API key - action denied`);
-      process.stdout.write(
-        JSON.stringify(makeOutput("deny", "OKed: invalid API key"))
-      );
+      log(`Invalid API key (HTTP ${err.status}) - action denied`);
+      respond("deny", `OKed: invalid API key (HTTP ${err.status}). Run \`oked init\` to pair again.`, failed);
+    } else if (err instanceof OKedTooManyPendingError) {
+      // Not an outage: the backend works, and too many approvals wait.
+      log(`Too many pending approvals (HTTP 429) - action denied`);
+      respond("deny", err.message, failed);
+    } else if (err instanceof OKedHttpError) {
+      log(`Backend error HTTP ${err.status} - action denied (fail-safe)`);
+      respond("deny", `OKed: backend error HTTP ${err.status}${err.detail ? `: ${err.detail}` : ""} (fail-safe deny)`, failed);
     } else if (err instanceof OKedBackendUnreachableError) {
       const decision = degradedDecision(tier, {
         strictFailClosed: client.strictFailClosed,
       });
+      const cause = errorInfo(err).message;
       if (decision === "allow") {
-        log(`Backend unreachable - allowed (degraded; ${tier}, non-high-stakes)`);
-        process.stdout.write(
-          JSON.stringify(
-            makeOutput(
-              "allow",
-              "OKed backend unreachable - allowed (degraded; non-high-stakes)"
-            )
-          )
-        );
+        log(`Backend unreachable (${cause}) - allowed (degraded; ${tier}, non-high-stakes)`);
+        respond("allow", `OKed backend unreachable (${cause}) - allowed (degraded; non-high-stakes)`, { ...failed, degraded: true });
       } else {
         const why = client.strictFailClosed
           ? "strict fail-closed"
           : "high-stakes";
-        log(`Backend unreachable - ${why} denied (fail-safe)`);
-        process.stdout.write(
-          JSON.stringify(
-            makeOutput(
-              "deny",
-              `OKed backend unreachable - ${why} denied (fail-safe)`
-            )
-          )
-        );
+        log(`Backend unreachable (${cause}) - ${why} denied (fail-safe)`);
+        respond("deny", `OKed backend unreachable (${cause}) - ${why} denied (fail-safe)`, failed);
       }
     } else {
-      // Unknown error - fail safe deny.
-      log(`Unexpected error - action denied (fail-safe)`);
-      process.stdout.write(
-        JSON.stringify(
-          makeOutput("deny", "OKed: unexpected error (fail-safe)")
-        )
-      );
+      // Unknown error - fail safe deny, with the real cause.
+      log(`Unexpected error (${errorText(err)}) - action denied (fail-safe)`);
+      respond("deny", `OKed: unexpected error (fail-safe): ${errorText(err)}`, failed);
     }
   }
 }
 
 main().catch((err) => {
   process.stderr.write(`[OKed] Fatal: ${err}\n`);
-  // Fail-safe: deny
-  process.stdout.write(
-    JSON.stringify(makeOutput("deny", "OKed: internal error (fail-safe)"))
-  );
+  // Fail-safe: deny, with the real cause.
+  respond("deny", `OKed: internal error (fail-safe): ${errorText(err)}`, { tool: "unknown", tier: null, error: errorInfo(err) });
   process.exit(0); // exit 0 so Claude reads our JSON, not a crash
 });

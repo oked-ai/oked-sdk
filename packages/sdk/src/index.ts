@@ -3,7 +3,7 @@ import { dirname } from "path";
 import type { ApprovalRequest, ApprovalResponse, OKedConfig } from "./types.js";
 import type { Rule } from "./rules.js";
 import { loadOKedConfig, OKED_RULES_CACHE_PATH, OKED_HEARTBEAT_PATH } from "./config.js";
-import { OKedAuthError, OKedBackendUnreachableError } from "./errors.js";
+import { OKedAuthError, OKedBackendUnreachableError, OKedHttpError, OKedTooManyPendingError } from "./errors.js";
 import { randomUUID } from "crypto";
 import { checkReceipt, OKED_RECEIPT_KEYS_URL } from "./receipt.js";
 import { hostname } from "os";
@@ -225,25 +225,59 @@ export class OKedClient {
 
     if (!res.ok) {
       const body = await res.text().catch(() => "");
+      const detail = shortDetail(body);
+      // A gateway that gave up waiting on a held long-poll: same as above.
+      if (res.status === 504) return HELD_TIMEOUT;
+      // Auth first, whatever the body: a bad key must never become an "outage",
+      // or degraded mode could allow an action with an invalid key.
       if (res.status === 401 || res.status === 403) {
         throw new OKedAuthError(`OKed backend error ${res.status}: ${body}`, res.status);
       }
-      // A gateway that gave up waiting on a held long-poll: same as above.
-      if (res.status === 504) return HELD_TIMEOUT;
-      if (res.status >= 500) {
-        throw new OKedBackendUnreachableError(`OKed backend error ${res.status}: ${body}`);
+      if (res.status === 429) throw new OKedTooManyPendingError(errorField(body) || detail);
+      // The hosting platform answered instead of the backend (the backend is
+      // gone or not deployed), or something answered that is not the backend
+      // at all. Both are an outage, so degraded mode applies.
+      if (res.headers.get("x-railway-fallback") || /application not found/i.test(body)) {
+        throw new OKedBackendUnreachableError(
+          `OKed backend unreachable: HTTP ${res.status}, the hosting platform answered "application not found" (${this.config.backendUrl})`,
+          undefined,
+          res.status,
+        );
       }
-      throw new Error(`OKed backend error ${res.status}: ${body}`);
+      if (!isJson(body)) {
+        throw new OKedBackendUnreachableError(
+          `OKed backend unreachable: HTTP ${res.status} with a reply that is not JSON${detail ? `: ${detail}` : ""}`,
+          undefined,
+          res.status,
+        );
+      }
+      if (res.status >= 500) {
+        throw new OKedBackendUnreachableError(`OKed backend error HTTP ${res.status}: ${detail}`, undefined, res.status);
+      }
+      throw new OKedHttpError(res.status, errorField(body) || detail);
     }
 
     let result: { approval_id: string | null; decision: string; status: string; receipt?: unknown };
+    let text: string;
     try {
       // The backend sends headers at once and streams whitespace heartbeats
       // while it waits, so the wait for a human happens here, in the body.
-      result = (await res.json()) as typeof result;
+      text = await res.text();
     } catch (err) {
       if (isHeldRequestTimeout(err)) return HELD_TIMEOUT;
       throw err;
+    }
+    try {
+      result = JSON.parse(text) as typeof result;
+      if (!result || typeof result !== "object") throw new Error("not an object");
+    } catch {
+      // HTTP 200 with a body that is not our JSON: not the backend. An outage.
+      throw new OKedBackendUnreachableError(
+        `OKed backend unreachable: HTTP ${res.status} with a reply that is not JSON` +
+          ` (content-type ${res.headers.get("content-type") || "none"})`,
+        undefined,
+        res.status,
+      );
     }
 
     // Nobody acts on a decision we cannot prove: an invalid receipt throws
@@ -350,6 +384,32 @@ const HELD_TIMEOUT: ApprovalResponse = { approved: false, approval_id: null, dec
  * abort (TimeoutError), or undici's 300s headers/body timeouts, which fire
  * regardless of the abort signal on a silent long-poll.
  */
+function isJson(text: string): boolean {
+  try {
+    JSON.parse(text);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** One line, at most 200 characters: for error messages, never a whole page. */
+function shortDetail(body: string): string {
+  const line = body.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+  return line.length > 200 ? line.slice(0, 197) + "..." : line;
+}
+
+/** The backend's own error text ({"error": "..."} or {"message": "..."}), if any. */
+function errorField(body: string): string {
+  try {
+    const j = JSON.parse(body) as { error?: unknown; message?: unknown };
+    const v = typeof j.error === "string" ? j.error : typeof j.message === "string" ? j.message : "";
+    return shortDetail(v);
+  } catch {
+    return "";
+  }
+}
+
 function isHeldRequestTimeout(err: unknown): boolean {
   if (!err || typeof err !== "object") return false;
   // AbortSignal.timeout() rejects with a DOMException, which is not an Error
@@ -372,7 +432,13 @@ function isRetriableConnectError(err: unknown): boolean {
   );
 }
 
-export { OKedAuthError, OKedBackendUnreachableError, OKedReceiptError } from "./errors.js";
+export {
+  OKedAuthError,
+  OKedBackendUnreachableError,
+  OKedHttpError,
+  OKedReceiptError,
+  OKedTooManyPendingError,
+} from "./errors.js";
 export { checkReceipt, keysFor, keysUrlAllowed, OKED_RECEIPT_KEYS_URL } from "./receipt.js";
 export { PINNED_RECEIPT_KEYS } from "./receipt-keys.js";
 export {
