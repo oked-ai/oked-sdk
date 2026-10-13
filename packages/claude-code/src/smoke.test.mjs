@@ -4,12 +4,18 @@
 // executes against dist/).
 import assert from "node:assert";
 import { DEFAULT_APPROVAL_TIMEOUT_MS } from "@oked/sdk";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   HOOK_CONFIG,
   HOOK_TIMEOUT_SECONDS,
   ensureHookTimeout,
   ensureMcpMatcher,
   hasOkedCommandHook,
+  upgradeOkedHooks,
+  upgradeSettingsFile,
+  userSettingsPath,
 } from "../dist/hook-config.js";
 
 let passed = 0;
@@ -71,4 +77,67 @@ let passed = 0;
   passed++;
 }
 
-console.log(`ok - @oked/claude-code smoke: ${passed}/6 passed`);
+// User-level settings: an existing oked-hook entry gets the new timeout and
+// matcher; other hooks and other settings stay as they are.
+{
+  const dir = mkdtempSync(join(tmpdir(), "oked-settings-"));
+  try {
+    const path = join(dir, "settings.json");
+    const before = {
+      model: "opus",
+      hooks: {
+        PreToolUse: [
+          { matcher: "Bash|Write|Edit|Agent", hooks: [{ type: "command", command: "oked-hook", timeout: 300 }] },
+          { matcher: "*", hooks: [{ type: "command", command: "node audit.mjs", timeout: 10 }] },
+        ],
+        Stop: [{ hooks: [{ type: "command", command: "node audit.mjs", timeout: 10 }] }],
+      },
+    };
+    writeFileSync(path, JSON.stringify(before, null, 2));
+    assert.equal(upgradeSettingsFile(path), "updated");
+    const after = JSON.parse(readFileSync(path, "utf8"));
+    assert.equal(after.hooks.PreToolUse[0].hooks[0].timeout, HOOK_TIMEOUT_SECONDS);
+    assert.equal(after.hooks.PreToolUse[0].matcher, "Bash|Write|Edit|Agent|mcp__.*");
+    assert.deepEqual(after.hooks.PreToolUse[1], before.hooks.PreToolUse[1], "a foreign hook stays");
+    assert.deepEqual(after.hooks.Stop, before.hooks.Stop, "other events stay");
+    assert.equal(after.model, "opus", "other settings stay");
+    assert.equal(upgradeSettingsFile(path), "unchanged", "a second run changes nothing");
+    passed++;
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+// It never installs the hook in a user file that does not have it, and it never
+// rewrites a file it cannot read.
+{
+  const dir = mkdtempSync(join(tmpdir(), "oked-settings-"));
+  try {
+    const none = join(dir, "none.json");
+    writeFileSync(none, JSON.stringify({ hooks: { PreToolUse: [{ hooks: [{ command: "other" }] }] } }));
+    assert.equal(upgradeSettingsFile(none), "no-oked-hook");
+    assert.ok(!readFileSync(none, "utf8").includes("oked-hook"));
+    const bad = join(dir, "bad.json");
+    writeFileSync(bad, "{ not json");
+    assert.equal(upgradeSettingsFile(bad), "unreadable");
+    assert.equal(readFileSync(bad, "utf8"), "{ not json");
+    assert.equal(upgradeSettingsFile(join(dir, "missing.json")), "absent");
+    assert.equal(upgradeOkedHooks({}), false);
+    passed++;
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+// CLAUDE_CONFIG_DIR moves the user settings file, as in Claude Code.
+{
+  const saved = process.env.CLAUDE_CONFIG_DIR;
+  process.env.CLAUDE_CONFIG_DIR = "/tmp/claude-config-test";
+  assert.equal(userSettingsPath(), "/tmp/claude-config-test/settings.json");
+  if (saved === undefined) delete process.env.CLAUDE_CONFIG_DIR;
+  else process.env.CLAUDE_CONFIG_DIR = saved;
+  assert.ok(userSettingsPath().endsWith(join(".claude", "settings.json")) || process.env.CLAUDE_CONFIG_DIR);
+  passed++;
+}
+
+console.log(`ok - @oked/claude-code smoke: ${passed}/9 passed`);

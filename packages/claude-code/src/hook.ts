@@ -37,10 +37,13 @@ function log(msg: string): void {
 
 type Context = Omit<DecisionLogEntry, "ts" | "decision" | "reason" | "client">;
 
-/** Writes the hook output. Every decision that is not an allow also goes to ~/.oked/hook.log. */
+/**
+ * Writes the hook output. Every deny and ask, and every degraded allow, also
+ * goes to ~/.oked/hook.log.
+ */
 function respond(decision: "allow" | "deny" | "ask", reason: string | undefined, ctx: Context): void {
   process.stdout.write(JSON.stringify(makeOutput(decision, reason)));
-  if (decision !== "allow") logDecision({ decision, reason: reason ?? "", client: CLIENT_ID, ...ctx });
+  if (decision !== "allow" || ctx.degraded) logDecision({ decision, reason: reason ?? "", client: CLIENT_ID, ...ctx });
 }
 
 /** "Name: message", one line, short. For deny reasons. */
@@ -178,7 +181,7 @@ async function main(): Promise<void> {
       const cause = errorInfo(err).message;
       if (decision === "allow") {
         log(`Backend unreachable (${cause}) - allowed (degraded; ${tier}, non-high-stakes)`);
-        respond("allow", `OKed backend unreachable (${cause}) - allowed (degraded; non-high-stakes)`, failed);
+        respond("allow", `OKed backend unreachable (${cause}) - allowed (degraded; non-high-stakes)`, { ...failed, degraded: true });
       } else {
         const why = client.strictFailClosed
           ? "strict fail-closed"

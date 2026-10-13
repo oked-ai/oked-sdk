@@ -3,8 +3,12 @@
  * in-place upgrades applied when an older entry is already there.
  *
  * Kept out of cli.ts because that module runs its command switch on import,
- * which makes it untestable. These are pure functions over the settings shape.
+ * which makes it untestable. Most are pure functions over the settings shape;
+ * upgradeSettingsFile() reads and writes one file.
  */
+import { existsSync, readFileSync, writeFileSync } from "fs";
+import { homedir } from "os";
+import { join } from "path";
 import { DEFAULT_APPROVAL_TIMEOUT_MS } from "@oked/sdk";
 
 export const MCP_TOOL_MATCHER = "mcp__.*";
@@ -76,4 +80,54 @@ export function ensureHookTimeout(entry: { hooks?: unknown[] }): boolean {
     updated = true;
   }
   return updated;
+}
+
+/**
+ * Apply the in-place upgrades (MCP matcher, timeout) to every `oked-hook`
+ * entry of a settings object. Never adds a hook. Returns true when something
+ * changed.
+ */
+export function upgradeOkedHooks(settings: { hooks?: Record<string, unknown> }): boolean {
+  const preToolUse = settings.hooks?.PreToolUse;
+  if (!Array.isArray(preToolUse)) return false;
+  let updated = false;
+  for (const entry of preToolUse as Array<{ matcher?: string; hooks?: unknown[] }>) {
+    if (!entry || typeof entry !== "object" || !hasOkedCommandHook(entry)) continue;
+    const nextMatcher = ensureMcpMatcher(entry.matcher);
+    if (nextMatcher !== entry.matcher) {
+      entry.matcher = nextMatcher;
+      updated = true;
+    }
+    if (ensureHookTimeout(entry)) updated = true;
+  }
+  return updated;
+}
+
+/** The user-level Claude Code settings file (all projects). */
+export function userSettingsPath(): string {
+  return join(process.env.CLAUDE_CONFIG_DIR || join(homedir(), ".claude"), "settings.json");
+}
+
+export type SettingsFileUpgrade = "updated" | "unchanged" | "no-oked-hook" | "absent" | "unreadable";
+
+/**
+ * Upgrade the `oked-hook` entries in one settings file, in place. A file with
+ * no `oked-hook` entry is left alone: this never installs the hook there.
+ * A file that does not parse is never rewritten.
+ */
+export function upgradeSettingsFile(path: string): SettingsFileUpgrade {
+  if (!existsSync(path)) return "absent";
+  let settings: { hooks?: Record<string, unknown> };
+  try {
+    settings = JSON.parse(readFileSync(path, "utf-8"));
+  } catch {
+    return "unreadable";
+  }
+  const pre = settings?.hooks?.PreToolUse;
+  if (!Array.isArray(pre) || !pre.some((e) => e && typeof e === "object" && hasOkedCommandHook(e as { hooks?: unknown[] }))) {
+    return "no-oked-hook";
+  }
+  if (!upgradeOkedHooks(settings)) return "unchanged";
+  writeFileSync(path, JSON.stringify(settings, null, 2) + "\n");
+  return "updated";
 }

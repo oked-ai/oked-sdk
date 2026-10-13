@@ -3,9 +3,11 @@ import { homedir } from "os";
 import { dirname, join } from "path";
 
 /**
- * One JSON line per hook decision that is not an allow (deny or ask), so a
- * person can see later why an action was blocked. It never holds the tool
- * input or the description: a command line can contain a secret.
+ * One JSON line per hook decision that is not a normal allow: every deny and
+ * ask, and every degraded allow (an action that ran without a person's
+ * decision because the backend was unreachable). A person can see later why
+ * an action was blocked, or which actions ran during an outage. It never holds
+ * the tool input or the description: a command line can contain a secret.
  */
 export const OKED_HOOK_LOG = join(homedir(), ".oked", "hook.log");
 
@@ -20,7 +22,9 @@ export interface ErrorInfo {
 
 export interface DecisionLogEntry {
   ts: string;
-  decision: "deny" | "ask";
+  decision: "deny" | "ask" | "allow";
+  /** True for an allow without a person's decision, during a backend outage. */
+  degraded?: boolean;
   reason: string;
   tool: string;
   tier: string | null;

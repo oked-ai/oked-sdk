@@ -20,7 +20,7 @@ oked init
 
 | Command | What it does |
 |---|---|
-| `oked init` | Install or update the project hook and pair this device. |
+| `oked init` | Install or update the project hook and pair this device. It also updates an existing `oked-hook` entry in your user settings (`~/.claude/settings.json`), for example to a new timeout. Run it again after you update the package. |
 | `oked status` | Show install state and ping the backend. |
 | `oked receipts verify [file]` | Check this machine's copy of approval receipts (default `~/.oked/receipts.jsonl`): every signature, and the chain links between neighbouring receipts. |
 | `oked uninstall` | Remove the project hook entry (other hooks are preserved). |
@@ -71,7 +71,7 @@ The backend counts as unreachable when the connection fails, when it answers wit
 
 ## Decision log
 
-The hook writes one JSON line to `~/.oked/hook.log` (mode 600) for each decision that is not an allow: time, decision, tool, tier, reason, approval ID, receipt ID and error (name, message, HTTP status). The log never holds the tool input or the command. Above 1 MB, it moves to `hook.log.1`. Set `OKED_HOOK_LOG` to use another file.
+The hook writes one JSON line to `~/.oked/hook.log` (mode 600) for each deny and ask, and for each degraded allow (`"degraded": true`: an action that ran without a person's decision because the backend was unreachable). Each line has the time, decision, tool, tier, reason, approval ID, receipt ID and error (name, message, HTTP status). The log never holds the tool input or the command. Above 1 MB, it moves to `hook.log.1`. Set `OKED_HOOK_LOG` to use another file.
 
 ## License
 

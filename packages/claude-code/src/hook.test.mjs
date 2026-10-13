@@ -87,13 +87,16 @@ try {
     passed++;
   }
 
-  // The same outage for a review-tier action: the existing degraded mode allows it. No log line.
+  // The same outage for a review-tier action: the existing degraded mode allows it.
+  // A degraded allow ran without a person's decision, so it is logged.
   {
     const before = logLines().length;
     const out = await runHook(REVIEW);
     assert.equal(out.permissionDecision, "allow");
     assert.match(out.permissionDecisionReason, /unreachable \(.*HTTP 404.*\) - allowed \(degraded/);
-    assert.equal(logLines().length, before, "an allow is not logged");
+    const lines = logLines();
+    assert.equal(lines.length, before + 1, "a degraded allow is logged");
+    assert.deepEqual([lines.at(-1).decision, lines.at(-1).degraded, lines.at(-1).tier], ["allow", true, "review"]);
     passed++;
   }
 
@@ -164,10 +167,20 @@ try {
     passed++;
   }
 
-  // The log: mode 600, one JSON line per non-allow decision, no tool input.
+  // A normal allow (approved) is not logged.
+  {
+    reply = { status: 200, headers: {}, body: JSON.stringify({ approval_id: "appr-3", decision: "approved", status: "approved" }) };
+    const before = logLines().length;
+    const out = await runHook(REVIEW);
+    assert.equal(out.permissionDecision, "allow");
+    assert.equal(logLines().length, before, "a normal allow is not logged");
+    passed++;
+  }
+
+  // The log: mode 600, one JSON line per deny, ask or degraded allow, no tool input.
   {
     const lines = logLines();
-    assert.equal(lines.length, 8, "8 non-allow decisions above");
+    assert.equal(lines.length, 9, "8 deny or ask decisions and 1 degraded allow above");
     assert.equal(statSync(logPath).mode & 0o777, 0o600);
     const text = readFileSync(logPath, "utf8");
     assert.ok(!text.includes(SECRET), "the log never holds tool input");
@@ -180,4 +193,4 @@ try {
   rmSync(home, { recursive: true, force: true });
 }
 
-console.log(`ok - @oked/claude-code hook: ${passed}/10 passed`);
+console.log(`ok - @oked/claude-code hook: ${passed}/11 passed`);

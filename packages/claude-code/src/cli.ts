@@ -10,6 +10,8 @@ import {
   hasOkedCommandHook,
   ensureMcpMatcher,
   ensureHookTimeout,
+  upgradeSettingsFile,
+  userSettingsPath,
 } from "./hook-config.js";
 
 import { CLIENT_VERSION } from "./version.js";
@@ -259,6 +261,20 @@ async function init(): Promise<void> {
   } else {
     console.log("OKed hook already configured.");
     console.log(`  Config: ${settingsPath}`);
+  }
+
+  // An oked-hook entry in the user-level settings (all projects) gets the
+  // same upgrades, so existing users get a new timeout when they run init
+  // after an update. Init never adds the hook there.
+  const userPath = userSettingsPath();
+  if (userPath !== settingsPath) {
+    const result = upgradeSettingsFile(userPath);
+    if (result === "updated") {
+      console.log("OKed hook updated in your user settings (all projects).");
+      console.log(`  Config: ${userPath}`);
+    } else if (result === "unreadable") {
+      console.log(`  Note: could not read ${userPath}; it was not changed.`);
+    }
   }
 
   // Already paired? Just ping and exit.
