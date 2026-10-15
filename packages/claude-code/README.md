@@ -21,6 +21,8 @@ oked init
 | Command | What it does |
 |---|---|
 | `oked init` | Install or update the project hook and pair this device. It also updates an existing `oked-hook` entry in your user settings (`~/.claude/settings.json`), for example to a new timeout. Run it again after you update the package. |
+| `oked init --key-only` | Only create or show your OKed API key (saved in `~/.oked/config.json`). It adds or changes no hook. Use it for tools that only need the key, such as the OpenShell middleware. |
+| `oked init --no-browser` | Print the pairing link instead of opening a browser, and leave the clipboard alone. Useful on a server or over SSH. Works with `--key-only`. |
 | `oked status` | Show install state and ping the backend. |
 | `oked receipts verify [file]` | Check this machine's copy of approval receipts (default `~/.oked/receipts.jsonl`): every signature, and the chain links between neighbouring receipts. |
 | `oked uninstall` | Remove the project hook entry (other hooks are preserved). |
