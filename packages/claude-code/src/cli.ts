@@ -20,6 +20,16 @@ import { OKED_RECEIPTS_LOG, verifyReceiptsFile } from "./receipts.js";
 const DEFAULT_BACKEND_URL =
   process.env.OKED_BACKEND_URL || "https://api.oked.ai";
 
+/** `oked init --key-only`: create or show the API key; add or change no hook. */
+const KEY_ONLY = process.argv.includes("--key-only");
+/** `oked init --no-browser`: print the pairing link; open no browser, use no clipboard. */
+const NO_BROWSER = process.argv.includes("--no-browser");
+
+/** The first 8 characters, never the whole key. */
+function maskKey(key: string): string {
+  return `${key.slice(0, 8)}...`;
+}
+
 function getSettingsPath(): string {
   return join(process.cwd(), ".claude", "settings.json");
 }
@@ -166,7 +176,7 @@ async function pair(clientType: "claude-code" | "openclaw" | "sdk"): Promise<str
   console.log("");
   console.log("  Your pairing code:");
   console.log(`    ${code.user_code}`);
-  if (await copyToClipboard(code.user_code)) {
+  if (!NO_BROWSER && (await copyToClipboard(code.user_code))) {
     console.log("    (copied to clipboard)");
   }
   console.log("");
@@ -178,11 +188,11 @@ async function pair(clientType: "claude-code" | "openclaw" | "sdk"): Promise<str
     Boolean(process.stdin.isTTY) &&
     !process.argv.includes("--yes") &&
     !process.argv.includes("-y");
-  if (interactive) {
+  if (interactive && !NO_BROWSER) {
     await waitForEnter("  Press Enter to open your browser (Ctrl+C to cancel)... ");
   }
 
-  const opened = openBrowser(code.verification_uri_complete);
+  const opened = NO_BROWSER ? false : openBrowser(code.verification_uri_complete);
   console.log("");
   if (opened) {
     console.log("  Opened your browser to:");
@@ -219,7 +229,36 @@ async function pair(clientType: "claude-code" | "openclaw" | "sdk"): Promise<str
   return null;
 }
 
+/**
+ * `oked init --key-only`: pair this device (or show the existing key) and save
+ * the key in ~/.oked/config.json. It adds no Claude Code hook and changes no
+ * settings file. For tools that only need the key, such as the OpenShell
+ * middleware.
+ */
+async function initKeyOnly(): Promise<void> {
+  const existing = new OKedClient();
+  if (existing.apiKey) {
+    const ok = await existing.ping();
+    const where = process.env.OKED_API_KEY ? "the OKED_API_KEY environment variable" : OKED_CONFIG_PATH;
+    console.log("OKed API key already set up (no hook added).");
+    console.log("");
+    console.log(`  API key: ${maskKey(existing.apiKey)}`);
+    console.log(`  Stored in: ${where}`);
+    console.log(`  Backend: ${existing.backendUrl} (${ok ? "connected" : "not reachable"})`);
+    return;
+  }
+
+  const apiKey = await pair("sdk");
+  if (!apiKey) return;
+
+  writeOkedConfig(apiKey, DEFAULT_BACKEND_URL);
+  console.log("");
+  console.log(`  Paired ✓  API key ${maskKey(apiKey)} saved to ${OKED_CONFIG_PATH}`);
+  console.log("  No Claude Code hook was added. Run `oked init` without --key-only to add it.");
+}
+
 async function init(): Promise<void> {
+  if (KEY_ONLY) return initKeyOnly();
   const settingsPath = getSettingsPath();
   const settings = readSettings(settingsPath);
 
@@ -282,7 +321,7 @@ async function init(): Promise<void> {
   if (existingClient.apiKey) {
     const ok = await existingClient.ping();
     console.log("");
-    console.log(`  API key: ${existingClient.apiKey.slice(0, 8)}... (already paired)`);
+    console.log(`  API key: ${maskKey(existingClient.apiKey)} (already paired)`);
     console.log(`  Backend: ${existingClient.backendUrl} (${ok ? "connected" : "not reachable"})`);
     console.log("");
     console.log("Every Claude Code session in this project is now protected.");
@@ -400,6 +439,8 @@ switch (command) {
     console.log("");
     console.log("Commands:");
     console.log("  init        Install OKed hooks in current project and pair this device");
+    console.log("    --key-only    Only create or show the API key. Add no hook.");
+    console.log("    --no-browser  Print the pairing link. Open no browser, use no clipboard.");
     console.log("  status      Show current config and connection status");
     console.log("  uninstall   Remove OKed hooks from current project");
     console.log("  receipts verify [file]  Check this machine's approval receipts");
