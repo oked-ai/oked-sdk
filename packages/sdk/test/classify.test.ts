@@ -1075,6 +1075,16 @@ describe("effect-category model — permissive default (round 5)", () => {
     assert.equal(bash(`psql -c "DELETE FROM users"`), "high_stakes");
   });
 
+  it("db statement after a quoted connection string keeps its tier", () => {
+    assert.equal(bash(`psql "$DATABASE_URL" -c "DELETE FROM users WHERE id=1"`), "high_stakes");
+    assert.equal(bash(`psql "$DATABASE_URL" -c "SELECT 1"`), "safe");
+  });
+
+  it("a harmless first -c can't hide a destructive second one", () => {
+    assert.equal(bash(`psql -c "SELECT 1" -c "DROP TABLE users"`), "high_stakes");
+    assert.equal(bash(`mysql -e "SELECT 1" --execute="TRUNCATE orders"`), "high_stakes");
+  });
+
   it("newly-covered destructive/irreversible ops → high_stakes", () => {
     for (const cmd of [
       "mkfs.ext4 /dev/sda1",
