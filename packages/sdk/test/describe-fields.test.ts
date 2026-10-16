@@ -126,6 +126,29 @@ describe("Bash — semantic rerendering", () => {
     assert.ok(f!.Body && f!.Body.includes("WHERE"));
   });
 
+  it("a quoted connection string before -c stays out of the body", () => {
+    const f = describeFields("Bash", {
+      command: `psql "$DATABASE_URL" -c "DELETE FROM users WHERE last_login < now() - interval '2 years'"`,
+    });
+    assert.equal(f!.Title, "Delete rows from");
+    assert.equal(f!.Target, "users");
+    assert.equal(f!.Body, "DELETE FROM users WHERE last_login < now() - interval '2 years'");
+  });
+
+  it("mysql -e after a quoted password keeps the password out of the body", () => {
+    const f = describeFields("Bash", {
+      command: `mysql -u root -p"s3cret" shop -e "DELETE FROM orders WHERE status='void'"`,
+    });
+    assert.equal(f!.Target, "orders");
+    assert.ok(!f!.Body?.includes("s3cret"), `body leaked the password: ${f!.Body}`);
+  });
+
+  it("psql -e (echo queries) is not taken as the statement", () => {
+    const f = describeFields("Bash", { command: `psql -e -c "DROP TABLE sessions"` });
+    assert.equal(f!.Title, "Drop table");
+    assert.equal(f!.Target, "sessions");
+  });
+
   it("DELETE without WHERE → 'Delete ALL rows from'", () => {
     const f = describeFields("Bash", { command: 'psql -c "DELETE FROM users"' });
     assert.equal(f!.Title, "Delete ALL rows from");
@@ -231,6 +254,21 @@ describe("Bash — multi-file rm", () => {
     assert.equal(f!.Title, "POST request to localhost");
     assert.equal(f!.Target, "/api/v1/approve");
     assert.equal(f!.Body, '{"description":"Force-push to main"}');
+  });
+
+  it("every -d value is in the body, joined with & as curl sends it", () => {
+    const f = describeFields("Bash", {
+      command: "curl -X POST https://api.stripe.com/v1/refunds -u $STRIPE_KEY: -d charge=ch_3PqL2x -d amount=4900",
+    });
+    assert.equal(f!.Target, "/v1/refunds");
+    assert.equal(f!.Body, "charge=ch_3PqL2x&amount=4900");
+  });
+
+  it("each -F form part gets its own line", () => {
+    const f = describeFields("Bash", {
+      command: `curl https://api.example.com/upload -F "name=report" -F "file=@q3.pdf"`,
+    });
+    assert.equal(f!.Body, "name=report\nfile=@q3.pdf");
   });
 
   it("a request body without -X is described as a POST", () => {

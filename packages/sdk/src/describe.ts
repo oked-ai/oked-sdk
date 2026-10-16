@@ -167,14 +167,27 @@ function extractPath(url: string): string | undefined {
   }
 }
 
-/** The value of the first curl request-body flag (-d, --data*, --json, -F, --form). */
+/**
+ * The request body curl sends, from every body flag in order: `-d`/`--data*`
+ * values joined with `&` (as curl joins them), `--json` values joined as-is,
+ * and one line per `-F`/`--form` part. Only the first flag used to count, so
+ * `-d charge=ch_1 -d amount=4900` lost the amount.
+ */
 function extractCurlPayload(cmd: string): string | undefined {
-  const m = cmd.match(
-    /\s(?:-d|--data(?:-raw|-binary|-urlencode|-ascii)?|--json|-F|--form)(?:\s+|=)(?:'([^']*)'|"((?:[^"\\]|\\.)*)"|([^\s'"|;&]+))/,
-  );
-  if (!m) return undefined;
-  const v = m[1] ?? m[2] ?? m[3];
-  return v ? v : undefined;
+  const data: string[] = [];
+  const json: string[] = [];
+  const form: string[] = [];
+  const re =
+    /\s(-d|--data(?:-raw|-binary|-urlencode|-ascii)?|--json|-F|--form)(?:\s+|=)(?:'([^']*)'|"((?:[^"\\]|\\.)*)"|([^\s'"|;&]+))/g;
+  for (const m of cmd.matchAll(re)) {
+    const v = m[2] ?? m[3] ?? m[4];
+    if (!v) continue;
+    if (m[1] === "--json") json.push(v);
+    else if (m[1] === "-F" || m[1] === "--form") form.push(v);
+    else data.push(v);
+  }
+  const parts = [data.join("&"), json.join(""), form.join("\n")].filter(Boolean);
+  return parts.length ? parts.join("\n") : undefined;
 }
 
 function summarizeBash(command: string, sizeBytes?: number, cwd?: string): Rendered {
@@ -540,6 +553,95 @@ function sqlFromInterpreterBody(body: string): string | null {
   return DB_LIBRARY_RE.test(body) ? body : null;
 }
 
+/**
+ * Shell words of `s` up to the first unquoted operator (| ; & < > or a
+ * newline), with quotes removed and `\"`-style escapes resolved. `quoted` marks
+ * a word that had a quoted part. Undefined when a quote is never closed.
+ */
+function shellWords(s: string): { text: string; quoted: boolean }[] | undefined {
+  const words: { text: string; quoted: boolean }[] = [];
+  let i = 0;
+  while (i < s.length) {
+    while (i < s.length && (s[i] === " " || s[i] === "\t")) i++;
+    if (i >= s.length || /[|;&<>\n]/.test(s[i])) break;
+    let text = "";
+    let quoted = false;
+    while (i < s.length && !/[\s|;&<>]/.test(s[i])) {
+      const c = s[i];
+      if (c === "'") {
+        const end = s.indexOf("'", i + 1);
+        if (end < 0) return undefined;
+        text += s.slice(i + 1, end);
+        i = end + 1;
+        quoted = true;
+      } else if (c === '"') {
+        let j = i + 1;
+        while (j < s.length && s[j] !== '"') {
+          if (s[j] === "\\" && /["\\$`]/.test(s[j + 1] ?? "")) {
+            text += s[j + 1];
+            j += 2;
+          } else {
+            text += s[j++];
+          }
+        }
+        if (j >= s.length) return undefined;
+        i = j + 1;
+        quoted = true;
+      } else if (c === "\\" && i + 1 < s.length) {
+        text += s[i + 1];
+        i += 2;
+      } else {
+        text += c;
+        i++;
+      }
+    }
+    words.push({ text, quoted });
+  }
+  return words;
+}
+
+// The flag that carries a statement, per SQL CLI. psql's `-e` is --echo-queries
+// and takes no value, so it must not count there.
+const SQL_CLI_STATEMENT_FLAGS: Record<string, { short?: string; long: string }> = {
+  psql: { short: "-c", long: "--command" },
+  mysql: { short: "-e", long: "--execute" },
+  mariadb: { short: "-e", long: "--execute" },
+  sqlite3: { long: "-cmd" },
+  sqlite: { long: "-cmd" },
+};
+
+/**
+ * The SQL a psql / mysql / sqlite3 invocation runs, from its arguments.
+ * Every statement flag counts (`psql -c "SELECT 1" -c "DROP TABLE t"` runs
+ * both), so a harmless first statement can't hide a destructive one. With no
+ * flag, quoted positional arguments that read as SQL (`sqlite3 db "…"`), else
+ * a trailing quoted argument as before. Undefined when the arguments can't be
+ * read (unbalanced quotes), so the caller can fall back.
+ */
+function sqlFromCliArgs(tool: string, args: string): string | null | undefined {
+  const words = shellWords(args);
+  if (!words) return undefined;
+  const flags = SQL_CLI_STATEMENT_FLAGS[tool];
+  const statements: string[] = [];
+  for (let k = 0; k < words.length; k++) {
+    const w = words[k].text;
+    if (w === flags.long || (flags.short && w === flags.short)) {
+      if (k + 1 < words.length) statements.push(words[++k].text);
+    } else if (w.startsWith(flags.long + "=")) {
+      statements.push(w.slice(flags.long.length + 1));
+    } else if (flags.short && words[k].quoted && w.length > 2 && w.startsWith(flags.short)) {
+      statements.push(w.slice(2)); // -c"SELECT …"
+    }
+  }
+  if (statements.length) return statements.join("\n");
+
+  const quoted = words.filter(w => w.quoted).map(w => w.text);
+  const sqlish = quoted.filter(q => SQL_KEYWORDS_RE.test(q));
+  if (sqlish.length) return sqlish.join("\n");
+  const last = words[words.length - 1];
+  return last?.quoted && words.length > 1 && /["']\s*$/.test(args) ? last.text : null;
+}
+
 export function findSqlInCommand(cmd: string): string | null {
   // Inline interpreter flags: node -e, python -c, ruby -e, perl -e. Anchored to
   // a command position so a SQL-looking string elsewhere doesn't match.
@@ -550,13 +652,22 @@ export function findSqlInCommand(cmd: string): string | null {
     if (sql) return sql;
   }
 
-  // psql -c "..." / mysql -e "..." / sqlite3 db "..." — outer-quoted statement.
-  // Anchored to the start of the command so "psql"/"mysql" appearing inside an
-  // argument (another tool's --body, etc.) can't trigger a false SQL match.
-  const dq = cmd.match(/^(?:\s*\w+=\S+\s+)*(?:sudo\s+)?(?:psql|mysql|sqlite3?|mariadb)\b[^"]*"([\s\S]+?)"\s*$/i);
-  if (dq) return dq[1];
-  const sq = cmd.match(/^(?:\s*\w+=\S+\s+)*(?:sudo\s+)?(?:psql|mysql|sqlite3?|mariadb)\b[^']*'([\s\S]+?)'\s*$/i);
-  if (sq) return sq[1];
+  // psql -c "..." / mysql -e "..." / sqlite3 db "..." — read the arguments as
+  // shell words, so a quoted connection string before the statement
+  // (`psql "$DATABASE_URL" -c "DELETE …"`) isn't swallowed into it. Anchored to
+  // the start of the command so "psql"/"mysql" appearing inside an argument
+  // (another tool's --body, etc.) can't trigger a false SQL match.
+  const cli = cmd.match(/^(?:\s*\w+=\S+\s+)*(?:sudo\s+)?(psql|mysql|sqlite3?|mariadb)\b/i);
+  const fromArgs = cli ? sqlFromCliArgs(cli[1].toLowerCase(), cmd.slice(cli[0].length)) : null;
+  if (fromArgs) return fromArgs;
+  if (fromArgs === undefined) {
+    // Unbalanced quotes: fall back to the outer-quoted span.
+    const dq = cmd.match(/^(?:\s*\w+=\S+\s+)*(?:sudo\s+)?(?:psql|mysql|sqlite3?|mariadb)\b[^"]*"([\s\S]+?)"\s*$/i);
+    if (dq) return dq[1];
+    const sq = cmd.match(/^(?:\s*\w+=\S+\s+)*(?:sudo\s+)?(?:psql|mysql|sqlite3?|mariadb)\b[^']*'([\s\S]+?)'\s*$/i);
+    if (sq) return sq[1];
+  }
+  // No statement in the arguments: a heredoc may still feed one (below).
 
   // Heredoc-piped script: <<EOF / <<'EOF' / <<"EOF" / <<-EOF. Only when the
   // command (outside the body) actually feeds the heredoc to a SQL CLI or
