@@ -1,6 +1,6 @@
 {
   "name": "@oked/sdk",
-  "version": "0.6.5",
+  "version": "0.6.6",
   "description": "OKed SDK - human approval layer for AI agents",
   "type": "module",
   "main": "dist/index.js",
@@ -45,7 +45,7 @@
     "access": "public"
   },
   "dependencies": {
-    "@oked/receipt-core": "0.6.5"
+    "@oked/receipt-core": "0.6.6"
   },
   "devDependencies": {
     "@types/node": "^22.13.10",
