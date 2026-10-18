@@ -1000,3 +1000,59 @@ describe("claude.ai connectors (UUID server names)", () => {
     assert.equal(describeFields("mcp__ccd_pr__set_auto_merge", {})!.Title, "Set auto merge via Claude desktop app");
   });
 });
+
+describe("approval review seed fixes (2026-10-18)", () => {
+  it("a compound command takes its title from the step that set the tier", () => {
+    const f = describeFields("Bash", {
+      command: "gh pr merge https://github.com/o/r/pull/7 --squash; SHA=$(gh pr view 7 --json state,mergeCommit); curl -s -X POST https://api.example.com/hook -d '{}'",
+    })!;
+    assert.equal(f.Title, "Merge PR #7 in o/r");
+    assert.equal(f.Annotation, "squash");
+    assert.equal(f.Subline, "Also: POST request to api.example.com /hook");
+    assert.ok(!/state,mergeCommit/.test(f.Title));
+  });
+
+  it("gh --json is not read as a POST body", () => {
+    const f = describeFields("Bash", { command: "curl -s https://x.dev/health; gh pr view 7 --json state" })!;
+    assert.notEqual(f.Title.startsWith("POST"), true);
+  });
+
+  it("gh writes name the PR or issue", () => {
+    assert.equal(describeFields("Bash", { command: "gh pr comment 12 --body 'LGTM'" })!.Title, "Comment on PR #12");
+    assert.equal(describeFields("Bash", { command: "gh pr comment 12 --body 'LGTM'" })!.Body, "LGTM");
+    assert.equal(describeFields("Bash", { command: "gh pr close 3 -R o/r" })!.Title, "Close PR #3 in o/r");
+    assert.equal(describeFields("Bash", { command: "gh release create v1.2.0" })!.Title, "Create release v1.2.0");
+  });
+
+  it("gh api shows the method and the endpoint", () => {
+    const f = describeFields("Bash", { command: "gh api -X DELETE repos/o/r/git/refs/heads/x" })!;
+    assert.equal(f.Title, "DELETE request to GitHub API");
+    assert.equal(f.Target, "repos/o/r/git/refs/heads/x");
+    assert.equal(describeFields("Bash", { command: "gh api graphql -f query='query { viewer { login } }'" })!.Title, "Query GitHub GraphQL API");
+  });
+
+  it("desktop app turn tools say what they do", () => {
+    assert.equal(describeFields("mcp__ccd_turn__update_plan", {})!.Title, "Update the task list in the Claude app");
+    assert.equal(describeFields("mcp__ccd_turn__wrap_up", { recap: "r" })!.Title, "Show the end-of-turn summary in the Claude app");
+    const s = describeFields("mcp__ccd_session__start_session", { title: "Fix CI", prompt: "Make CI green", target: "cloud" })!;
+    assert.equal(s.Title, "Start a new Claude session in the cloud");
+    assert.equal(s.Target, "Fix CI");
+    assert.equal(s.Body, "Make CI green");
+  });
+
+  it("only known acronyms are capitalized", () => {
+    assert.equal(describeFields("mcp__acme__wrap_up", {})!.Title, "Wrap up via acme");
+    assert.equal(describeFields("mcp__acme__get_repo", {})!.Title, "Get repo via acme");
+    assert.equal(describeFields("mcp__acme__update_pr", {})!.Title, "Update PR via acme");
+  });
+});
+
+describe("Railway", () => {
+  it("names the deploy and the service", () => {
+    const f = describeFields("Bash", { command: "railway up --service api -e production" })!;
+    assert.equal(f.Title, "Deploy to Railway");
+    assert.equal(f.Target, "api");
+    assert.equal(f.Annotation, "(production)");
+    assert.equal(describeFields("Bash", { command: "railway down" })!.Title, "Remove the latest Railway deployment");
+  });
+});

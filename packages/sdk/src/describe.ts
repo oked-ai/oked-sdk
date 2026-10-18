@@ -10,7 +10,8 @@
 
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { basename, isAbsolute, join, resolve } from "node:path";
-import { extractShellWriteOps } from "./classify.js";
+import { classify, extractShellWriteOps, splitTopLevel } from "./classify.js";
+import { TIER_ORDER } from "./degraded.js";
 
 const BODY_PREVIEW_MAX = 200;
 const COMMAND_INLINE_MAX = 50;
@@ -124,18 +125,19 @@ function summarize(toolName: string, toolInput: Record<string, unknown>, ctx: De
  * command isn't a mutating HTTP request. Headlines the outward request ahead of
  * an incidental file redirect in a compound command.
  */
-function summarizeMutatingCurl(cmd: string): Rendered | null {
-  if (!/\b(?:curl|wget)\b/.test(cmd)) return null;
+function summarizeMutatingCurl(command: string): Rendered | null {
+  if (!/\b(?:curl|wget)\b/.test(command)) return null;
+  // Read flags from the curl/wget step only: a `--json` or `-d` on another step
+  // (`gh pr view --json state`, `unzip -d dir`) is not this request's body.
+  const steps = splitTopLevel(command);
+  const step = steps.find((s) => /\b(?:curl|wget)\b/.test(s) && isMutatingCurlStep(s));
+  if (!step) return null;
+  const cmd = ` ${step}`;
   // `(?:^|\s)` not `\b`: `-X` is preceded by whitespace, and `\b` requires a
   // word char before the `-`, so `\b-X` never matches the usual ` -X DELETE`.
   const methodM = cmd.match(
     /(?:^|\s)-X\s*(DELETE|POST|PUT|PATCH)\b|(?:^|\s)--request[=\s]+(DELETE|POST|PUT|PATCH)\b/i,
   );
-  const hasBody =
-    /\s-d[\s=]|\s--data(?:-raw|-binary|-urlencode|-ascii)?[\s=]|\s-F[\s=]|\s--form[\s=]|\s(?:-T|--upload-file)[\s=]|\s--json[\s=]/.test(
-      cmd,
-    );
-  if (!methodM && !hasBody) return null;
   const method = (methodM?.[1] || methodM?.[2] || "POST").toUpperCase();
   const url = cmd.match(/https?:\/\/[^\s'"]+/)?.[0] || "";
   const host = url ? extractHost(url) : "URL";
@@ -151,9 +153,15 @@ function summarizeMutatingCurl(cmd: string): Rendered | null {
     target: endpoint,
     body: payload !== undefined
       ? truncateBody(payload)
-      : cmd.length > COMMAND_INLINE_MAX ? truncateBody(cmd) : undefined,
+      : command.length > COMMAND_INLINE_MAX ? truncateBody(command) : undefined,
     kind,
   };
+}
+
+function isMutatingCurlStep(step: string): boolean {
+  const s = ` ${step}`;
+  return /(?:^|\s)-X\s*(DELETE|POST|PUT|PATCH)\b|(?:^|\s)--request[=\s]+(DELETE|POST|PUT|PATCH)\b/i.test(s) ||
+    /\s-d[\s=]|\s--data(?:-raw|-binary|-urlencode|-ascii)?[\s=]|\s-F[\s=]|\s--form[\s=]|\s(?:-T|--upload-file)[\s=]|\s--json[\s=]/.test(s);
 }
 
 /** Path (+ query) of a URL, or undefined for a bare origin. */
@@ -193,6 +201,9 @@ function extractCurlPayload(cmd: string): string | undefined {
 function summarizeBash(command: string, sizeBytes?: number, cwd?: string): Rendered {
   const cmd = (command || "").trim();
   if (!cmd) return { title: "Run empty command", kind: "unknown_bash" };
+
+  const compound = summarizeCompoundBash(cmd, sizeBytes, cwd);
+  if (compound) return compound;
 
   // SQL detection runs before shell-write detection so that inline-interpreter
   // payloads (`node -e "..."`, `python -c "..."`) aren't misread as shell
@@ -272,6 +283,9 @@ function summarizeBash(command: string, sizeBytes?: number, cwd?: string): Rende
     return m ? { title: `Git commit "${truncate(m[1], 60)}"`, kind: "git_commit" } : { title: "Git commit", kind: "git_commit" };
   }
 
+  const gh = summarizeGh(cmd);
+  if (gh) return gh;
+
   // gh pr create — reversible (PRs can be closed). Extract --title when present.
   if (/\bgh\s+pr\s+create\b/.test(cmd)) {
     const m = cmd.match(/--title\s+["']([^"']+)["']/);
@@ -344,6 +358,17 @@ function summarizeBash(command: string, sizeBytes?: number, cwd?: string): Rende
   const dockerRm = cmd.match(/\bdocker\s+rm\s+(\S+)/);
   if (dockerRm) return { title: "Remove Docker container", target: dockerRm[1], kind: "docker_rm" };
 
+  // Railway: deploys and tear-downs of a live service.
+  const railway = cmd.match(/\brailway\s+(up|deploy|redeploy|down|delete)\b(.*)$/s);
+  if (railway) {
+    const service = railway[2].match(/\s(?:-s|--service)[\s=]+(\S+)/)?.[1];
+    const env = railway[2].match(/\s(?:-e|--environment)[\s=]+(\S+)/)?.[1];
+    const verb = railway[1] === "down" ? "Remove the latest Railway deployment"
+      : railway[1] === "delete" ? "Delete the Railway project"
+      : railway[1] === "redeploy" ? "Redeploy on Railway" : "Deploy to Railway";
+    return { title: verb, target: service, annotation: env ? `(${env})` : undefined, kind: "deploy" };
+  }
+
   // npm / npx
   const npmScript = cmd.match(/\bnpm\s+run\s+(\S+)/);
   if (npmScript) return { title: `Run npm script ${npmScript[1]}`, kind: "npm_run" };
@@ -366,6 +391,108 @@ function summarizeBash(command: string, sizeBytes?: number, cwd?: string): Rende
   // Long or short — generic command
   if (cmd.length > COMMAND_INLINE_MAX) return { title: "Run command", body: truncateBody(cmd), kind: "unknown_bash" };
   return { title: cmd, kind: "unknown_bash" };
+}
+
+/**
+ * A command of several steps (`;`, `&&`, `||`, newlines) takes its title from
+ * the step that set the tier, so `gh pr merge … ; gh pr view --json … ; curl
+ * -X POST …` reads "POST request to api.oked.ai", not a title built from bits
+ * of three steps. Other steps that need approval on their own are listed in the
+ * subline. Returns null when no step needs approval, or when the tier comes
+ * from a pattern that spans steps (`curl … | sh`): the whole-command rules
+ * below describe those.
+ */
+function summarizeCompoundBash(cmd: string, sizeBytes?: number, cwd?: string): Rendered | null {
+  const steps = splitTopLevel(cmd, { pipes: false });
+  if (steps.length < 2) return null;
+  const tiers = steps.map((s) => classify("Bash", { command: s }));
+  const rank = tiers.map((t) => TIER_ORDER[t]);
+  const top = Math.max(...rank);
+  if (top < TIER_ORDER.review) return null;
+  if (TIER_ORDER[classify("Bash", { command: cmd })] !== top) return null;
+  const lead = rank.indexOf(top);
+  const step = steps[lead];
+  // npm publish reads the package.json a preceding `cd` points at.
+  const r = (/\bnpm\s+publish\b/.test(step) && summarizeNpmPublish(cmd, cwd)) || summarizeBash(step, sizeBytes, cwd);
+  const also = [...new Set(
+    steps
+      .filter((_, i) => i !== lead && rank[i] >= TIER_ORDER.review)
+      .map((s) => describeStep(s, cwd)),
+  )].filter((t) => t !== describeStep(step, cwd));
+  // The body shows the steps that need approval, not the setup and polling
+  // around them; the footnote says there are other steps.
+  const risky = steps.filter((_, i) => rank[i] >= TIER_ORDER.review);
+  const quiet = steps.length - risky.length;
+  return {
+    ...r,
+    subline: also.length ? `Also: ${also.join("; ")}` : r.subline,
+    body: r.body ?? truncateBody(risky.join("\n")),
+    footnote: r.footnote ?? (quiet ? "Other steps in this command need no approval" : undefined),
+  };
+}
+
+function describeStep(step: string, cwd?: string): string {
+  const r = summarizeBash(step, undefined, cwd);
+  return r.target && !r.title.includes(r.target) ? `${r.title} ${r.target}` : r.title;
+}
+
+/** GitHub CLI writes: which PR, issue or release, in which repo. */
+function summarizeGh(cmd: string): Rendered | null {
+  const m = cmd.match(/\bgh\s+(pr|issue|release|repo|workflow|run|secret|variable|api)\s+(\S+)(.*)$/s);
+  if (!m) return null;
+  const [, noun, verb, rest] = m;
+  const url = rest.match(/https:\/\/github\.com\/([^/\s]+\/[^/\s]+)\/(?:pull|issues)\/(\d+)/);
+  const repoFlag = rest.match(/\s(?:-R|--repo)[\s=]+(\S+)/)?.[1];
+  const repo = url?.[1] ?? repoFlag;
+  const num = url?.[2] ?? rest.match(/^\s+#?(\d+)\b/)?.[1];
+  const ref = num ? `#${num}` : "";
+  const where = repo ? ` in ${repo}` : "";
+  if (noun === "pr" && verb === "merge") {
+    const how = /\s(?:--squash|-s)\b/.test(rest) ? "squash" : /\s(?:--rebase|-r)\b/.test(rest) ? "rebase" : undefined;
+    const auto = /\s--auto\b/.test(rest);
+    return {
+      title: `Merge PR ${ref}${where}`.replace(/\s+/g, " ").trim(),
+      annotation: [how, auto ? "when checks pass" : undefined, /\s(?:--delete-branch|-d)\b/.test(rest) ? "deletes branch" : undefined]
+        .filter(Boolean).join(", ") || undefined,
+      kind: "git_pr_merge",
+    };
+  }
+  if (noun === "api") {
+    const args = ` ${verb}${rest}`;
+    const method = args.match(/\s(?:-X|--method)(?:\s+|=)?([A-Za-z]+)\b/)?.[1]?.toUpperCase();
+    // The endpoint is the first argument that is not a flag or a flag's value.
+    const endpoint = args
+      .replace(/\s(?:-X|--method|-H|--header|-f|-F|--field|--raw-field|--input|-q|--jq|-t|--template|--hostname|-p|--preview|--cache)(?:\s+|=)(?:'[^']*'|"(?:[^"\\]|\\.)*"|\S+)/g, " ")
+      .split(/\s+/).find((w) => w && !w.startsWith("-"))?.replace(/^['"]|['"]$/g, "");
+    if (endpoint === "graphql") {
+      const mutation = /\bmutation\b/.test(args);
+      return { title: mutation ? "Change data via GitHub GraphQL API" : "Query GitHub GraphQL API", body: truncateBody(cmd), kind: mutation ? "http_post" : "http_get" };
+    }
+    const m2 = method ?? (/\s(?:-f|-F|--field|--raw-field|--input)(?:\s|=)/.test(args) ? "POST" : "GET");
+    return {
+      title: `${m2} request to GitHub API`,
+      target: endpoint,
+      body: truncateBody(cmd),
+      kind: m2 === "DELETE" ? "http_delete" : m2 === "PUT" ? "http_put" : m2 === "GET" ? "http_get" : "http_post",
+    };
+  }
+  const outward = new Set(["merge", "close", "reopen", "comment", "review", "edit", "ready", "delete", "archive", "rename",
+    "create", "upload", "set", "run", "cancel", "rerun", "transfer", "fork", "enable", "disable"]);
+  if (!outward.has(verb) || (noun === "pr" && verb === "create")) return null;
+  const thing = { pr: "PR", issue: "issue", release: "release", repo: "repo", workflow: "workflow", run: "workflow run", secret: "secret", variable: "variable" }[noun] ?? noun;
+  const name = noun === "release" || noun === "secret" || noun === "variable" || noun === "workflow"
+    ? rest.match(/^\s+([^\s-][^\s]*)/)?.[1] : undefined;
+  const body = rest.match(/\s(?:-b|--body)[\s=]+(?:'([^']*)'|"((?:[^"\\]|\\.)*)")/);
+  const obj = `${thing}${ref ? ` ${ref}` : name ? ` ${name}` : ""}`;
+  const phrase = verb === "comment" ? `Comment on ${obj}`
+    : verb === "ready" ? `Mark ${obj} ready for review`
+    : verb === "set" ? `Set ${obj}`
+    : `${verb.charAt(0).toUpperCase()}${verb.slice(1)} ${obj}`;
+  return {
+    title: `${phrase}${where}`,
+    body: body ? truncateBody(body[1] ?? body[2] ?? "") : undefined,
+    kind: noun === "pr" ? "git_pr_write" : "gh_write",
+  };
 }
 
 /**
@@ -1063,6 +1190,9 @@ function summarizeMcp(toolName: string, input: Record<string, unknown>): Rendere
       : { title: "Ask you to pick a folder for this session", kind: "folder_access" };
   }
 
+  const desktop = summarizeDesktopApp(parts[1] || "", tool, input);
+  if (desktop) return desktop;
+
   const browser = parts.slice(1, -1).find((p) => p === "Claude_Browser" || p === "claude-in-chrome");
   if (browser) return summarizeBrowser(parts[parts.length - 1] || "", input, browser);
 
@@ -1128,9 +1258,31 @@ function summarizeMcp(toolName: string, input: Record<string, unknown>): Rendere
     return { title: `Submit ${selector} via ${server}`, kind: "mcp_submit" };
   }
   if (tool.startsWith("list_") || tool.startsWith("get_") || tool.startsWith("search_")) {
-    return { title: `${toWords(tool)} via ${server}`, kind: "unknown_tool" };
+    return { title: `${toSentence(tool)} via ${server}`, kind: "unknown_tool" };
   }
   return { title: `${toSentence(tool)} via ${server}`, kind: "unknown_tool" };
+}
+
+/** Desktop app tools whose name alone does not say what they do. */
+function summarizeDesktopApp(server: string, tool: string, input: Record<string, unknown>): Rendered | null {
+  const str = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : undefined);
+  if (server === "ccd_turn" && tool === "update_plan") {
+    return { title: "Update the task list in the Claude app", kind: "session_housekeeping" };
+  }
+  if (server === "ccd_turn" && tool === "wrap_up") {
+    return { title: "Show the end-of-turn summary in the Claude app", body: str(input.recap), kind: "session_housekeeping" };
+  }
+  if (server === "ccd_session" && (tool === "start_session" || tool === "hand_off_to_session")) {
+    const where = input.target === "cloud" ? "in the cloud" : input.target === "ssh" ? `on ${str(input.host) ?? "an SSH host"}` : undefined;
+    const title = tool === "hand_off_to_session" ? "Move this task to a new Claude session" : "Start a new Claude session";
+    return {
+      title: where ? `${title} ${where}` : title,
+      target: str(input.title),
+      body: str(input.prompt) ?? str(input.remaining_plan),
+      kind: "session_start",
+    };
+  }
+  return null;
 }
 
 function identifyTarget(input: Record<string, unknown>): string | null {
@@ -1374,8 +1526,12 @@ function formatByteCount(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+// Words shown in capitals. Only known acronyms: uppercasing every short word
+// turned "wrap_up" into "Wrap UP" and "get_repo" into "GET repo".
+const ACRONYMS = new Set(["pr", "prs", "url", "api", "sql", "ci", "id", "ids", "ui", "dns", "ssh", "sms", "pdf", "csv", "json", "html", "css", "aws", "gcp", "db", "vm", "ip", "mcp", "otp", "llm"]);
+
 function toWords(snake: string): string {
-  return snake.replace(/_/g, " ").split(" ").map((w) => (w.length <= 3 ? w.toUpperCase() : w)).join(" ");
+  return snake.replace(/_/g, " ").split(" ").map((w) => (ACRONYMS.has(w.toLowerCase()) ? w.toUpperCase() : w)).join(" ");
 }
 
 // "set_auto_merge" -> "Set auto merge", "bind_pr" -> "Bind PR": the first word
