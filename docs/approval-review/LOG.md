@@ -115,7 +115,8 @@ Corpus: `2026-10-18-update-plan`
 | Target | /aml11/oked-app/pull/124 | · |
 | Annotation | · | squash |
 | Subline | · | Also: POST request to api.oked.ai /api/mobile/v1/auth/token |
-| Body | state,mergeCommit | gh pr merge https://github.com/aml11/oked-app/pull/124 --squash 2>&1 \| tail -1; SHA=$(gh pr view https://github.com/aml11/oked-app/pull/124 --json state,mergeCommit --jq '.mergeCommit.oid'); echo "me… |
+| Body | state,mergeCommit | gh pr merge https://github.com/aml11/oked-app/pull/124 --squash 2>&1 \| tail -1<br>curl -s -w " %{http_code}\n" -X POST https://api.oked.ai/api/mobile/v1/auth/token -H 'Content-Type: application/json' -d… |
+| Footnote | · | Other steps in this command need no approval |
 | Kind | http_post | git_pr_merge |
 
 Corpus: `2026-10-18-gh-merge-then-post`
