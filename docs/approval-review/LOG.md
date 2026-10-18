@@ -3,6 +3,106 @@
 Every change the approval review loop made to a card's tier, text or layout, newest first.
 Built from `changes.jsonl` by `node scripts/approval-review/record.mjs log`. Do not edit by hand.
 
+## 2026-10-18 · tier · `Bash: echo … | sh`
+
+**Why:** Gap found during the review: text piped into sh or bash ran with no card, because no single step looked risky. It now needs review, and the card says Run text as a sh script.
+
+| | Before | After |
+|---|---|---|
+| Tier | ⚪ safe (no card) | 🔵 review (asks you) |
+| Title | Delete file recursively | Run text as a sh script |
+| Target | build | · |
+| Body | · | echo 'rm -rf build' \| sh |
+| Kind | file_delete | shell_pipeline |
+
+Corpus: `2026-10-18-pipe-text-to-shell`
+
+## 2026-10-18 · tier · `Bash: npx prisma migrate deploy (local DB)`
+
+**Why:** Migrations to a local test database (localhost:5433) were high stakes, like a production deploy. With a local DATABASE_URL in the command they are now logged. Without one, or with any other host, they stay high stakes. Seen 3 times.
+
+| | Before | After |
+|---|---|---|
+| Tier | 🔴 high stakes (Face ID) | 🟡 warning (logged, no card) |
+| Title | Deploy via npx | Apply Prisma database migrations |
+| Target | · | localhost:5433/oked_test_e2e |
+| Body | npx prisma migrate deploy 2>&1 \| tail -2 | · |
+| Footnote | Other steps in this command need no approval | · |
+| Kind | npx_deploy | sql_migrate |
+
+Corpus: `2026-10-18-prisma-migrate-local`
+
+## 2026-10-18 · tier · `mcp__Claude_Code_iOS_Simulator__control`
+
+**Why:** Every iOS Simulator action asked you, even a screenshot. The simulator is a local test device. Looking is now safe, and taps, typing and local installs are logged, like clicks in the built-in browser. Seen 5 times in 2 weeks.
+
+| | Before | After |
+|---|---|---|
+| Tier | 🔵 review (asks you) | ⚪ safe (no card) |
+| Title | Control via Claude_Code_iOS_Simulator | Take an iOS Simulator screenshot |
+| Kind | unknown_tool | simulator |
+
+Corpus: `2026-10-18-simulator-screenshot`
+
+## 2026-10-18 · tier · `Bash: pkill -f scratchpad/…`
+
+**Why:** Stopping a test database that ran from the session scratchpad was high stakes. You approved each one in seconds. pkill -f of a temp or scratchpad path is now logged. Other kills stay high stakes; see the question in the PR.
+
+| | Before | After |
+|---|---|---|
+| Tier | 🔴 high stakes (Face ID) | 🟡 warning (logged, no card) |
+| Title | Kill processes | Kill processes |
+| Body | pkill -TERM -f "scratchpad/pg/start.mjs" | pkill -TERM -f "scratchpad/pg/start.mjs"; sleep 3; pgrep -f "scratchpad/pg" >/dev/null && echo "still running" \|\| echo "postgres stopped" |
+| Footnote | Other steps in this command need no approval | · |
+| Kind | kill_process | kill_process |
+
+Corpus: `2026-10-18-pkill-scratchpad-postgres`
+
+## 2026-10-18 · tier · `Bash: rm -rf $W (temp path)`
+
+**Why:** rm -rf $W was high stakes, though W was set to a scratchpad path one step before. A variable set to a temp path, a file an earlier step made, and a relative path after cd into a temp dir now count as temp. These deletes are logged, not asked.
+
+| | Before | After |
+|---|---|---|
+| Tier | 🔴 high stakes (Face ID) | 🟡 warning (logged, no card) |
+| Title | Delete file recursively | Delete file recursively |
+| Target | $W | /private/tmp/claude-501/-Users-oren-Dev-OKed-oked-openshell/fbe57da5-4d01-4f78-b8f1-f1c3816d6f15/scratchpad/wt |
+| Body | rm -rf $W | · |
+| Footnote | Other steps in this command need no approval | · |
+| Kind | file_delete | file_delete |
+
+Corpus: `2026-10-18-rm-temp-worktree-var`
+
+## 2026-10-18 · tier · `Bash: git commit -m`
+
+**Why:** A commit message that said curl -d made a high-stakes POST card. The quoted text of git, grep, echo and printf is not run, so it no longer sets the tier. grep "curl -X POST" had the same problem.
+
+| | Before | After |
+|---|---|---|
+| Tier | 🔴 high stakes (Face ID) | 🟡 warning (logged, no card) |
+| Title | POST request to URL | Git commit "Never write form body text as a key in the capture" |
+| Body | sends | · |
+| Footnote | Other steps in this command need no approval | · |
+| Kind | http_post | git_commit |
+
+Corpus: `2026-10-18-commit-message-mentions-curl`
+
+## 2026-10-18 · tier · `Bash: python3 - <<'EOF' (file edit)`
+
+**Why:** A Python script that edited RELEASING.md was high stakes and said Publish package to npm, because the text it wrote mentioned npm publish. A script fed by a heredoc is code: words in it no longer set the tier or the title. Scripts like this made about 15 false high-stakes cards in 2 weeks (titles Run command, Run SQL statement, POST request to URL, Force push).
+
+| | Before | After |
+|---|---|---|
+| Tier | 🔴 high stakes (Face ID) | 🟡 warning (logged, no card) |
+| Title | Publish package to npm | Create file |
+| Target | · | packages/receipt-core/README.md |
+| Subline | tag latest · public access | · |
+| Body | python3 - <<'EOF'<br>p='RELEASING.md'; s=open(p).read()<br>old='''### Why the workflow publishes one package per job'''<br>new='''### Adding a new package<br><br>npm only lets you attach a Trusted Publisher to a pa… | python3 - <<'EOF'<br>cat > packages/receipt-core/README.md <<'EOF'<br># @oked/receipt-core<br><br>The format and the cryptography of OKed signed approval receipts, shared by the<br>OKed backend (which signs), `@oke… |
+| Footnote | Other steps in this command need no approval | · |
+| Kind | npm_publish | file_create |
+
+Corpus: `2026-10-18-heredoc-script-mentions-npm-publish`
+
 ## 2026-10-18 · text · `Bash: npx prisma migrate deploy`
 
 **Why:** The card said Deploy via npx, which reads like a production deploy. The command applies database migrations to a local test database. Now the title says so and names the database host and name.
