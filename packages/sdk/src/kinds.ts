@@ -17,11 +17,11 @@ export type OperationKind =
   | "sql_drop" | "sql_truncate" | "sql_alter" | "sql_create"
   | "sql_delete_rows" | "sql_delete_all_rows"
   | "sql_update_rows" | "sql_update_every_row"
-  | "sql_insert" | "sql_query"
+  | "sql_insert" | "sql_query" | "sql_migrate"
   // Git
   | "git_push" | "git_force_push" | "git_reset_hard"
   | "git_clean" | "git_checkout" | "git_restore" | "git_commit"
-  | "git_pr_create" | "git_pr_merge" | "git_pr_write" | "gh_write"
+  | "git_pr_create" | "git_pr_merge" | "git_pr_write" | "gh_write" | "git_branch_delete"
   // Deploys
   | "deploy"
   // Network / remote
@@ -45,7 +45,7 @@ export type OperationKind =
   | "mcp_send" | "mcp_submit_form" | "mcp_fill" | "mcp_submit" | "mcp_query"
   | "browser_navigate" | "browser_interact" | "browser_script" | "browser_dev_server"
   | "folder_access"
-  | "session_control" | "session_housekeeping" | "session_start" | "worktree" | "schedule" | "agent_message" | "web_fetch" | "monitor" | "artifact"
+  | "session_control" | "session_housekeeping" | "session_start" | "simulator" | "worktree" | "schedule" | "agent_message" | "web_fetch" | "monitor" | "artifact"
   // Agents
   | "agent_launch"
   // Shell composite / fallbacks

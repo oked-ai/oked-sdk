@@ -235,8 +235,12 @@ function summarizeBash(command: string, sizeBytes?: number, cwd?: string): Rende
   // the generic "Run command".
   const rmMatch = cmd.match(/\b(?:rm|trash|trash-put|rmdir)\s+(?:(-rf?|-fr|--recursive|-r)\s+)?([^\n]+)/);
   if (rmMatch) {
-    const recursive = !!rmMatch[1] || /^rm\s+-/.test(cmd);
-    const targets = parseRmTargets(rmMatch[2]);
+    // Recursive only with an r/R flag: `rm -f x` deletes one file.
+    const flags = (rmMatch[1] ? `${rmMatch[1]} ` : "") + rmMatch[2];
+    const recursive = /(?:^|\s)(?:-[a-zA-Z]*[rR][a-zA-Z]*|--recursive)(?=\s|$)/.test(flags.split(/[;&|\n]/)[0]);
+    // `D=/some/dir; rm -f $D/x` shows the real path, not `$D/x`.
+    const vars = literalAssignments(cmd);
+    const targets = parseRmTargets(rmMatch[2]).map((t) => expandVars(t, vars));
 
     if (targets.length <= 1) {
       const target = targets[0] || "files";
@@ -271,6 +275,18 @@ function summarizeBash(command: string, sizeBytes?: number, cwd?: string): Rende
       ? { title: "Force push", target, kind: "git_force_push" }
       : { title: "Push", target, kind: "git_push" };
   }
+  const branchDelete = cmd.match(/\bgit\s+branch\s+(?:-D|--delete\s+--force|-d|--delete)\s+([^\s;&|]+)/);
+  if (branchDelete) {
+    const forced = /\bgit\s+branch\s+(?:-D|--delete\s+--force)\b/.test(cmd);
+    return {
+      title: "Delete local Git branch",
+      target: branchDelete[1],
+      annotation: forced ? "even if not merged" : undefined,
+      kind: "git_branch_delete",
+    };
+  }
+  const prisma = summarizePrismaDeploy(cmd);
+  if (prisma) return prisma;
   if (/\bgit\s+reset\s+--hard\b/.test(cmd)) return { title: "Hard reset — discard all local changes", kind: "git_reset_hard" };
   if (/\bgit\s+clean\s+-f/.test(cmd)) return { title: "Remove all untracked files", kind: "git_clean" };
   if (/\bgit\s+checkout\s+--\s+\./.test(cmd)) return { title: "Discard all unstaged changes", kind: "git_checkout" };
@@ -411,13 +427,18 @@ function summarizeCompoundBash(cmd: string, sizeBytes?: number, cwd?: string): R
   if (top < TIER_ORDER.review) return null;
   if (TIER_ORDER[classify("Bash", { command: cmd })] !== top) return null;
   const lead = rank.indexOf(top);
-  const step = steps[lead];
-  // npm publish reads the package.json a preceding `cd` points at.
-  const r = (/\bnpm\s+publish\b/.test(step) && summarizeNpmPublish(cmd, cwd)) || summarizeBash(step, sizeBytes, cwd);
+  // Variables set by earlier steps (`D=/dir; rm $D/x`) show as their values.
+  const vars = literalAssignments(cmd);
+  const step = expandVars(steps[lead], vars);
+  // npm publish reads the package.json a preceding `cd` points at; prisma reads
+  // a DATABASE_URL an earlier step exported.
+  const r = (/\bnpm\s+publish\b/.test(step) && summarizeNpmPublish(cmd, cwd)) ||
+    summarizePrismaDeploy(/\bprisma\s+migrate\s+deploy\b/.test(step) ? cmd : "") ||
+    summarizeBash(step, sizeBytes, cwd);
   const also = [...new Set(
     steps
       .filter((_, i) => i !== lead && rank[i] >= TIER_ORDER.review)
-      .map((s) => describeStep(s, cwd)),
+      .map((s) => describeStep(expandVars(s, vars), cwd)),
   )].filter((t) => t !== describeStep(step, cwd));
   // The body shows the steps that need approval, not the setup and polling
   // around them; the footnote says there are other steps.
@@ -1266,6 +1287,26 @@ function summarizeMcp(toolName: string, input: Record<string, unknown>): Rendere
 /** Desktop app tools whose name alone does not say what they do. */
 function summarizeDesktopApp(server: string, tool: string, input: Record<string, unknown>): Rendered | null {
   const str = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : undefined);
+  if (server === "Claude_Code_iOS_Simulator" && tool === "control") return summarizeSimulator(input);
+  if (server === "scheduled-tasks") {
+    const name = str(input.title) ?? str(input.taskId);
+    const when = str(input.cronExpression) ? `cron ${str(input.cronExpression)}` : str(input.fireAt) ? `once at ${str(input.fireAt)}` : undefined;
+    const verb = { create_scheduled_task: "Create a scheduled task", update_scheduled_task: "Change a scheduled task",
+      run_scheduled_task: "Run a scheduled task now", delete_scheduled_task: "Delete a scheduled task" }[tool];
+    if (verb) {
+      const change = tool === "update_scheduled_task"
+        ? [input.prompt !== undefined ? "prompt" : "", when ? "schedule" : "", input.enabled === false ? "pause" : input.enabled === true ? "resume" : ""].filter(Boolean).join(", ")
+        : "";
+      return {
+        title: verb,
+        target: name,
+        annotation: [when, change ? `changes: ${change}` : ""].filter(Boolean).join(" · ") || undefined,
+        body: str(input.prompt),
+        footnote: tool === "create_scheduled_task" ? "Claude runs this prompt on its own on this schedule" : undefined,
+        kind: "schedule",
+      };
+    }
+  }
   if (server === "ccd_turn" && tool === "update_plan") {
     return { title: "Update the task list in the Claude app", kind: "session_housekeeping" };
   }
@@ -1283,6 +1324,28 @@ function summarizeDesktopApp(server: string, tool: string, input: Record<string,
     };
   }
   return null;
+}
+
+/** The desktop app's iOS Simulator tool: one `control` tool, many actions. */
+function summarizeSimulator(input: Record<string, unknown>): Rendered {
+  const a = typeof input.action === "string" ? input.action : "";
+  const at = typeof input.x === "number" && typeof input.y === "number" ? `(${input.x}, ${input.y})` : undefined;
+  const titles: Record<string, string> = {
+    attach: "Show the iOS Simulator panel", detach: "Close the iOS Simulator panel", screenshot: "Take an iOS Simulator screenshot",
+    launch: "Install and open an app in the iOS Simulator", tap: "Tap in the iOS Simulator", swipe: "Swipe in the iOS Simulator",
+    touch_path: "Drag in the iOS Simulator", touch2_path: "Pinch or rotate in the iOS Simulator", text: "Type text in the iOS Simulator",
+    button: "Press a button in the iOS Simulator", open_url: "Open a link in the iOS Simulator",
+  };
+  const target = a === "launch" ? (typeof input.bundle_id === "string" ? input.bundle_id : typeof input.app_path === "string" ? shortenPath(input.app_path) : undefined)
+    : a === "open_url" ? (input.url as string | undefined)
+    : a === "button" ? (input.name as string | undefined)
+    : at;
+  return {
+    title: titles[a] ?? `Use the iOS Simulator${a ? ` (${a})` : ""}`,
+    target,
+    body: a === "text" && typeof input.text === "string" ? input.text : undefined,
+    kind: "simulator",
+  };
 }
 
 function identifyTarget(input: Record<string, unknown>): string | null {
@@ -1594,6 +1657,32 @@ function parseRmTargets(argsString: string): string[] {
     }
   }
   return targets;
+}
+
+/** `prisma migrate deploy`: which database, from a DATABASE_URL set in the command. */
+function summarizePrismaDeploy(cmd: string): Rendered | null {
+  if (!/\bprisma\s+migrate\s+deploy\b/.test(cmd)) return null;
+  const url = cmd.match(/DATABASE_URL=["']?([a-z]+:\/\/[^\s"';&|]+)/)?.[1];
+  let db: string | undefined;
+  if (url) {
+    try {
+      const u = new URL(url);
+      db = `${u.hostname}${u.port ? `:${u.port}` : ""}${u.pathname}`;
+    } catch { /* keep undefined */ }
+  }
+  return { title: "Apply Prisma database migrations", target: db, annotation: db ? undefined : "to the database in DATABASE_URL", kind: "sql_migrate" };
+}
+
+/** `NAME=value` assignments with a literal value (no `$(…)`, no backticks), in order. */
+function literalAssignments(cmd: string): Map<string, string> {
+  const vars = new Map<string, string>();
+  const re = /(?:^|[;&|\n(]\s*)(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)=("[^"$`]*"|'[^']*'|[^\s;&|$`'"()]+)(?=[\s;&|)]|$)/g;
+  for (const m of cmd.matchAll(re)) vars.set(m[1], m[2].replace(/^["']|["']$/g, ""));
+  return vars;
+}
+
+function expandVars(token: string, vars: Map<string, string>): string {
+  return token.replace(/\$\{?([A-Za-z_][A-Za-z0-9_]*)\}?/g, (whole, name) => vars.get(name) ?? whole);
 }
 
 function stripQuotes(s: string): string {
