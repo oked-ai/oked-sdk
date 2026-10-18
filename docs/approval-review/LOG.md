@@ -15,7 +15,7 @@ Built from `changes.jsonl` by `node scripts/approval-review/record.mjs log`. Do 
 | Body | · | echo 'rm -rf build' \| sh |
 | Kind | file_delete | shell_pipeline |
 
-Corpus: `2026-10-18-pipe-text-to-shell`
+Corpus: `2026-10-18-pipe-text-to-shell` · PR: https://github.com/oked-ai/oked-sdk/pull/72
 
 ## 2026-10-18 · tier · `Bash: npx prisma migrate deploy (local DB)`
 
@@ -30,7 +30,7 @@ Corpus: `2026-10-18-pipe-text-to-shell`
 | Footnote | Other steps in this command need no approval | · |
 | Kind | npx_deploy | sql_migrate |
 
-Corpus: `2026-10-18-prisma-migrate-local`
+Corpus: `2026-10-18-prisma-migrate-local` · PR: https://github.com/oked-ai/oked-sdk/pull/72
 
 ## 2026-10-18 · tier · `mcp__Claude_Code_iOS_Simulator__control`
 
@@ -42,7 +42,7 @@ Corpus: `2026-10-18-prisma-migrate-local`
 | Title | Control via Claude_Code_iOS_Simulator | Take an iOS Simulator screenshot |
 | Kind | unknown_tool | simulator |
 
-Corpus: `2026-10-18-simulator-screenshot`
+Corpus: `2026-10-18-simulator-screenshot` · PR: https://github.com/oked-ai/oked-sdk/pull/72
 
 ## 2026-10-18 · tier · `Bash: pkill -f scratchpad/…`
 
@@ -56,7 +56,7 @@ Corpus: `2026-10-18-simulator-screenshot`
 | Footnote | Other steps in this command need no approval | · |
 | Kind | kill_process | kill_process |
 
-Corpus: `2026-10-18-pkill-scratchpad-postgres`
+Corpus: `2026-10-18-pkill-scratchpad-postgres` · PR: https://github.com/oked-ai/oked-sdk/pull/72
 
 ## 2026-10-18 · tier · `Bash: rm -rf $W (temp path)`
 
@@ -71,7 +71,7 @@ Corpus: `2026-10-18-pkill-scratchpad-postgres`
 | Footnote | Other steps in this command need no approval | · |
 | Kind | file_delete | file_delete |
 
-Corpus: `2026-10-18-rm-temp-worktree-var`
+Corpus: `2026-10-18-rm-temp-worktree-var` · PR: https://github.com/oked-ai/oked-sdk/pull/72
 
 ## 2026-10-18 · tier · `Bash: git commit -m`
 
@@ -85,7 +85,7 @@ Corpus: `2026-10-18-rm-temp-worktree-var`
 | Footnote | Other steps in this command need no approval | · |
 | Kind | http_post | git_commit |
 
-Corpus: `2026-10-18-commit-message-mentions-curl`
+Corpus: `2026-10-18-commit-message-mentions-curl` · PR: https://github.com/oked-ai/oked-sdk/pull/72
 
 ## 2026-10-18 · tier · `Bash: python3 - <<'EOF' (file edit)`
 
@@ -101,7 +101,7 @@ Corpus: `2026-10-18-commit-message-mentions-curl`
 | Footnote | Other steps in this command need no approval | · |
 | Kind | npm_publish | file_create |
 
-Corpus: `2026-10-18-heredoc-script-mentions-npm-publish`
+Corpus: `2026-10-18-heredoc-script-mentions-npm-publish` · PR: https://github.com/oked-ai/oked-sdk/pull/72
 
 ## 2026-10-18 · text · `Bash: npx prisma migrate deploy`
 
