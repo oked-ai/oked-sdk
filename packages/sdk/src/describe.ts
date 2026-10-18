@@ -10,7 +10,7 @@
 
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { basename, isAbsolute, join, resolve } from "node:path";
-import { classify, extractShellWriteOps, splitTopLevel } from "./classify.js";
+import { blankTextCommandArgs, classify, extractShellWriteOps, splitTopLevel, stripCodeHeredocBodies } from "./classify.js";
 import { TIER_ORDER } from "./degraded.js";
 
 const BODY_PREVIEW_MAX = 200;
@@ -129,8 +129,10 @@ function summarizeMutatingCurl(command: string): Rendered | null {
   if (!/\b(?:curl|wget)\b/.test(command)) return null;
   // Read flags from the curl/wget step only: a `--json` or `-d` on another step
   // (`gh pr view --json state`, `unzip -d dir`) is not this request's body.
+  // Quoted text of git, grep and echo is not a request (a commit message that
+  // says "curl -d" is not a POST): look for curl in the blanked view.
   const steps = splitTopLevel(command);
-  const step = steps.find((s) => /\b(?:curl|wget)\b/.test(s) && isMutatingCurlStep(s));
+  const step = steps.find((s) => /\b(?:curl|wget)\b/.test(blankTextCommandArgs(s)) && isMutatingCurlStep(s));
   if (!step) return null;
   const cmd = ` ${step}`;
   // `(?:^|\s)` not `\b`: `-X` is preceded by whitespace, and `\b` requires a
@@ -199,7 +201,7 @@ function extractCurlPayload(cmd: string): string | undefined {
 }
 
 function summarizeBash(command: string, sizeBytes?: number, cwd?: string): Rendered {
-  const cmd = (command || "").trim();
+  let cmd = (command || "").trim();
   if (!cmd) return { title: "Run empty command", kind: "unknown_bash" };
 
   const compound = summarizeCompoundBash(cmd, sizeBytes, cwd);
@@ -211,6 +213,19 @@ function summarizeBash(command: string, sizeBytes?: number, cwd?: string): Rende
   // inside the quoted body otherwise match the `>` redirect regex.
   const sql = findSqlInCommand(cmd);
   if (sql) return summarizeSql(sql, cmd);
+
+  // A Python or Node script fed by a heredoc is code: show it as a script, and
+  // read the rest of the command without the script body, so its text
+  // ("npm publish", "git push --force") does not name the card.
+  const script = summarizeCodeHeredoc(cmd);
+  if (script) return script;
+  cmd = stripCodeHeredocBodies(cmd);
+
+  // Text piped into a shell runs as a script that no step shows by name.
+  const toShell = cmd.match(/^(.*?)\|\s*(?:sudo\s+)?((?:ba|z|k|da)?sh)\b(?!\s+-n\b)/s);
+  if (toShell && !/\b(?:curl|wget)\b/.test(toShell[1]) && splitTopLevel(cmd, { pipes: false }).length === 1) {
+    return { title: `Run text as a ${toShell[2]} script`, body: truncateBody(cmd), kind: "shell_pipeline" };
+  }
 
   // A mutating curl/wget (POST/PUT/DELETE, or a request body) is described
   // BEFORE shell-write detection. In a compound command the outward request is
@@ -296,7 +311,8 @@ function summarizeBash(command: string, sizeBytes?: number, cwd?: string): Rende
     // message is a command substitution / heredoc — `-m "$(cat <<'EOF' … )"` —
     // since that has no clean inline title to extract.
     const m = cmd.match(/-m\s+["']([^"'$]+)["']/);
-    return m ? { title: `Git commit "${truncate(m[1], 60)}"`, kind: "git_commit" } : { title: "Git commit", kind: "git_commit" };
+    // The subject line only: a multi-line message made a multi-line title.
+    return m ? { title: `Git commit "${truncate(m[1].split("\n")[0].trim(), 60)}"`, kind: "git_commit" } : { title: "Git commit", kind: "git_commit" };
   }
 
   const gh = summarizeGh(cmd);
@@ -355,11 +371,7 @@ function summarizeBash(command: string, sizeBytes?: number, cwd?: string): Rende
     /(?:^|[\n;&|`({]|\$\(|\b(?:sudo|then|do|else|command|xargs)\s+)\s*(killall|pkill|kill)\b/,
   );
   if (killM) {
-    return {
-      title: killM[1].toLowerCase() === "kill" ? "Kill process" : "Kill processes",
-      body: truncateBody(cmd),
-      kind: "kill_process",
-    };
+    return { ...killTarget(cmd.slice((killM.index ?? 0) + killM[0].length - killM[1].length)), body: truncateBody(cmd), kind: "kill_process" };
   }
 
   // Multi-step pipeline
@@ -690,8 +702,12 @@ const INTERPRETER_CONSUMER_RE =
 // words but no .execute()-style call and no DB library cannot run SQL: it is
 // text processing (a Python script that edits a source file whose comments
 // say "DELETE FROM", for example), so it must not be shown as a SQL statement.
+//
+// The library must be loaded (import, require, from, use), not only named: a
+// script that edits describe.ts, whose text says "psql" and "sqlite3", or a
+// schema.prisma file, names a library without using one.
 const DB_LIBRARY_RE =
-  /\b(?:sqlite3|better-sqlite3|psycopg2?|pymysql|MySQLdb|mysql2?|sqlalchemy|duckdb|knex|prisma|pg|sequel|DBI)\b/;
+  /(?:\bimport\s+|\bfrom\s+)['"]?(?:sqlite3|better-sqlite3|psycopg2?|psycopg|pymysql|MySQLdb|mysql2?|sqlalchemy|duckdb|knex|pg|@prisma\/client)\b|\brequire\(\s*['"](?:sqlite3|better-sqlite3|pg|mysql2?|knex|duckdb|@prisma\/client)['"]|\bnew\s+PrismaClient\b|\buse\s+DBI\b|\bSequel\.connect\b|\bsqlite3\.connect\s*\(|\bpsycopg2?\.connect\s*\(/;
 
 // SQL to run from an interpreter body (node -e, python -c, `python - <<EOF`).
 function sqlFromInterpreterBody(body: string): string | null {
@@ -1657,6 +1673,43 @@ function parseRmTargets(argsString: string): string[] {
     }
   }
   return targets;
+}
+
+/** What a kill stops: a pattern, process names, a port, or process ids. */
+function killTarget(step: string): { title: string; target?: string } {
+  const line = step.split(/\n|;|&&|\|\|/)[0].trim();
+  const words = (s: string) => (s.match(/'[^']*'|"[^"]*"|\S+/g) ?? []).map((w) => w.replace(/^['"]|['"]$/g, ""));
+  if (/^pkill\b/.test(line)) {
+    const w = words(line.replace(/\|.*$/, "")).slice(1).filter((x) => !/^-(?!f$)/.test(x));
+    const f = w.indexOf("-f");
+    return { title: "Stop processes matching", target: (f >= 0 ? w[f + 1] : w[w.length - 1]) || undefined };
+  }
+  if (/^killall\b/.test(line)) {
+    return { title: "Stop processes named", target: words(line).slice(1).filter((x) => !x.startsWith("-")).join(", ") || undefined };
+  }
+  const port = line.match(/lsof\b[^)]*?-i\s*(?:tcp|TCP|udp)?:?(\d+)|-iTCP:(\d+)/);
+  if (port) return { title: "Stop the process on port", target: port[1] ?? port[2] };
+  const pg = line.match(/\$\(\s*pgrep\s+(?:-\w+\s+)*(?:-f\s+)?(['"]?)(.+?)\1\s*\)/);
+  if (pg) return { title: "Stop processes matching", target: pg[2] };
+  const pids = words(line).slice(1).filter((x) => /^\d+$/.test(x));
+  if (pids.length) return { title: pids.length === 1 ? "Stop process" : "Stop processes", target: `PID ${pids.join(", ")}` };
+  return { title: "Stop processes" };
+}
+
+/** `python3 - <<'EOF' … EOF` (one step): "Run a Python script" with the script as the body. */
+function summarizeCodeHeredoc(cmd: string): Rendered | null {
+  if (splitTopLevel(cmd).length > 1) return null;
+  const m = cmd.match(/^(?:\w+=\S+\s+)*(?:sudo\s+)?(node|python\d?(?:\.\d+)?|ruby|perl|deno|bun)\b[^\n]*<<-?\s*(["']?)([A-Za-z_]\w*)\2[^\n]*\n([\s\S]*?)\n\s*\3\s*$/);
+  if (!m) return null;
+  const lang = m[1].startsWith("python") ? "Python" : m[1] === "node" ? "Node" : m[1].charAt(0).toUpperCase() + m[1].slice(1);
+  const files = [...m[4].matchAll(/(?:open|readFileSync|writeFileSync|Path)\(\s*['"]([^'"]+)['"]/g)].map((f) => f[1]);
+  const edits = /\.write\(|writeFileSync|write_text\(/.test(m[4]);
+  return {
+    title: edits && files.length ? `Edit file with a ${lang} script` : `Run a ${lang} script`,
+    target: files.length ? [...new Set(files)].map(shortenPath).join("\n") : undefined,
+    body: truncateBody(m[4]),
+    kind: edits ? "file_edit" : "script_run",
+  };
 }
 
 /** `prisma migrate deploy`: which database, from a DATABASE_URL set in the command. */
