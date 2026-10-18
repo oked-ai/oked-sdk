@@ -690,8 +690,12 @@ const INTERPRETER_CONSUMER_RE =
 // words but no .execute()-style call and no DB library cannot run SQL: it is
 // text processing (a Python script that edits a source file whose comments
 // say "DELETE FROM", for example), so it must not be shown as a SQL statement.
+//
+// The library must be loaded (import, require, from, use), not only named: a
+// script that edits describe.ts, whose text says "psql" and "sqlite3", or a
+// schema.prisma file, names a library without using one.
 const DB_LIBRARY_RE =
-  /\b(?:sqlite3|better-sqlite3|psycopg2?|pymysql|MySQLdb|mysql2?|sqlalchemy|duckdb|knex|prisma|pg|sequel|DBI)\b/;
+  /(?:\bimport\s+|\bfrom\s+)['"]?(?:sqlite3|better-sqlite3|psycopg2?|psycopg|pymysql|MySQLdb|mysql2?|sqlalchemy|duckdb|knex|pg|@prisma\/client)\b|\brequire\(\s*['"](?:sqlite3|better-sqlite3|pg|mysql2?|knex|duckdb|@prisma\/client)['"]|\bnew\s+PrismaClient\b|\buse\s+DBI\b|\bSequel\.connect\b|\bsqlite3\.connect\s*\(|\bpsycopg2?\.connect\s*\(/;
 
 // SQL to run from an interpreter body (node -e, python -c, `python - <<EOF`).
 function sqlFromInterpreterBody(body: string): string | null {

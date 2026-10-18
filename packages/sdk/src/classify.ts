@@ -153,6 +153,28 @@ const DELETE_LEAD =
 const DELETE_COMMAND_RE =
   /(?:^|[\n`({]|\$\()\s*(?:rm|rmdir|trash|trash-put)\b/;
 
+const NPX_DEPLOY_RE = /\bnpx\s+.*\s+deploy\b/;
+
+/**
+ * `prisma migrate deploy` against a DATABASE_URL on this machine (localhost,
+ * 127.0.0.1, ::1) set in the same command: it changes a local test database,
+ * not a live one, so the `npx … deploy` rule does not apply. Without a local
+ * DATABASE_URL in the command the URL comes from the environment, which can be
+ * production, so the rule still applies.
+ */
+function isLocalPrismaDeploy(command: string): boolean {
+  if (!/\bprisma\s+migrate\s+deploy\b/.test(command)) return false;
+  const urls = [...command.matchAll(/DATABASE_URL=["']?([a-z]+:\/\/[^\s"';&|]+)/g)].map((m) => m[1]);
+  if (urls.length === 0) return false;
+  return urls.every((u) => {
+    try {
+      return ["localhost", "127.0.0.1", "[::1]"].includes(new URL(u).hostname);
+    } catch {
+      return false;
+    }
+  });
+}
+
 // Bash commands classified as high stakes (destructive, irreversible, external).
 // Scanned on the FULL command (some patterns, e.g. download|shell, span a pipe).
 // File deletion lives in DELETE_PATTERNS (per-stage) instead, see above.
@@ -182,7 +204,7 @@ const HIGH_STAKES_COMMANDS = [
   /\bcurl\s+.*\|\s*(bash|sh|zsh)\b/,
   /\bnpm\s+publish\b/,
   /\bnpm\s+unpublish\b/,
-  /\bnpx\s+.*\s+deploy\b/,
+  NPX_DEPLOY_RE,
   // NOTE: ssh is intentionally NOT a blanket high_stakes here. ssh is a
   // transport — the real effect is whatever runs on the remote host — so it's
   // classified by its remote command in classifySshStage (a read-only remote
@@ -313,6 +335,8 @@ const WARNING_COMMANDS = [
   // high_stakes in the full scan above and wins before reaching here.
   /^git\s+push\b/,
   /^gh\s+pr\s+create\b/,
+  // Prisma migrations reach here only for a local database (see isLocalPrismaDeploy).
+  /^(?:\w+=\S+\s+)*npx\s+prisma\s+migrate\s+deploy\b/,
   // Package installs always mutate node_modules and run dependency postinstall
   // scripts — a known local mutation worth an audit line.
   /^npm\s+(install|ci|i|update|upgrade|rebuild|prune|dedupe)\b/,
@@ -346,6 +370,33 @@ function isEphemeralPath(filePath: string): boolean {
 // in this single inspected command string — no environment-resolution guess.
 const MKTEMP_ASSIGN_RE =
   /^(?:export\s+|declare\s+|local\s+|readonly\s+)?(\w+)=["']?(?:\$\(|`)\s*mktemp\b/;
+
+// Entries in the ephemeral set that are not variable names: `path:<p>` is a
+// file an earlier stage created, `cwd:temp` means the shell is in a temp dir.
+const CREATED_PATH = "path:";
+const TEMP_CWD = "cwd:temp";
+// An earlier stage exported a DATABASE_URL on this machine (see isLocalPrismaDeploy).
+const LOCAL_DB = "db:local";
+
+function noteEphemeralEffects(stage: string, into: Set<string>): void {
+  const assign = stage.match(/^(?:export\s+)?(\w+)=("[^"$`]*"|'[^']*'|[^\s;&|$`'"()]+)$/);
+  if (assign && isEphemeralPath(unquote(assign[2]))) into.add(assign[1]);
+  for (const op of extractShellWriteOps(stage)) {
+    if (op.kind === "create" || op.kind === "copy" || op.kind === "touch") into.add(CREATED_PATH + unquote(op.target));
+  }
+  const dbUrl = stage.match(/^(?:export\s+)?DATABASE_URL=["']?([a-z]+:\/\/[^\s"';&|]+)["']?$/);
+  if (dbUrl) {
+    if (isLocalPrismaDeploy(`DATABASE_URL=${dbUrl[1]} prisma migrate deploy`)) into.add(LOCAL_DB);
+    else into.delete(LOCAL_DB);
+  }
+  const cd = stage.match(/^cd\s+(.+)$/);
+  if (cd) {
+    const dir = unquote(cd[1].trim());
+    const temp = /^"?\$\(\s*mktemp\b/.test(cd[1].trim()) || isEphemeralPath(dir) || isEphemeralVar(dir, into);
+    if (temp) into.add(TEMP_CWD);
+    else into.delete(TEMP_CWD);
+  }
+}
 
 function collectMktempVars(stage: string, into: Set<string>): void {
   const m = stage.match(MKTEMP_ASSIGN_RE);
@@ -572,7 +623,8 @@ function isEphemeralOnlyDeletion(command: string, ephemeralVars: Set<string> = n
   if (targets.length === 0) return false;
   return targets.every((a) => {
     const t = unquote(a);
-    return isEphemeralPath(t) || isEphemeralVar(t, ephemeralVars);
+    return isEphemeralPath(t) || isEphemeralVar(t, ephemeralVars) || ephemeralVars.has(CREATED_PATH + t) ||
+      (ephemeralVars.has(TEMP_CWD) && /^[\w.-][\w./-]*$/.test(t) && !t.split("/").includes(".."));
   });
 }
 
@@ -790,7 +842,7 @@ function classifyBashCommand(command: string, ephemeralVars: Set<string> = new S
   //                surface via `intact` — that is the accepted shell-only-opacity
   //                trade-off; see classifyStageShellEffects.)
   const intact = stripHeredocBodies(command).trim();
-  const stripped = stripCurlDataBodies(stripInlineScriptBodies(intact)).trim();
+  const stripped = blankTextCommandArgs(stripCurlDataBodies(stripInlineScriptBodies(stripCodeHeredocBodies(intact)))).trim();
 
   // High-stakes scan on the FULL (body-stripped) command, before any splitting.
   // These patterns use \b and several intentionally span an operator (e.g.
@@ -800,8 +852,18 @@ function classifyBashCommand(command: string, ephemeralVars: Set<string> = new S
   // deletion is NOT here — it's per-stage below so the ephemeral-temp downgrade
   // can run.)
   for (const pattern of HIGH_STAKES_COMMANDS) {
+    if (pattern === NPX_DEPLOY_RE && (isLocalPrismaDeploy(stripped) ||
+      (ephemeralVars.has(LOCAL_DB) && /\bprisma\s+migrate\s+deploy\b/.test(stripped)))) continue;
     if (pattern.test(stripped)) return "high_stakes";
   }
+
+  // Text piped into a shell (`echo '…' | sh`, `printf … | bash`) runs as code
+  // that no stage shows on its own. At least `review`; a known high-stakes
+  // pattern above (curl | sh) already returned.
+  const pipesToShell = splitTopLevel(stripped, { pipes: false }).some((step) => {
+    const parts = splitTopLevel(step);
+    return parts.length > 1 && parts.slice(1).some((p) => /^(?:sudo\s+)?(?:ba|z|k|da)?sh\b(?!\s+-n\b)/.test(p));
+  });
 
   // Compound commands: split on top-level `|`, `||`, `&&`, `;` and take the
   // highest tier. Split the body-INTACT view so each stage keeps its SQL
@@ -816,10 +878,17 @@ function classifyBashCommand(command: string, ephemeralVars: Set<string> = new S
     // an earlier stage. Inherits any vars passed from an enclosing command.
     const vars = new Set(ephemeralVars);
     for (const stage of stages) collectMktempVars(stage, vars);
-    return stages.reduce<RiskTier>(
-      (worst, stage) => maxTier(worst, classifyBashCommand(stage, vars)),
-      "safe",
-    );
+    // Throwaway paths that only EARLIER stages make known: a file an earlier
+    // stage created (`cat > _smoke.mjs <<EOF … ; rm _smoke.mjs`), a variable set
+    // to a literal temp path (`W=/tmp/wt; rm -rf $W`), and a `cd` into a temp
+    // dir (relative paths then live in it). Gathered in order, so a delete
+    // before the create still counts as a real delete.
+    let worst: RiskTier = pipesToShell ? "review" : "safe";
+    for (const stage of stages) {
+      worst = maxTier(worst, classifyBashCommand(stage, vars));
+      noteEphemeralEffects(stripHeredocBodies(stage), vars);
+    }
+    return worst;
   }
 
   // ---- single stage from here ----
@@ -831,7 +900,7 @@ function classifyBashCommand(command: string, ephemeralVars: Set<string> = new S
   const sql = findSqlInCommand(intact);
   const sqlTier: RiskTier = sql ? classifySqlSeverity(sql) : "safe";
 
-  return maxTier(sqlTier, classifyStageShellEffects(stripped, ephemeralVars));
+  return maxTier(maxTier(sqlTier, pipesToShell ? "review" : "safe"), classifyStageShellEffects(stripped, ephemeralVars));
 }
 
 /**
@@ -853,6 +922,12 @@ function classifyStageShellEffects(stage: string, ephemeralVars: Set<string> = n
   // can't fire inside an argument). These don't span pipes, so `^`-anchoring is
   // precise and avoids prose false-positives.
   const bareStage = stage.replace(/^sudo\s+/, "");
+  // Stopping a process whose command line names a temp or scratchpad path (a
+  // test database or server the session started there) is local cleanup.
+  if (/^pkill\s+(?:-\w+\s+)*-f\s+/.test(bareStage)) {
+    const pattern = unquote(splitArgs(bareStage.replace(/^pkill\s+(?:-\w+\s+)*-f\s+/, ""))[0] ?? "");
+    if (/(?:^|\/)scratchpad\//.test(pattern) || EPHEMERAL_PATH_RE.test(pattern)) return "warning";
+  }
   for (const pattern of HIGH_STAKES_STAGE) {
     if (pattern.test(bareStage)) return "high_stakes";
   }
@@ -867,6 +942,10 @@ function classifyStageShellEffects(stage: string, ephemeralVars: Set<string> = n
       return isLoopbackHttpStage(stage) ? "warning" : "high_stakes";
     }
   }
+
+  // `DATABASE_URL=<local> npx prisma migrate deploy`: the assignment prefix
+  // below would classify the bare `npx … deploy` without its local URL.
+  if (/^(?:\w+=\S+\s+)*npx\s+prisma\s+migrate\s+deploy\b/.test(bareStage) && isLocalPrismaDeploy(bareStage)) return "warning";
 
   const ghApiTier = classifyGhApiStage(bareStage);
   if (ghApiTier !== null) return ghApiTier;
@@ -1005,6 +1084,59 @@ export function stripHeredocBodies(command: string): string {
     i++;
   }
   return out.join("\n");
+}
+
+// Interpreters (not shells) whose heredoc body is code: `python3 - <<'EOF'`,
+// `node - <<EOF`, `psql <<SQL`. Shell heredocs (`bash <<EOF`) stay scannable.
+const CODE_HEREDOC_RE =
+  /(?:^|\||&&|;|\$\(|`)\s*(?:\w+=\S+\s+)*(?:sudo\s+)?(?:psql|mysql|mariadb|sqlite3?|node|python\d?(?:\.\d+)?|ruby|perl|deno|bun)\b[^\n|;&]*<</;
+
+/**
+ * Drop the bodies of heredocs fed to a code interpreter, for the SHELL-pattern
+ * scans only (the same policy as `-e`/`-c` bodies below). A Python script that
+ * edits a file whose text says "git push --force" or "npm publish" is not a
+ * force push or a publish. SQL detection still reads the intact body.
+ */
+export function stripCodeHeredocBodies(command: string): string {
+  const lines = command.split("\n");
+  const out: string[] = [];
+  let i = 0;
+  while (i < lines.length) {
+    const line = lines[i];
+    out.push(line);
+    const openers = [...line.matchAll(/<<-?\s*(["']?)([A-Za-z_][A-Za-z0-9_]*)\1/g)];
+    if (openers.length > 0 && CODE_HEREDOC_RE.test(line)) {
+      const delim = openers[openers.length - 1][2];
+      i++;
+      while (i < lines.length && lines[i].trim() !== delim) i++;
+      if (i < lines.length) i++;
+      continue;
+    }
+    i++;
+  }
+  return out.join("\n");
+}
+
+// Commands whose quoted arguments are text, never run: a commit message, a
+// search pattern, a PR body, printed text. `gh api` is left out: its fields are
+// a request payload (a GraphQL mutation, for example).
+const TEXT_ARG_COMMAND_RE = /^(?:\w+=(?:"[^"]*"|'[^']*'|\S+)\s+)*(?:git|grep|egrep|fgrep|rg|echo|printf|gh(?!\s+api\b))\b/;
+
+/**
+ * Blank the inside of quoted arguments of text commands, for the SHELL-pattern
+ * scans only, so `git commit -m "curl -d sends JSON"` or `grep "curl -X POST"`
+ * is not read as a POST. A step that pipes on (`echo '…' | sh`) keeps its text,
+ * because the next command may run it.
+ */
+export function blankTextCommandArgs(command: string): string {
+  return splitTopLevel(command, { pipes: false })
+    .map((step) => {
+      if (!TEXT_ARG_COMMAND_RE.test(step) || splitTopLevel(step).length > 1) return step;
+      // A quoted redirect target (`>> "$HOME/.ssh/authorized_keys"`) is a path, not text.
+      return step.replace(/'[^']*'|"(?:[^"\\]|\\.)*"/g, (q, at: number) =>
+        /[<>]\s*$/.test(step.slice(0, at)) ? q : q[0] + " ".repeat(Math.max(0, q.length - 2)) + q[0]);
+    })
+    .join("\n");
 }
 
 // Interpreters whose inline `-e`/`-c`/`--eval` (and perl/deno one-liner) body is
@@ -1427,6 +1559,19 @@ function classifyMcpTool(toolName: string, toolInput: Record<string, unknown> = 
     return target === undefined || target === "local" ? "warning" : "review";
   }
   if (parts.length === 3 && isClaudeDocsWrite(parts[1] || "", tool, toolInput)) return "warning";
+
+  // The desktop app's iOS Simulator: a local test device. Looking at it is
+  // safe; taps, typing and installing a local build change only the
+  // simulator, like page clicks in the built-in browser, so they are logged.
+  if (parts.includes("Claude_Code_iOS_Simulator")) {
+    if (tool === "control") {
+      const action = toolInput.action;
+      if (action === "screenshot" || action === "attach" || action === "detach") return "safe";
+      if (["tap", "swipe", "touch_path", "touch2_path", "text", "button", "open_url", "launch"].includes(action as string)) return "warning";
+      return "review";
+    }
+    if (tool === "build") return "warning";
+  }
 
   const browserServer = parts.slice(1, -1).find((p) => BROWSER_MCP_SERVERS.has(p));
   if (browserServer) return classifyBrowserTool(tool, toolInput, browserServer);
