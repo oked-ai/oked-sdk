@@ -1237,3 +1237,59 @@ describe("Claude Code built-in session tools", () => {
     assert.equal(classify("Artifact", { action: "list" }), "safe");
   });
 });
+
+describe("GitHub CLI and Railway", () => {
+  it("merging a PR, deletes and archives are high stakes", () => {
+    assert.equal(bash("gh pr merge 12 --squash"), "high_stakes");
+    assert.equal(bash("gh pr merge https://github.com/o/r/pull/12 --squash 2>&1 | tail -1"), "high_stakes");
+    assert.equal(bash("gh repo delete o/r --yes"), "high_stakes");
+    assert.equal(bash("gh release delete v1.0.0"), "high_stakes");
+    assert.equal(bash("gh repo archive o/r"), "high_stakes");
+  });
+
+  it("comments, issues, releases and workflow runs need review", () => {
+    assert.equal(bash("gh pr comment 12 --body 'LGTM'"), "review");
+    assert.equal(bash("gh pr close 12"), "review");
+    assert.equal(bash("gh issue create --title x --body y"), "review");
+    assert.equal(bash("gh release create v1.0.0"), "review");
+    assert.equal(bash("gh workflow run deploy.yml"), "review");
+    assert.equal(bash("gh secret set TOKEN"), "review");
+  });
+
+  it("gh reads stay safe", () => {
+    assert.equal(bash("gh pr view 12 --json state,mergeCommit"), "safe");
+    assert.equal(bash("gh pr checks 12"), "safe");
+    assert.equal(bash("gh run list"), "safe");
+    assert.equal(bash("gh api repos/o/r/pulls"), "safe");
+    assert.equal(bash("gh api -X GET repos/o/r/issues -f state=open"), "safe");
+    assert.equal(bash("gh api graphql -f query='query { viewer { login } }'"), "safe");
+  });
+
+  it("gh api writes are high stakes, like a curl POST", () => {
+    assert.equal(bash("gh api -X DELETE repos/o/r/git/refs/heads/x"), "high_stakes");
+    assert.equal(bash("gh api --method PATCH repos/o/r -f description=x"), "high_stakes");
+    assert.equal(bash("gh api repos/o/r/issues -f title=x"), "high_stakes");
+    assert.equal(bash("gh api graphql -f query='mutation { addStar(input:{}) { clientMutationId } }'"), "high_stakes");
+  });
+
+  it("Railway deploys are high stakes, reads are safe", () => {
+    assert.equal(bash("railway up"), "high_stakes");
+    assert.equal(bash("railway redeploy --yes"), "high_stakes");
+    assert.equal(bash("railway logs"), "safe");
+    assert.equal(bash("railway status"), "safe");
+  });
+});
+
+describe("desktop app turn and session tools", () => {
+  it("the task list and the end-of-turn summary are safe", () => {
+    assert.equal(classify("mcp__ccd_turn__update_plan", { advance: true }), "safe");
+    assert.equal(classify("mcp__ccd_turn__wrap_up", { recap: "done" }), "safe");
+  });
+
+  it("a new local session is logged; a cloud or SSH one needs review", () => {
+    assert.equal(classify("mcp__ccd_session__start_session", { title: "t", prompt: "p" }), "warning");
+    assert.equal(classify("mcp__ccd_session__hand_off_to_session", { title: "t", remaining_plan: "p" }), "warning");
+    assert.equal(classify("mcp__ccd_session__start_session", { title: "t", prompt: "p", target: "cloud" }), "review");
+    assert.equal(classify("mcp__ccd_session__start_session", { title: "t", prompt: "p", target: "ssh", host: "box" }), "review");
+  });
+});

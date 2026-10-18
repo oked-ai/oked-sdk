@@ -7,7 +7,7 @@
  * classifier that produced them.
  */
 
-export const CLASSIFIER_VERSION = "v2";
+export const CLASSIFIER_VERSION = "v3";
 
 export type OperationKind =
   // File operations
@@ -21,7 +21,9 @@ export type OperationKind =
   // Git
   | "git_push" | "git_force_push" | "git_reset_hard"
   | "git_clean" | "git_checkout" | "git_restore" | "git_commit"
-  | "git_pr_create"
+  | "git_pr_create" | "git_pr_merge" | "git_pr_write" | "gh_write"
+  // Deploys
+  | "deploy"
   // Network / remote
   | "ssh_remote"
   // HTTP via shell
@@ -43,7 +45,7 @@ export type OperationKind =
   | "mcp_send" | "mcp_submit_form" | "mcp_fill" | "mcp_submit" | "mcp_query"
   | "browser_navigate" | "browser_interact" | "browser_script" | "browser_dev_server"
   | "folder_access"
-  | "session_control" | "worktree" | "schedule" | "agent_message" | "web_fetch" | "monitor" | "artifact"
+  | "session_control" | "session_housekeeping" | "session_start" | "worktree" | "schedule" | "agent_message" | "web_fetch" | "monitor" | "artifact"
   // Agents
   | "agent_launch"
   // Shell composite / fallbacks

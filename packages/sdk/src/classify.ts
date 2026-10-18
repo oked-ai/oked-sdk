@@ -229,6 +229,13 @@ const HIGH_STAKES_STAGE = [
   /^killall\b/,
   // Wide-open permissions.
   /^chmod\s+(?:-\S+\s+)*777\b/,
+  // GitHub CLI: merging a PR changes the base branch for everyone (and often
+  // deploys); deletes and archives can't be undone from here.
+  /^gh\s+pr\s+merge\b/,
+  /^gh\s+(?:repo|release|issue|label|gist|secret|variable|cache|run|ruleset)\s+delete\b/,
+  /^gh\s+repo\s+archive\b/,
+  // Railway deploys and tear-downs change a live service.
+  /^railway\s+(?:up|deploy|redeploy|down|delete)\b/,
 ];
 
 // curl request-method / request-body flags, scanned PER-STAGE (a single stage
@@ -254,7 +261,31 @@ const HIGH_STAKES_CURL_STAGE = [
 // message delete, folder purge — are high_stakes in the full scan above.)
 const REVIEW_COMMANDS = [
   /^himalaya\s+message\s+(send|reply|forward)\b/,
+  // GitHub CLI writes other people see (comments, reviews, issues, releases)
+  // or that change the repo's settings and CI. They can be edited or undone.
+  /^gh\s+pr\s+(?:close|reopen|comment|review|edit|ready|lock|unlock)\b/,
+  /^gh\s+issue\s+(?:create|close|reopen|comment|edit|transfer|lock|unlock|pin|unpin)\b/,
+  /^gh\s+release\s+(?:create|edit|upload)\b/,
+  /^gh\s+repo\s+(?:create|edit|rename|fork)\b/,
+  /^gh\s+(?:secret|variable)\s+set\b/,
+  /^gh\s+workflow\s+(?:run|enable|disable)\b/,
+  /^gh\s+run\s+(?:cancel|rerun)\b/,
+  /^gh\s+(?:gist|label)\s+(?:create|edit)\b/,
 ];
+
+/**
+ * `gh api` is curl for GitHub: a mutating method, or fields without a method
+ * (gh then sends a POST), is an outward write like a curl POST. A GraphQL call
+ * is a write only when it holds a mutation. Returns null for other commands.
+ */
+function classifyGhApiStage(stage: string): RiskTier | null {
+  if (!/^gh\s+api\b/.test(stage)) return null;
+  const method = stage.match(/\s(?:-X|--method)(?:\s+|=)?([A-Za-z]+)\b/)?.[1]?.toUpperCase();
+  if (method && method !== "GET" && method !== "HEAD") return "high_stakes";
+  if (/^gh\s+api\s+graphql\b/.test(stage)) return /\bmutation\b/.test(stage) ? "high_stakes" : "safe";
+  if (!method && /\s(?:-f|-F|--field|--raw-field|--input)(?:\s|=)/.test(stage)) return "high_stakes";
+  return "safe";
+}
 
 // Local-mutation MARKERS for DETECTED side effects. These never gate a prompt —
 // under the effect-based model anything not flagged destructive/outward/sensitive
@@ -451,8 +482,11 @@ function maxTier(a: RiskTier, b: RiskTier): RiskTier {
  * Operators inside quoted strings, command substitutions, and heredoc bodies —
  * including the `"$(cat <<'EOF' … )"` heredoc form used for commit messages —
  * are kept intact so message text isn't split. A backslash-escaped newline is a
- * line continuation, not a separator. Returns trimmed, non-empty segments. */
-function splitTopLevel(cmd: string): string[] {
+ * line continuation, not a separator. Returns trimmed, non-empty segments.
+ * With `pipes: false`, a pipeline (`a | b`) stays one segment: the card text
+ * reads a pipeline as one step (`printf … | himalaya message send`). */
+export function splitTopLevel(cmd: string, opts: { pipes?: boolean } = {}): string[] {
+  const splitPipes = opts.pipes !== false;
   const out: string[] = [];
   let cur = "";
   let quote: '"' | "'" | null = null;
@@ -503,7 +537,7 @@ function splitTopLevel(cmd: string): string[] {
       i += 2; // consume both operator chars
       continue;
     }
-    if (ch === "|" || ch === ";") {
+    if (ch === ";" || (ch === "|" && splitPipes)) {
       out.push(cur.trim());
       cur = "";
       i++;
@@ -833,6 +867,9 @@ function classifyStageShellEffects(stage: string, ephemeralVars: Set<string> = n
       return isLoopbackHttpStage(stage) ? "warning" : "high_stakes";
     }
   }
+
+  const ghApiTier = classifyGhApiStage(bareStage);
+  if (ghApiTier !== null) return ghApiTier;
 
   // Variable assignments: `NAME=value` (pure) or `NAME=$(cmd) rest` (env prefix
   // / capture). Classify the command-substitution inners and any trailing
@@ -1328,6 +1365,8 @@ const CCD_SAFE_TOOLS = new Map<string, ReadonlySet<string>>([
   ["ccd_pr", new Set(["bind_pr", "unbind_pr"])],
   ["ccd_view", new Set(["show_pane", "close_pane", "set_transcript_view"])],
   ["ccd_session", new Set(["spawn_task"])],
+  // The task list under Claude's message and the end-of-turn summary box.
+  ["ccd_turn", new Set(["update_plan", "wrap_up"])],
   ["ccd_window", new Set(["open_session_in", "close_split", "set_sidebar_collapsed"])],
   ["ccd_sidebar", new Set([
     "create_group", "create_section", "rename_group", "rename_section",
@@ -1380,6 +1419,13 @@ function classifyMcpTool(toolName: string, toolInput: Record<string, unknown> = 
   // The PR bar's CI monitor switches. auto_fix lets the session push fixes,
   // but each push is gated on its own. Log it, no prompt.
   if (parts.includes("ccd_pr") && tool === "set_monitor") return "warning";
+  // Start a new local Claude session, or move this task into one. Its own tool
+  // calls are gated by OKed like this one's, so log it, no prompt. A cloud or
+  // SSH session runs outside this machine's hook, so it stays `review`.
+  if (parts.includes("ccd_session") && (tool === "start_session" || tool === "hand_off_to_session")) {
+    const target = toolInput.target;
+    return target === undefined || target === "local" ? "warning" : "review";
+  }
   if (parts.length === 3 && isClaudeDocsWrite(parts[1] || "", tool, toolInput)) return "warning";
 
   const browserServer = parts.slice(1, -1).find((p) => BROWSER_MCP_SERVERS.has(p));
