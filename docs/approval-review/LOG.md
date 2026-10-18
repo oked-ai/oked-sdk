@@ -15,7 +15,7 @@ Built from `changes.jsonl` by `node scripts/approval-review/record.mjs log`. Do 
 | Footnote | Other steps in this command need no approval | · |
 | Kind | shell_pipeline | shell_pipeline |
 
-Seen 1× (✅ 1, ❌ 0) · Corpus: `2026-10-18-node-e-string-mentions-prisma-deploy`
+Seen 1× (✅ 1, ❌ 0) · Corpus: `2026-10-18-node-e-string-mentions-prisma-deploy` · PR: https://github.com/oked-ai/oked-sdk/pull/73
 
 ## 2026-10-18 · tier · `Bash`
 
@@ -30,7 +30,7 @@ Seen 1× (✅ 1, ❌ 0) · Corpus: `2026-10-18-node-e-string-mentions-prisma-dep
 | Footnote | Other steps in this command need no approval | · |
 | Kind | file_delete | file_delete |
 
-Seen 1× (✅ 1, ❌ 0) · Corpus: `2026-10-18-rmdir-mktemp-home-with-redirect`
+Seen 1× (✅ 1, ❌ 0) · Corpus: `2026-10-18-rmdir-mktemp-home-with-redirect` · PR: https://github.com/oked-ai/oked-sdk/pull/73
 
 ## 2026-10-18 · tier · `Bash`
 
@@ -46,7 +46,7 @@ Seen 1× (✅ 1, ❌ 0) · Corpus: `2026-10-18-rmdir-mktemp-home-with-redirect`
 | Footnote | package.json is marked private, npm will refuse to publish it | · |
 | Kind | npm_publish | shell_pipeline |
 
-Seen 1× (✅ 1, ❌ 0) · Corpus: `2026-10-18-grep-pattern-mentions-npm-publish`
+Seen 1× (✅ 1, ❌ 0) · Corpus: `2026-10-18-grep-pattern-mentions-npm-publish` · PR: https://github.com/oked-ai/oked-sdk/pull/73
 
 ## 2026-10-18 · tier · `Bash: pkill / killall / kill of a local dev server`
 
