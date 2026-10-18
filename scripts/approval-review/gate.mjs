@@ -72,7 +72,7 @@ checkFiles(REPO_ROOT, SDK_ALLOWED);
 const moves = [];
 const baseCorpus = (() => {
   try {
-    return execFileSync("git", ["show", `${base}:packages/sdk/test/fixtures/approval-corpus.jsonl`], { cwd: REPO_ROOT, encoding: "utf8" })
+    return execFileSync("git", ["show", `${base}:packages/sdk/test/fixtures/approval-corpus.jsonl`], { cwd: REPO_ROOT, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] })
       .split("\n").filter((l) => l.trim()).map((l) => JSON.parse(l));
   } catch {
     return [];
