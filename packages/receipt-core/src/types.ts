@@ -6,8 +6,14 @@ export type Digest = `sha256:${string}`;
 
 export type ReceiptDecision = "approved" | "denied" | "timed_out";
 export type DeciderKind = "human" | "rule" | "system";
-export type Assurance = "none" | "channel" | "passkey";
-export type DecisionChannel = "telegram" | "dashboard";
+/**
+ * How the human decider was verified. "channel": the linked account or signed-in
+ * session that decided. "device_verified": the OKed iPhone app checked Face ID
+ * or the device passcode right before the decision. "passkey": planned.
+ */
+export type Assurance = "none" | "channel" | "device_verified" | "passkey";
+/** Where a human decided. "mobile" is the OKed iPhone app. */
+export type DecisionChannel = "telegram" | "dashboard" | "mobile";
 /** Why a system decider decided. Null for human and rule deciders. */
 export type SystemReason = "timeout" | "classified_safe";
 export type RiskTier = "safe" | "warning" | "review" | "high_stakes";
