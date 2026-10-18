@@ -319,7 +319,8 @@ describe("Bash — multi-file rm", () => {
     const cmd = 'WT=/repo/.claude/worktrees/x\nrm "$WT/backend/node_modules"\ncd "$WT" && git status --short';
     const f = describeFields("Bash", { command: cmd });
     assert.equal(f!.Title, "Delete file");
-    assert.equal(f!.Target, "$WT/backend/node_modules");
+    // WT is set to a literal path earlier in the script, so the card shows it.
+    assert.equal(f!.Target, "/repo/.claude/worktrees/x/backend/node_modules");
   });
 
   it("rm with quoted paths containing spaces", () => {
@@ -1054,5 +1055,52 @@ describe("Railway", () => {
     assert.equal(f.Target, "api");
     assert.equal(f.Annotation, "(production)");
     assert.equal(describeFields("Bash", { command: "railway down" })!.Title, "Remove the latest Railway deployment");
+  });
+});
+
+describe("approval review 2026-10-18 (2 weeks of cards): text", () => {
+  it("rm -f is not recursive", () => {
+    assert.equal(describeFields("Bash", { command: "rm -f _smoke.mjs" })!.Title, "Delete file");
+    assert.equal(describeFields("Bash", { command: "rm -fr build" })!.Title, "Delete file recursively");
+    assert.equal(describeFields("Bash", { command: "rm -R build" })!.Title, "Delete file recursively");
+  });
+
+  it("a variable set earlier in the command shows as its value", () => {
+    const f = describeFields("Bash", { command: "D=/Users/me/notes; rm -f $D/old.md && ls $D" })!;
+    assert.equal(f.Target, "~/notes/old.md");
+    const g = describeFields("Bash", { command: "rm -rf \"$UNSET/x\"" })!;
+    assert.equal(g.Target, "$UNSET/x");
+  });
+
+  it("git branch -D names the branch", () => {
+    const f = describeFields("Bash", { command: "git worktree remove wt && git branch -D claude/feature-x" })!;
+    assert.equal(f.Title, "Delete local Git branch");
+    assert.equal(f.Target, "claude/feature-x");
+    assert.equal(f.Annotation, "even if not merged");
+  });
+
+  it("prisma migrate deploy names the database", () => {
+    const f = describeFields("Bash", { command: "export DATABASE_URL=postgresql://u:p@localhost:5433/app_test; npx prisma migrate deploy 2>&1 | tail -2" })!;
+    assert.equal(f.Title, "Apply Prisma database migrations");
+    assert.equal(f.Target, "localhost:5433/app_test");
+    assert.ok(!JSON.stringify(f).includes("u:p@"), "no password on the card title or target");
+  });
+
+  it("iOS Simulator actions say what they do", () => {
+    const sim = (input: Record<string, unknown>) => describeFields("mcp__Claude_Code_iOS_Simulator__control", input)!;
+    assert.equal(sim({ action: "screenshot" }).Title, "Take an iOS Simulator screenshot");
+    assert.equal(sim({ action: "tap", x: 10, y: 20 }).Target, "(10, 20)");
+    assert.equal(sim({ action: "text", text: "hello" }).Body, "hello");
+    assert.equal(sim({ action: "launch", bundle_id: "ai.oked.app" }).Target, "ai.oked.app");
+  });
+
+  it("scheduled tasks show the name, the schedule and the prompt", () => {
+    const f = describeFields("mcp__scheduled-tasks__create_scheduled_task", { taskId: "t", title: "Daily check", cronExpression: "0 9 * * *", prompt: "Check X." })!;
+    assert.equal(f.Title, "Create a scheduled task");
+    assert.equal(f.Target, "Daily check");
+    assert.equal(f.Annotation, "cron 0 9 * * *");
+    assert.equal(f.Body, "Check X.");
+    const u = describeFields("mcp__scheduled-tasks__update_scheduled_task", { taskId: "t", enabled: false })!;
+    assert.equal(u.Annotation, "changes: pause");
   });
 });

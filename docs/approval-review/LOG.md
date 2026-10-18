@@ -3,6 +3,81 @@
 Every change the approval review loop made to a card's tier, text or layout, newest first.
 Built from `changes.jsonl` by `node scripts/approval-review/record.mjs log`. Do not edit by hand.
 
+## 2026-10-18 · text · `Bash: npx prisma migrate deploy`
+
+**Why:** The card said Deploy via npx, which reads like a production deploy. The command applies database migrations to a local test database. Now the title says so and names the database host and name.
+
+| | Before | After |
+|---|---|---|
+| Tier | 🔴 high stakes (Face ID) | 🔴 high stakes (Face ID) |
+| Title | Deploy via npx | Apply Prisma database migrations |
+| Target | · | localhost:5433/oked_test_e2e |
+| Body | npx prisma migrate deploy 2>&1 \| tail -2 | npx prisma migrate deploy 2>&1 \| tail -2 |
+| Footnote | Other steps in this command need no approval | Other steps in this command need no approval |
+| Kind | npx_deploy | sql_migrate |
+
+Corpus: `2026-10-18-prisma-migrate-local` · PR: https://github.com/oked-ai/oked-sdk/pull/70
+
+## 2026-10-18 · text · `mcp__scheduled-tasks__create_scheduled_task`
+
+**Why:** The card did not show the schedule or the prompt that Claude will run on its own. Now it shows the task name, the schedule, the prompt and a note that it runs without you.
+
+| | Before | After |
+|---|---|---|
+| Tier | 🔵 review (asks you) | 🔵 review (asks you) |
+| Title | Create scheduled task "OKed approval review" via scheduled-tasks | Create a scheduled task |
+| Target | · | OKed approval review |
+| Annotation | · | cron 0 */4 * * * |
+| Body | · | Run one pass of the OKed approval review loop.<br><br>Context: OKed sends approval cards for AI agent actions to Oren's Telegram and the OKed iPhone app. Some cards have the wrong risk tier (noise that cau… |
+| Footnote | · | Claude runs this prompt on its own on this schedule |
+| Kind | mcp_create | schedule |
+
+Corpus: `2026-10-18-scheduled-task-create` · PR: https://github.com/oked-ai/oked-sdk/pull/70
+
+## 2026-10-18 · text · `mcp__Claude_Code_iOS_Simulator__control`
+
+**Why:** Every iOS Simulator card said Control via Claude_Code_iOS_Simulator, so you could not tell a screenshot from a tap. Now the title names the action and the target shows where it taps. Seen 5 times.
+
+| | Before | After |
+|---|---|---|
+| Tier | 🔵 review (asks you) | 🔵 review (asks you) |
+| Title | Control via Claude_Code_iOS_Simulator | Tap in the iOS Simulator |
+| Target | · | (201, 636) |
+| Kind | unknown_tool | simulator |
+
+Corpus: `2026-10-18-simulator-tap` · PR: https://github.com/oked-ai/oked-sdk/pull/70
+
+## 2026-10-18 · text · `Bash: git branch -D`
+
+**Why:** The card title was the raw command. Now it says Delete local Git branch, names the branch, and says when the branch is deleted even if not merged.
+
+| | Before | After |
+|---|---|---|
+| Tier | 🔴 high stakes (Face ID) | 🔴 high stakes (Face ID) |
+| Title | git branch -D claude/settings-sections | Delete local Git branch |
+| Target | · | claude/settings-sections |
+| Annotation | · | even if not merged |
+| Body | git branch -D claude/settings-sections | git branch -D claude/settings-sections |
+| Footnote | Other steps in this command need no approval | Other steps in this command need no approval |
+| Kind | unknown_bash | git_branch_delete |
+
+Corpus: `2026-10-18-git-branch-delete` · PR: https://github.com/oked-ai/oked-sdk/pull/70
+
+## 2026-10-18 · text · `Bash: rm -f`
+
+**Why:** An rm -f card said Delete file recursively, because any flag counted as recursive. The path showed as $D/answer-in-ste100.md, not the real file. Now only an r flag means recursive, and a variable set earlier in the command shows as its value. Seen on 13 delete cards in 2 weeks.
+
+| | Before | After |
+|---|---|---|
+| Tier | 🔴 high stakes (Face ID) | 🔴 high stakes (Face ID) |
+| Title | Delete file recursively | Delete file |
+| Target | $D/answer-in-ste100.md | ~/.claude/projects/-Users-oren-Dev-OKed/memory/answer-in-ste100.md |
+| Body | rm -f $D/answer-in-ste100.md | rm -f $D/answer-in-ste100.md |
+| Footnote | Other steps in this command need no approval | Other steps in this command need no approval |
+| Kind | file_delete | file_delete |
+
+Corpus: `2026-10-18-rm-f-memory-file` · PR: https://github.com/oked-ai/oked-sdk/pull/70
+
 ## 2026-10-18 · layout · `Telegram card (all cards)`
 
 **Why:** Code sat in a quote block, unknown cards showed a ⚙️ that meant nothing, the button under each card was a bare ⚙️, and the decided state took two lines in capitals. Now code shows in a code block, unknown cards have no icon, the button reads ⚙️ Rule, and the decided state is one line: ✅ Approved by Oren Dor · 🧾 receipt.
