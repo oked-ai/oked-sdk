@@ -371,6 +371,40 @@ function isEphemeralPath(filePath: string): boolean {
 const MKTEMP_ASSIGN_RE =
   /^(?:export\s+|declare\s+|local\s+|readonly\s+)?(\w+)=["']?(?:\$\(|`)\s*mktemp\b/;
 
+// Process names and command lines of local dev servers and dev tooling: Node
+// and Python app servers, bundlers, package-manager scripts, and Node scripts.
+const DEV_PROCESS_RE =
+  /\b(?:node|nodemon|tsx|ts-node|vite|next|nuxt|astro|remix|webpack(?:-dev-server)?|esbuild|parcel|turbo|npm|pnpm|yarn|bun|deno|wrangler|miniflare|uvicorn|gunicorn|flask|runserver|rails|puma|http\.server|http-server|live-server|serve|hugo|jekyll|storybook|expo|metro)\b|\.(?:[cm]?js|tsx?)\b/;
+
+/**
+ * A kill of a local dev server: `pkill -f "tsx src/main.ts"`, `killall node`,
+ * `kill $(pgrep -f vite)`, or a kill of whatever listens on a port
+ * (`kill $(lsof -t -iTCP:3000 -sTCP:LISTEN)`). Oren chose `review` (no Face
+ * ID) for these on 2026-10-18. A bare `kill <pid>` names no process, so it
+ * stays high stakes.
+ */
+function isDevServerKill(stage: string): boolean {
+  const pkill = stage.match(/^pkill\s+(.+)$/);
+  if (pkill) {
+    const args = splitArgs(pkill[1]).filter((a) => !a.startsWith("-") || a === "-f");
+    const pattern = unquote(args[args.indexOf("-f") + 1] ?? args[args.length - 1] ?? "");
+    return DEV_PROCESS_RE.test(pattern);
+  }
+  const killall = stage.match(/^killall\s+(.+)$/);
+  if (killall) {
+    const names = splitArgs(killall[1]).filter((a) => !a.startsWith("-")).map(unquote);
+    return names.length > 0 && names.every((n) => DEV_PROCESS_RE.test(n));
+  }
+  const kill = stage.match(/^kill\s+(?:-\w+\s+)*\$\((.+)\)\s*(?:2>\/dev\/null)?$/);
+  if (kill) {
+    const inner = kill[1].trim();
+    if (/^lsof\b/.test(inner) && /-i\s*(?:tcp|TCP|udp)?:?\d+|-iTCP:\d+/.test(inner)) return true;
+    const pg = inner.match(/^pgrep\s+(?:-\w+\s+)*(?:-f\s+)?(.+)$/);
+    if (pg) return DEV_PROCESS_RE.test(unquote(pg[1].trim()));
+  }
+  return false;
+}
+
 // Entries in the ephemeral set that are not variable names: `path:<p>` is a
 // file an earlier stage created, `cwd:temp` means the shell is in a temp dir.
 const CREATED_PATH = "path:";
@@ -928,6 +962,8 @@ function classifyStageShellEffects(stage: string, ephemeralVars: Set<string> = n
     const pattern = unquote(splitArgs(bareStage.replace(/^pkill\s+(?:-\w+\s+)*-f\s+/, ""))[0] ?? "");
     if (/(?:^|\/)scratchpad\//.test(pattern) || EPHEMERAL_PATH_RE.test(pattern)) return "warning";
   }
+  // Stopping a local dev server is review: it asks, without Face ID.
+  if (isDevServerKill(bareStage)) return "review";
   for (const pattern of HIGH_STAKES_STAGE) {
     if (pattern.test(bareStage)) return "high_stakes";
   }
