@@ -47,6 +47,8 @@ curl -s -w " %{http_code}\n" -X POST https://api.oked.ai/api/mobile/v1/auth/toke
 [ ✅ Approve ][ ❌ Deny ][ ⚙️ Rule ]
 ```
 
+PR: https://github.com/aml11/oked-app/pull/126
+
 ## 2026-10-18 · tier · `Bash: railway up`
 
 **Why:** Railway deploys were safe and the card only showed the raw command. A deploy changes a live service, so it is high stakes now, with the title Deploy to Railway.
@@ -56,6 +58,8 @@ curl -s -w " %{http_code}\n" -X POST https://api.oked.ai/api/mobile/v1/auth/toke
 | Tier | ⚪ safe (no card) | 🔴 high stakes (Face ID) |
 | Title | railway up | Deploy to Railway |
 | Kind | unknown_bash | deploy |
+
+PR: https://github.com/oked-ai/oked-sdk/pull/69
 
 ## 2026-10-18 · tier · `Bash: gh pr comment`
 
@@ -68,6 +72,8 @@ curl -s -w " %{http_code}\n" -X POST https://api.oked.ai/api/mobile/v1/auth/toke
 | Body | · | LGTM |
 | Kind | unknown_bash | git_pr_write |
 
+PR: https://github.com/oked-ai/oked-sdk/pull/69
+
 ## 2026-10-18 · tier · `Bash: gh pr merge`
 
 **Why:** Found while checking the PR #124 card: gh pr merge was safe, so a merge alone never asked you. A merge changes the base branch for everyone and often deploys. gh deletes and archives are high stakes too.
@@ -78,6 +84,8 @@ curl -s -w " %{http_code}\n" -X POST https://api.oked.ai/api/mobile/v1/auth/toke
 | Title | gh pr merge 12 --squash | Merge PR #12 |
 | Annotation | · | squash |
 | Kind | unknown_bash | git_pr_merge |
+
+PR: https://github.com/oked-ai/oked-sdk/pull/69
 
 ## 2026-10-18 · tier · `mcp__ccd_turn__wrap_up`
 
@@ -90,7 +98,7 @@ curl -s -w " %{http_code}\n" -X POST https://api.oked.ai/api/mobile/v1/auth/toke
 | Body | · | The fix is in. Tests pass. Nothing is committed. |
 | Kind | unknown_tool | session_housekeeping |
 
-Corpus: `2026-10-18-wrap-up`
+Corpus: `2026-10-18-wrap-up` · PR: https://github.com/oked-ai/oked-sdk/pull/69
 
 ## 2026-10-18 · tier · `mcp__ccd_turn__update_plan`
 
@@ -102,7 +110,7 @@ Corpus: `2026-10-18-wrap-up`
 | Title | Update plan via Claude desktop app | Update the task list in the Claude app |
 | Kind | mcp_update | session_housekeeping |
 
-Corpus: `2026-10-18-update-plan`
+Corpus: `2026-10-18-update-plan` · PR: https://github.com/oked-ai/oked-sdk/pull/69
 
 ## 2026-10-18 · text · `Bash`
 
@@ -119,4 +127,4 @@ Corpus: `2026-10-18-update-plan`
 | Footnote | · | Other steps in this command need no approval |
 | Kind | http_post | git_pr_merge |
 
-Corpus: `2026-10-18-gh-merge-then-post`
+Corpus: `2026-10-18-gh-merge-then-post` · PR: https://github.com/oked-ai/oked-sdk/pull/69
