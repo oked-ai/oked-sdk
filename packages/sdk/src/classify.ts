@@ -653,7 +653,8 @@ export function splitTopLevel(cmd: string, opts: { pipes?: boolean } = {}): stri
 function isEphemeralOnlyDeletion(command: string, ephemeralVars: Set<string> = new Set()): boolean {
   const m = command.match(/^(?:sudo\s+)?(?:rm|rmdir|trash|trash-put)\b\s+(.+)$/s);
   if (!m) return false;
-  const targets = splitArgs(m[1]).filter((a) => !a.startsWith("-"));
+  // A redirect (`2>/dev/null`) is not a target.
+  const targets = splitArgs(m[1]).filter((a) => !a.startsWith("-") && !/^(?:\d|&)?>>?\S+$/.test(a));
   if (targets.length === 0) return false;
   return targets.every((a) => {
     const t = unquote(a);
@@ -949,7 +950,12 @@ function classifyStageShellEffects(stage: string, ephemeralVars: Set<string> = n
   // A delete word sitting in an argument (filename, branch name, echo text) is
   // NOT a deletion — that's the false positive DELETE_COMMAND_RE avoids.
   if (isEphemeralOnlyDeletion(stage, ephemeralVars)) return "warning";
-  if (DELETE_COMMAND_RE.test(stage.replace(DELETE_LEAD, ""))) return "high_stakes";
+  // rmdir removes only EMPTY folders (it fails on a folder with files), so no
+  // data is lost and `mkdir` undoes it: a reversible local change.
+  const deleteStage = stage.replace(DELETE_LEAD, "");
+  const rmdirArgs = deleteStage.match(/^(?:sudo\s+)?rmdir\b(.*)$/s)?.[1];
+  if (rmdirArgs !== undefined && !DELETE_COMMAND_RE.test(rmdirArgs)) return "warning";
+  if (DELETE_COMMAND_RE.test(deleteStage)) return "high_stakes";
 
   // Destructive/irreversible single commands, matched at stage start with any
   // leading `sudo ` stripped (so `sudo mkfs …` is still caught, but the word
@@ -1158,16 +1164,22 @@ export function stripCodeHeredocBodies(command: string): string {
 // a request payload (a GraphQL mutation, for example).
 const TEXT_ARG_COMMAND_RE = /^(?:\w+=(?:"[^"]*"|'[^']*'|\S+)\s+)*(?:git|grep|egrep|fgrep|rg|echo|printf|gh(?!\s+api\b))\b/;
 
+// Commands that run the text piped into them as code.
+const RUNS_PIPED_TEXT_RE =
+  /^(?:sudo\s+)?(?:(?:ba|z|k|da)?sh|xargs|eval|source|\.|node|deno|bun|python\d?(?:\.\d+)?|ruby|perl|psql|mysql|mariadb|sqlite3?)\b/;
+
 /**
  * Blank the inside of quoted arguments of text commands, for the SHELL-pattern
  * scans only, so `git commit -m "curl -d sends JSON"` or `grep "curl -X POST"`
- * is not read as a POST. A step that pipes on (`echo '…' | sh`) keeps its text,
- * because the next command may run it.
+ * is not read as a POST. A step that pipes into a command that runs its input
+ * (`echo '…' | sh`) keeps its text. A pipe into a reader (`grep "…" | head`)
+ * does not run the text, so the text is blanked.
  */
 export function blankTextCommandArgs(command: string): string {
   return splitTopLevel(command, { pipes: false })
     .map((step) => {
-      if (!TEXT_ARG_COMMAND_RE.test(step) || splitTopLevel(step).length > 1) return step;
+      if (!TEXT_ARG_COMMAND_RE.test(step)) return step;
+      if (splitTopLevel(step).slice(1).some((p) => RUNS_PIPED_TEXT_RE.test(p))) return step;
       // A quoted redirect target (`>> "$HOME/.ssh/authorized_keys"`) is a path, not text.
       return step.replace(/'[^']*'|"(?:[^"\\]|\\.)*"/g, (q, at: number) =>
         /[<>]\s*$/.test(step.slice(0, at)) ? q : q[0] + " ".repeat(Math.max(0, q.length - 2)) + q[0]);

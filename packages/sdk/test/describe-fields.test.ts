@@ -1105,3 +1105,26 @@ describe("approval review 2026-10-18 (2 weeks of cards): text", () => {
     assert.equal(u.Annotation, "changes: pause");
   });
 });
+
+describe("approval review 2026-10-18T1713: text", () => {
+  const bashFields = (command: string) => describeFields("Bash", { command })!;
+
+  it("rmdir says it deletes an empty folder", () => {
+    assert.equal(bashFields("rmdir build/empty").Title, "Delete empty folder");
+    assert.equal(bashFields("rmdir build/empty").Target, "build/empty");
+    assert.equal(bashFields("rmdir a b").Title, "Delete 2 empty folders");
+  });
+
+  it("words in a search pattern or a node -e script do not name the card", () => {
+    assert.equal(bashFields(`grep -E "x|npm publish" a.yml`).Kind, "unknown_bash");
+    assert.equal(bashFields(`grep "a\\|git push --force" f`).Kind, "unknown_bash");
+    assert.equal(
+      bashFields(`node -e 'for (const c of ["DATABASE_URL=postgres://u@prod.example.com/db npx prisma migrate deploy"]) console.log(c)'`).Kind,
+      "unknown_bash",
+    );
+    // The real commands keep their titles.
+    assert.equal(bashFields("cd pkg && npm publish").Title, "Publish package to npm");
+    assert.equal(bashFields("DATABASE_URL=postgres://u@db.prod.io/x npx prisma migrate deploy").Kind, "sql_migrate");
+    assert.equal(bashFields("git push --force origin main").Title, "Force push");
+  });
+});

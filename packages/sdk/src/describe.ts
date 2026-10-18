@@ -10,7 +10,7 @@
 
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { basename, isAbsolute, join, resolve } from "node:path";
-import { blankTextCommandArgs, classify, extractShellWriteOps, splitTopLevel, stripCodeHeredocBodies } from "./classify.js";
+import { blankTextCommandArgs, classify, extractShellWriteOps, splitTopLevel, stripCodeHeredocBodies, stripInlineScriptBodies } from "./classify.js";
 import { TIER_ORDER } from "./degraded.js";
 
 const BODY_PREVIEW_MAX = 200;
@@ -248,14 +248,22 @@ function summarizeBash(command: string, sizeBytes?: number, cwd?: string): Rende
   // an interior line of a multi-line script (e.g. `rm "$WT/node_modules"` before
   // a trailing `cd … && git status`) wouldn't match and the card fell back to
   // the generic "Run command".
-  const rmMatch = cmd.match(/\b(?:rm|trash|trash-put|rmdir)\s+(?:(-rf?|-fr|--recursive|-r)\s+)?([^\n]+)/);
+  const rmMatch = cmd.match(/\b(rm|trash|trash-put|rmdir)\s+(?:(-rf?|-fr|--recursive|-r)\s+)?([^\n]+)/);
+  if (rmMatch && rmMatch[1] === "rmdir") {
+    // rmdir removes empty folders only.
+    const vars = literalAssignments(cmd);
+    const targets = parseRmTargets(rmMatch[3]).map((t) => shortenPath(stripQuotes(expandVars(t, vars))));
+    return targets.length <= 1
+      ? { title: "Delete empty folder", target: targets[0], kind: "file_delete" }
+      : { title: `Delete ${targets.length} empty folders`, target: targets.join("\n"), kind: "file_delete" };
+  }
   if (rmMatch) {
     // Recursive only with an r/R flag: `rm -f x` deletes one file.
-    const flags = (rmMatch[1] ? `${rmMatch[1]} ` : "") + rmMatch[2];
+    const flags = (rmMatch[2] ? `${rmMatch[2]} ` : "") + rmMatch[3];
     const recursive = /(?:^|\s)(?:-[a-zA-Z]*[rR][a-zA-Z]*|--recursive)(?=\s|$)/.test(flags.split(/[;&|\n]/)[0]);
     // `D=/some/dir; rm -f $D/x` shows the real path, not `$D/x`.
     const vars = literalAssignments(cmd);
-    const targets = parseRmTargets(rmMatch[2]).map((t) => expandVars(t, vars));
+    const targets = parseRmTargets(rmMatch[3]).map((t) => expandVars(t, vars));
 
     if (targets.length <= 1) {
       const target = targets[0] || "files";
@@ -278,7 +286,7 @@ function summarizeBash(command: string, sizeBytes?: number, cwd?: string): Rende
   }
 
   // git
-  if (/\bgit\s+push\b/.test(cmd)) {
+  if (/\bgit\s+push\b/.test(shellText(cmd))) {
     // Parse the remote + branch ignoring flags (-u, --force, --set-upstream, …)
     // so `git push -u origin feat` renders "feat → origin", not "origin → -u".
     const after = cmd.match(/\bgit\s+push\b(.*)$/s)?.[1] ?? "";
@@ -402,8 +410,8 @@ function summarizeBash(command: string, sizeBytes?: number, cwd?: string): Rende
   if (npmScript) return { title: `Run npm script ${npmScript[1]}`, kind: "npm_run" };
   if (/\bnpm\s+install\b/.test(cmd)) return { title: "Install npm dependencies", kind: "npm_install" };
   if (/\bnpm\s+test\b/.test(cmd)) return { title: "Run npm tests", kind: "npm_test" };
-  if (/\bnpm\s+unpublish\b/.test(cmd)) return { title: "Unpublish package from npm", kind: "npm_unpublish" };
-  if (/\bnpx\s+.*\s+deploy\b/.test(cmd)) return { title: "Deploy via npx", body: truncateBody(cmd), kind: "npx_deploy" };
+  if (/\bnpm\s+unpublish\b/.test(shellText(cmd))) return { title: "Unpublish package from npm", kind: "npm_unpublish" };
+  if (/\bnpx\s+.*\s+deploy\b/.test(shellText(cmd))) return { title: "Deploy via npx", body: truncateBody(cmd), kind: "npx_deploy" };
 
   // sudo / chmod (kill/pkill/killall are handled in command position above,
   // ahead of the compound catch-all).
@@ -533,9 +541,12 @@ function summarizeGh(cmd: string): Rendered | null {
  * Name/version come from the package.json the publish will read: the cwd,
  * adjusted by a preceding `cd`, a `--workspace`, or a folder argument.
  */
+const NPM_PUBLISH_STEP_RE = /(?:^|[\n;&|(]|\$\()\s*(?:\w+=\S+\s+)*(?:sudo\s+)?npm\s+publish\b([^\n;&|)]*)/;
+
 function summarizeNpmPublish(cmd: string, cwd?: string): Rendered | null {
-  const m = cmd.match(/(?:^|[\n;&|(]|\$\()\s*(?:\w+=\S+\s+)*(?:sudo\s+)?npm\s+publish\b([^\n;&|)]*)/);
-  if (!m) return null;
+  const m = cmd.match(NPM_PUBLISH_STEP_RE);
+  // `grep "verify\|npm publish" x | head` searches for the words, it does not publish.
+  if (!m || !NPM_PUBLISH_STEP_RE.test(shellText(cmd))) return null;
 
   const tokens = m[1].trim().split(/\s+/).filter(Boolean).map(stripQuotes);
   const flags: Record<string, string | true> = {};
@@ -1714,7 +1725,7 @@ function summarizeCodeHeredoc(cmd: string): Rendered | null {
 
 /** `prisma migrate deploy`: which database, from a DATABASE_URL set in the command. */
 function summarizePrismaDeploy(cmd: string): Rendered | null {
-  if (!/\bprisma\s+migrate\s+deploy\b/.test(cmd)) return null;
+  if (!/\bprisma\s+migrate\s+deploy\b/.test(shellText(cmd))) return null;
   const url = cmd.match(/DATABASE_URL=["']?([a-z]+:\/\/[^\s"';&|]+)/)?.[1];
   let db: string | undefined;
   if (url) {
@@ -1724,6 +1735,12 @@ function summarizePrismaDeploy(cmd: string): Rendered | null {
     } catch { /* keep undefined */ }
   }
   return { title: "Apply Prisma database migrations", target: db, annotation: db ? undefined : "to the database in DATABASE_URL", kind: "sql_migrate" };
+}
+
+/** The command as the shell runs it: quoted text arguments and inline script
+ * bodies (`node -e '…'`) blanked, so words in them do not name the card. */
+function shellText(cmd: string): string {
+  return blankTextCommandArgs(stripInlineScriptBodies(cmd));
 }
 
 /** `NAME=value` assignments with a literal value (no `$(…)`, no backticks), in order. */

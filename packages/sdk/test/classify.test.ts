@@ -1366,3 +1366,27 @@ describe("approval review 2026-10-18 (2 weeks of cards): false high stakes", () 
     assert.equal(sim({ action: "something_new" }), "review");
   });
 });
+
+describe("approval review 2026-10-18T1713: tiers", () => {
+  it("a grep pattern piped to a reader is text, not a command", () => {
+    assert.equal(bash(`cd /repo && grep -n "verify\\|workspace\\|npm publish" .github/workflows/publish.yml | head`), "safe");
+    assert.equal(bash(`grep -rn "git push --force" docs | wc -l`), "safe");
+    // Text piped into a command that runs it keeps its tier.
+    assert.equal(bash(`echo "npm publish" | sh`), "high_stakes");
+    assert.equal(bash(`echo "npm publish" | xargs -I{} sh -c {}`), "high_stakes");
+  });
+
+  it("rmdir removes only empty folders, so it is logged", () => {
+    assert.equal(bash("rmdir build/empty"), "warning");
+    assert.equal(bash(`T=$(mktemp -d); echo hi; rmdir "$T" 2>/dev/null; true`), "warning");
+    assert.equal(bash(`EMPTYHOME=$(mktemp -d); HOME="$EMPTYHOME" npm test; rmdir "$EMPTYHOME" 2>/dev/null; true`), "warning");
+    // A real delete in the same stage stays high stakes.
+    assert.equal(bash("rmdir $(rm -rf ~/work)"), "high_stakes");
+    assert.equal(bash("rmdir a; rm -rf b"), "high_stakes");
+  });
+
+  it("a redirect after a temp delete is not a target", () => {
+    assert.equal(bash(`T=$(mktemp -d); rm -rf "$T" 2>/dev/null`), "warning");
+    assert.equal(bash(`rm -rf build 2>/dev/null`), "high_stakes");
+  });
+});
