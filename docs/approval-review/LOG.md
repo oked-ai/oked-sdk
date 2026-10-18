@@ -16,7 +16,7 @@ Built from `changes.jsonl` by `node scripts/approval-review/record.mjs log`. Do 
 | Footnote | Other steps in this command need no approval | Other steps in this command need no approval |
 | Kind | npx_deploy | sql_migrate |
 
-Corpus: `2026-10-18-prisma-migrate-local`
+Corpus: `2026-10-18-prisma-migrate-local` · PR: https://github.com/oked-ai/oked-sdk/pull/70
 
 ## 2026-10-18 · text · `mcp__scheduled-tasks__create_scheduled_task`
 
@@ -32,7 +32,7 @@ Corpus: `2026-10-18-prisma-migrate-local`
 | Footnote | · | Claude runs this prompt on its own on this schedule |
 | Kind | mcp_create | schedule |
 
-Corpus: `2026-10-18-scheduled-task-create`
+Corpus: `2026-10-18-scheduled-task-create` · PR: https://github.com/oked-ai/oked-sdk/pull/70
 
 ## 2026-10-18 · text · `mcp__Claude_Code_iOS_Simulator__control`
 
@@ -45,7 +45,7 @@ Corpus: `2026-10-18-scheduled-task-create`
 | Target | · | (201, 636) |
 | Kind | unknown_tool | simulator |
 
-Corpus: `2026-10-18-simulator-tap`
+Corpus: `2026-10-18-simulator-tap` · PR: https://github.com/oked-ai/oked-sdk/pull/70
 
 ## 2026-10-18 · text · `Bash: git branch -D`
 
@@ -61,7 +61,7 @@ Corpus: `2026-10-18-simulator-tap`
 | Footnote | Other steps in this command need no approval | Other steps in this command need no approval |
 | Kind | unknown_bash | git_branch_delete |
 
-Corpus: `2026-10-18-git-branch-delete`
+Corpus: `2026-10-18-git-branch-delete` · PR: https://github.com/oked-ai/oked-sdk/pull/70
 
 ## 2026-10-18 · text · `Bash: rm -f`
 
@@ -76,7 +76,7 @@ Corpus: `2026-10-18-git-branch-delete`
 | Footnote | Other steps in this command need no approval | Other steps in this command need no approval |
 | Kind | file_delete | file_delete |
 
-Corpus: `2026-10-18-rm-f-memory-file`
+Corpus: `2026-10-18-rm-f-memory-file` · PR: https://github.com/oked-ai/oked-sdk/pull/70
 
 ## 2026-10-18 · layout · `Telegram card (all cards)`
 
