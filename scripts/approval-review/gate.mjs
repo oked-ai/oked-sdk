@@ -113,7 +113,7 @@ function classifyWithBase(items) {
   rmSync(dir, { recursive: true, force: true });
   mkdirSync(dir, { recursive: true });
   try {
-    const tar = execFileSync("git", ["archive", "--format=tar", base, "packages/sdk/src"], { cwd: REPO_ROOT, maxBuffer: 64 * 1024 * 1024 });
+    const tar = execFileSync("git", ["archive", "--format=tar", base, "packages/sdk/src", "packages/sdk/package.json"], { cwd: REPO_ROOT, maxBuffer: 64 * 1024 * 1024 });
     execFileSync("tar", ["-x", "-C", dir], { input: tar });
     writeFileSync(join(dir, "items.json"), JSON.stringify(items.filter((i) => i.toolInput).map((i) => ({ id: i.id, action: i.action, toolInput: i.toolInput }))));
     writeFileSync(join(dir, "run.mts"), [
