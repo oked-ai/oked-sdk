@@ -14,7 +14,7 @@
 //   - a test fails.
 // Text-only changes and tier increases pass.
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { REPO_ROOT, CORPUS_PATH, CHANGES_PATH, LOG_PATH, TIER_ORDER, loadSdk, rebuild, shapeOf, parseArgs } from "./lib.mjs";
 import { scan } from "./sanitize.mjs";
@@ -93,12 +93,42 @@ for (const old of baseCorpus) {
 if (args.fetched) {
   const sdk = await loadSdk();
   const { items } = JSON.parse(readFileSync(args.fetched, "utf8"));
+  // Compare the base branch's classifier with this branch's on the same cards.
+  // The tier a card had when it was sent is not the base: it may come from an
+  // older client, and a change that already shipped is not this PR's move.
+  const baseTiers = classifyWithBase(items);
   for (const it of items) {
     if (!it.toolInput) continue;
     const after = rebuild(sdk, it);
-    // rawTier is the tier before the person's own rules; a rule's override is not a classifier move.
-    const from = it.rawTier && TIER_ORDER[it.rawTier] !== undefined ? it.rawTier : it.tier;
+    const from = baseTiers.get(it.id);
+    if (!from) continue;
     if (from !== after.tier) moves.push({ shape: shapeOf(it), from, to: after.tier, kinds: [it.fields?.Kind, after.fields?.Kind] });
+  }
+}
+
+/** Tier of each card under the base branch's packages/sdk/src, run with tsx. */
+function classifyWithBase(items) {
+  // Inside node_modules, so the base sources resolve @oked/receipt-core and tsx.
+  const dir = join(REPO_ROOT, "node_modules", ".cache", "oked-gate-base");
+  rmSync(dir, { recursive: true, force: true });
+  mkdirSync(dir, { recursive: true });
+  try {
+    const tar = execFileSync("git", ["archive", "--format=tar", base, "packages/sdk/src"], { cwd: REPO_ROOT, maxBuffer: 64 * 1024 * 1024 });
+    execFileSync("tar", ["-x", "-C", dir], { input: tar });
+    writeFileSync(join(dir, "items.json"), JSON.stringify(items.filter((i) => i.toolInput).map((i) => ({ id: i.id, action: i.action, toolInput: i.toolInput }))));
+    writeFileSync(join(dir, "run.mts"), [
+      'import { readFileSync } from "node:fs";',
+      'import { classify } from "./packages/sdk/src/classify.ts";',
+      'const items = JSON.parse(readFileSync(new URL("./items.json", import.meta.url), "utf8"));',
+      'console.log(JSON.stringify(items.map((i) => [i.id, classify(i.action, i.toolInput)])));',
+    ].join("\n"));
+    const out = execFileSync("npx", ["tsx", join(dir, "run.mts")], { cwd: REPO_ROOT, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
+    return new Map(JSON.parse(out));
+  } catch (e) {
+    reasons.push(`could not run the ${base} classifier to compare tiers: ${String(e.message).split("\n")[0]}`);
+    return new Map();
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
   }
 }
 
