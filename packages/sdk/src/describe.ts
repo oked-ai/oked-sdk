@@ -371,11 +371,7 @@ function summarizeBash(command: string, sizeBytes?: number, cwd?: string): Rende
     /(?:^|[\n;&|`({]|\$\(|\b(?:sudo|then|do|else|command|xargs)\s+)\s*(killall|pkill|kill)\b/,
   );
   if (killM) {
-    return {
-      title: killM[1].toLowerCase() === "kill" ? "Kill process" : "Kill processes",
-      body: truncateBody(cmd),
-      kind: "kill_process",
-    };
+    return { ...killTarget(cmd.slice((killM.index ?? 0) + killM[0].length - killM[1].length)), body: truncateBody(cmd), kind: "kill_process" };
   }
 
   // Multi-step pipeline
@@ -1677,6 +1673,27 @@ function parseRmTargets(argsString: string): string[] {
     }
   }
   return targets;
+}
+
+/** What a kill stops: a pattern, process names, a port, or process ids. */
+function killTarget(step: string): { title: string; target?: string } {
+  const line = step.split(/\n|;|&&|\|\|/)[0].trim();
+  const words = (s: string) => (s.match(/'[^']*'|"[^"]*"|\S+/g) ?? []).map((w) => w.replace(/^['"]|['"]$/g, ""));
+  if (/^pkill\b/.test(line)) {
+    const w = words(line.replace(/\|.*$/, "")).slice(1).filter((x) => !/^-(?!f$)/.test(x));
+    const f = w.indexOf("-f");
+    return { title: "Stop processes matching", target: (f >= 0 ? w[f + 1] : w[w.length - 1]) || undefined };
+  }
+  if (/^killall\b/.test(line)) {
+    return { title: "Stop processes named", target: words(line).slice(1).filter((x) => !x.startsWith("-")).join(", ") || undefined };
+  }
+  const port = line.match(/lsof\b[^)]*?-i\s*(?:tcp|TCP|udp)?:?(\d+)|-iTCP:(\d+)/);
+  if (port) return { title: "Stop the process on port", target: port[1] ?? port[2] };
+  const pg = line.match(/\$\(\s*pgrep\s+(?:-\w+\s+)*(?:-f\s+)?(['"]?)(.+?)\1\s*\)/);
+  if (pg) return { title: "Stop processes matching", target: pg[2] };
+  const pids = words(line).slice(1).filter((x) => /^\d+$/.test(x));
+  if (pids.length) return { title: pids.length === 1 ? "Stop process" : "Stop processes", target: `PID ${pids.join(", ")}` };
+  return { title: "Stop processes" };
 }
 
 /** `python3 - <<'EOF' … EOF` (one step): "Run a Python script" with the script as the body. */

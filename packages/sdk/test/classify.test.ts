@@ -1335,7 +1335,18 @@ describe("approval review 2026-10-18 (2 weeks of cards): false high stakes", () 
   it("stopping a process that runs from a temp or scratchpad path is logged", () => {
     assert.equal(bash('pkill -TERM -f "scratchpad/pg/start.mjs"'), "warning");
     assert.equal(bash("pkill -f '/tmp/server.js'"), "warning");
-    assert.equal(bash('pkill -f "tsx src/main.ts"'), "high_stakes");
+    assert.equal(bash("kill 85257"), "high_stakes");
+  });
+
+  it("stopping a local dev server asks without Face ID (review)", () => {
+    assert.equal(bash('pkill -f "tsx src/main.ts"'), "review");
+    assert.equal(bash("pkill -f vite"), "review");
+    assert.equal(bash("killall node"), "review");
+    assert.equal(bash("kill $(lsof -t -nP -iTCP:3000 -sTCP:LISTEN)"), "review");
+    assert.equal(bash('kill $(pgrep -f "tools/webscan.mjs") 2>/dev/null'), "review");
+    // Other processes, and a bare pid, stay high stakes.
+    assert.equal(bash("pkill -f 'openshell sandbox exec'"), "high_stakes");
+    assert.equal(bash("killall Finder"), "high_stakes");
     assert.equal(bash("kill 85257"), "high_stakes");
   });
 

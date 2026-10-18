@@ -3,6 +3,21 @@
 Every change the approval review loop made to a card's tier, text or layout, newest first.
 Built from `changes.jsonl` by `node scripts/approval-review/record.mjs log`. Do not edit by hand.
 
+## 2026-10-18 · tier · `Bash: pkill / killall / kill of a local dev server`
+
+**Why:** You chose this on 2026-10-18. Stopping a local dev server (pkill -f "tsx src/main.ts", killall node, kill $(lsof -t -iTCP:3000), kill $(pgrep -f vite)) was high stakes with Face ID. It is now review: it asks, without Face ID. The card says Stop processes matching and names the pattern or port. A bare kill <pid> and other processes stay high stakes. 13 kill cards in 2 weeks, 4 timed out while the agent waited.
+
+| | Before | After |
+|---|---|---|
+| Tier | 🔴 high stakes (Face ID) | 🔵 review (asks you) |
+| Title | Kill processes | Stop processes matching |
+| Target | · | tsx src/main.ts |
+| Body | pkill -f "tsx src/main.ts" | pkill -f "tsx src/main.ts" |
+| Footnote | Other steps in this command need no approval | Other steps in this command need no approval |
+| Kind | kill_process | kill_process |
+
+Corpus: `2026-10-18-pkill-dev-server` · PR: https://github.com/oked-ai/oked-sdk/pull/72
+
 ## 2026-10-18 · tier · `Bash: echo … | sh`
 
 **Why:** Gap found during the review: text piped into sh or bash ran with no card, because no single step looked risky. It now needs review, and the card says Run text as a sh script.
@@ -46,12 +61,13 @@ Corpus: `2026-10-18-simulator-screenshot` · PR: https://github.com/oked-ai/oked
 
 ## 2026-10-18 · tier · `Bash: pkill -f scratchpad/…`
 
-**Why:** Stopping a test database that ran from the session scratchpad was high stakes. You approved each one in seconds. pkill -f of a temp or scratchpad path is now logged. Other kills stay high stakes; see the question in the PR.
+**Why:** Stopping a test database that ran from the session scratchpad was high stakes. You approved each one in seconds. pkill -f of a temp or scratchpad path is now logged, and the card names the pattern.
 
 | | Before | After |
 |---|---|---|
 | Tier | 🔴 high stakes (Face ID) | 🟡 warning (logged, no card) |
-| Title | Kill processes | Kill processes |
+| Title | Kill processes | Stop processes matching |
+| Target | · | scratchpad/pg/start.mjs |
 | Body | pkill -TERM -f "scratchpad/pg/start.mjs" | pkill -TERM -f "scratchpad/pg/start.mjs"; sleep 3; pgrep -f "scratchpad/pg" >/dev/null && echo "still running" \|\| echo "postgres stopped" |
 | Footnote | Other steps in this command need no approval | · |
 | Kind | kill_process | kill_process |
