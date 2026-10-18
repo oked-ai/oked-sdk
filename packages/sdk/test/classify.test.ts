@@ -1293,3 +1293,76 @@ describe("desktop app turn and session tools", () => {
     assert.equal(classify("mcp__ccd_session__start_session", { title: "t", prompt: "p", target: "ssh", host: "box" }), "review");
   });
 });
+
+describe("approval review 2026-10-18 (2 weeks of cards): false high stakes", () => {
+  it("a Python or Node heredoc script is code, not shell: words in it set no tier", () => {
+    assert.equal(bash("python3 - <<'EOF'\np='RELEASING.md'; s=open(p).read()\ns=s.replace('npm publish', 'git push --force origin main')\nopen(p,'w').write(s)\nEOF"), "safe");
+    assert.equal(bash("node - <<'EOF'\nconst x = 'curl -X POST https://example.com -d x';\nEOF"), "safe");
+    // A shell heredoc is still read as shell.
+    assert.equal(bash("bash <<'EOF'\ngit push --force origin main\nEOF"), "high_stakes");
+  });
+
+  it("SQL in a script counts only when the script loads a database library", () => {
+    assert.equal(bash("python3 - <<'EOF'\np='src/describe.ts'; s=open(p).read()\ns=s.replace('psql|sqlite3', 'DELETE FROM users')\nopen(p,'w').write(s)\nEOF"), "safe");
+    assert.equal(bash("python3 - <<'EOF'\nimport sqlite3\nsqlite3.connect('a.db').execute('DELETE FROM users')\nEOF"), "high_stakes");
+  });
+
+  it("quoted text of git, grep and echo is not run", () => {
+    assert.equal(bash('git commit -q -m "curl -d sends JSON with the form content type"'), "warning");
+    assert.equal(bash('grep -rln "psql\\|curl -X POST" test'), "safe");
+    assert.equal(bash('git commit -m "never git push --force"'), "warning");
+    // Text piped on to a shell runs: it needs review (0.6.6 had it safe).
+    assert.equal(bash("echo 'rm -rf /important' | sh"), "review");
+    assert.equal(bash("printf 'ls' | bash -s"), "review");
+    // A quoted redirect target is a path.
+    assert.equal(bash('echo key >> "$HOME/.ssh/authorized_keys"'), "review");
+  });
+
+  it("deleting a file that an earlier step made is cleanup", () => {
+    assert.equal(bash("cat > _smoke.mjs <<'EOF'\nconsole.log(1)\nEOF\nnode _smoke.mjs; rm -f _smoke.mjs"), "warning");
+    assert.equal(bash("cp a.ts $BE/tmp.config.ts && npx prisma validate --config $BE/tmp.config.ts; rm -f $BE/tmp.config.ts"), "warning");
+    // Delete first, create after: the delete removes a real file.
+    assert.equal(bash("rm -f notes.md; echo x > notes.md"), "high_stakes");
+  });
+
+  it("a variable set to a temp path, or a cd into a temp dir, makes the delete temp", () => {
+    assert.equal(bash("W=/private/tmp/scratch/wt && rm -rf $W && git worktree add $W HEAD"), "warning");
+    assert.equal(bash('cd "$(mktemp -d)" && npm pack -q x && rm -rf package'), "warning");
+    assert.equal(bash("cd /tmp/x && cd /Users/me/repo && rm -rf package"), "high_stakes");
+    assert.equal(bash('cd "$(mktemp -d)" && rm -rf ../real'), "high_stakes");
+  });
+
+  it("stopping a process that runs from a temp or scratchpad path is logged", () => {
+    assert.equal(bash('pkill -TERM -f "scratchpad/pg/start.mjs"'), "warning");
+    assert.equal(bash("pkill -f '/tmp/server.js'"), "warning");
+    assert.equal(bash("kill 85257"), "high_stakes");
+  });
+
+  it("stopping a local dev server asks without Face ID (review)", () => {
+    assert.equal(bash('pkill -f "tsx src/main.ts"'), "review");
+    assert.equal(bash("pkill -f vite"), "review");
+    assert.equal(bash("killall node"), "review");
+    assert.equal(bash("kill $(lsof -t -nP -iTCP:3000 -sTCP:LISTEN)"), "review");
+    assert.equal(bash('kill $(pgrep -f "tools/webscan.mjs") 2>/dev/null'), "review");
+    // Other processes, and a bare pid, stay high stakes.
+    assert.equal(bash("pkill -f 'openshell sandbox exec'"), "high_stakes");
+    assert.equal(bash("killall Finder"), "high_stakes");
+    assert.equal(bash("kill 85257"), "high_stakes");
+  });
+
+  it("prisma migrate deploy to a local database is logged, any other database is high stakes", () => {
+    assert.equal(bash("export DATABASE_URL=postgresql://u:p@localhost:5433/t; npx prisma migrate deploy"), "warning");
+    assert.equal(bash("DATABASE_URL=postgresql://u@127.0.0.1/t npx prisma migrate deploy"), "warning");
+    assert.equal(bash("npx prisma migrate deploy"), "high_stakes");
+    assert.equal(bash("export DATABASE_URL=postgresql://u@db.prod.io/x; npx prisma migrate deploy"), "high_stakes");
+  });
+
+  it("iOS Simulator: looking is safe, input and local installs are logged", () => {
+    const sim = (input: Record<string, unknown>) => classify("mcp__Claude_Code_iOS_Simulator__control", input);
+    assert.equal(sim({ action: "screenshot" }), "safe");
+    assert.equal(sim({ action: "attach" }), "safe");
+    assert.equal(sim({ action: "tap", x: 1, y: 2 }), "warning");
+    assert.equal(sim({ action: "launch", app_path: "/x/App.app" }), "warning");
+    assert.equal(sim({ action: "something_new" }), "review");
+  });
+});

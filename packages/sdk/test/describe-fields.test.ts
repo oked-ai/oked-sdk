@@ -298,18 +298,19 @@ describe("Bash — multi-file rm", () => {
     assert.equal(f!.Title, "Create file");
   });
 
-  it("a compound script that kills a process headlines 'Kill processes'", () => {
+  it("a compound script that kills a process headlines the kill and its pattern", () => {
     // Regression: the compound "Run command" catch-all ran before the kill
     // handler, so `if pgrep …; then pkill -f …; fi` showed "Run command".
     const cmd =
       'if pgrep -f "user-data-dir=$PROFILE" >/dev/null 2>&1; then\n  echo "Stale Chrome — killing it."\n  pkill -f "user-data-dir=$PROFILE"\nfi';
-    assert.equal(describeFields("Bash", { command: cmd })!.Title, "Kill processes");
+    const f = describeFields("Bash", { command: cmd })!;
+    assert.equal(f.Title, "Stop processes matching");
+    assert.equal(f.Target, "user-data-dir=$PROFILE");
   });
 
   it("'killing' inside echo text is not mislabeled as a kill", () => {
     const f = describeFields("Bash", { command: 'echo "killing it is bad" && ls' });
-    assert.notEqual(f!.Title, "Kill processes");
-    assert.notEqual(f!.Title, "Kill process");
+    assert.ok(!/^Stop process/.test(f!.Title));
   });
 
   it("rm on an interior line of a multi-line script headlines 'Delete file'", () => {
