@@ -1,6 +1,8 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describeFields, describe as describeOne } from "../src/describe.js";
 
@@ -1155,5 +1157,71 @@ describe("approval review 2026-10-19T0606: text", () => {
     // The real deletes keep their titles.
     assert.equal(bashFields("rmdir a b").Title, "Delete 2 empty folders");
     assert.equal(bashFields(`git commit -m "x" && rm -rf build`).Title, "Delete file recursively");
+  });
+});
+
+describe("git cards name the repo", () => {
+  const root = mkdtempSync(join(tmpdir(), "oked-git-"));
+  // A repo with an origin remote, on branch feat.
+  const sdk = join(root, "sdk");
+  mkdirSync(join(sdk, ".git"), { recursive: true });
+  mkdirSync(join(sdk, "packages"), { recursive: true });
+  writeFileSync(join(sdk, ".git", "config"), '[core]\n\tbare = false\n[remote "origin"]\n\turl = git@github.com:oked-ai/oked-sdk.git\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n');
+  writeFileSync(join(sdk, ".git", "HEAD"), "ref: refs/heads/feat\n");
+  // A worktree of that repo, on branch wt.
+  const wt = join(root, "wt");
+  mkdirSync(join(sdk, ".git", "worktrees", "wt"), { recursive: true });
+  mkdirSync(wt);
+  writeFileSync(join(wt, ".git"), `gitdir: ${join(sdk, ".git", "worktrees", "wt")}\n`);
+  writeFileSync(join(sdk, ".git", "worktrees", "wt", "commondir"), "../..\n");
+  writeFileSync(join(sdk, ".git", "worktrees", "wt", "HEAD"), "ref: refs/heads/wt\n");
+  // A repo with no remote.
+  const local = join(root, "notes");
+  mkdirSync(join(local, ".git"), { recursive: true });
+  writeFileSync(join(local, ".git", "config"), "[core]\n\tbare = false\n");
+  writeFileSync(join(local, ".git", "HEAD"), "ref: refs/heads/main\n");
+
+  const at = (command: string, cwd?: string) => describeFields("Bash", { command }, { cwd })!;
+
+  it("a push names the remote repo and the branch", () => {
+    assert.equal(at("git push --force origin main", sdk).Target, "main → oked-ai/oked-sdk");
+    assert.equal(at("git push", join(sdk, "packages")).Target, "feat → oked-ai/oked-sdk");
+    assert.equal(at(`cd ${wt} && git push -u origin wt`).Target, "wt → oked-ai/oked-sdk");
+    assert.equal(at(`git -C ${wt} push`).Target, "wt → oked-ai/oked-sdk");
+  });
+
+  it("a remote branch delete names the remote repo", () => {
+    const f = at("git push origin --delete old", sdk);
+    assert.equal(f.Title, "Delete remote Git branch");
+    assert.equal(f.Target, "old on oked-ai/oked-sdk");
+  });
+
+  it("a push from a repo with no such remote names the local repo", () => {
+    const f = at("git push backup main", local);
+    assert.equal(f.Target, "main → backup");
+    assert.equal(f.Annotation, "in notes");
+  });
+
+  it("local git changes name the repo in the title", () => {
+    assert.equal(at("git branch -D old", sdk).Title, "Delete local Git branch in oked-ai/oked-sdk");
+    assert.equal(at(`S=${root}; cd $S/wt && git status && git branch -D old`).Title, "Delete local Git branch in oked-ai/oked-sdk");
+    assert.equal(at(`git -C ${local} reset --hard`).Title, "Hard reset in notes, discard all local changes");
+    assert.equal(at('git commit -m "Fix it"', wt).Title, 'Git commit "Fix it" in oked-ai/oked-sdk');
+    assert.equal(at("git clean -fd", local).Title, "Remove all untracked files in notes");
+  });
+
+  it("with no known folder, the card is as before", () => {
+    assert.equal(at("git branch -D old").Title, "Delete local Git branch");
+    assert.equal(at("cd sub && git branch -D old").Title, "Delete local Git branch");
+  });
+
+  it("push arguments end at a quote", () => {
+    const f = at(`node $S/probe2.mjs x '["git push origin main","git push --force origin main"]'`);
+    assert.equal(f.Title, "Force push");
+    assert.equal(f.Target, "main → origin");
+  });
+
+  it("a command of several steps has no footnote", () => {
+    assert.equal(at("git status; git push --force origin main").Footnote, undefined);
   });
 });
