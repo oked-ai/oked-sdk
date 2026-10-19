@@ -1221,6 +1221,23 @@ describe("git cards name the repo", () => {
     assert.equal(f.Target, "main → origin");
   });
 
+  it("a PR card names the repo and links to the PR", () => {
+    const f = at("gh pr merge 76 --squash --delete-branch 2>&1 | tail -3", sdk);
+    assert.equal(f.Title, "Merge PR #76 in oked-ai/oked-sdk");
+    assert.equal(f.Link, "https://github.com/oked-ai/oked-sdk/pull/76");
+    assert.equal(at(`cd ${wt} && gh pr comment 5 --body "ok"`).Link, "https://github.com/oked-ai/oked-sdk/pull/5");
+    assert.equal(at("gh pr merge https://github.com/aml11/oked-app/pull/132 --squash").Link, "https://github.com/aml11/oked-app/pull/132");
+    assert.equal(at("gh issue close 9 -R aml11/oked-app").Link, "https://github.com/aml11/oked-app/issues/9");
+  });
+
+  it("a PR card has no link when the repo is not on GitHub or not known", () => {
+    const f = at("gh pr merge 76 --squash", local);
+    assert.equal(f.Title, "Merge PR #76");
+    assert.equal(f.Link, undefined);
+    assert.equal(at("gh pr merge 76 -R git.example.com/a/b").Link, undefined);
+    assert.equal(at("gh pr merge --squash", sdk).Link, undefined);
+  });
+
   it("a command of several steps has no footnote", () => {
     assert.equal(at("git status; git push --force origin main").Footnote, undefined);
   });
