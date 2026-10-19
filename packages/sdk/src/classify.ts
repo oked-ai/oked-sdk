@@ -1164,6 +1164,13 @@ export function stripCodeHeredocBodies(command: string): string {
 // a request payload (a GraphQL mutation, for example).
 const TEXT_ARG_COMMAND_RE = /^(?:\w+=(?:"[^"]*"|'[^']*'|\S+)\s+)*(?:git|grep|egrep|fgrep|rg|echo|printf|gh(?!\s+api\b))\b/;
 
+// A script file run by node/tsx/bun (`node scripts/x.mjs …`), not inline code
+// (`node -e`). Its quoted long-option values (`--reason "…"`) are text. Its
+// quoted positional arguments keep their text, because the script may run them.
+const SCRIPT_FILE_STEP_RE =
+  /^(?:\\\s+)?(?:\w+=(?:"[^"]*"|'[^']*'|\S+)\s+)*(?:node|tsx|bun)\s+(?!-)\S+\.[cm]?[jt]s(?:\s|$)/;
+const LONG_OPTION_QUOTED_VALUE_RE = /(--[\w-]+(?:=|\s+))('[^']*'|"(?:[^"\\]|\\.)*")/g;
+
 // Commands that run the text piped into them as code.
 const RUNS_PIPED_TEXT_RE =
   /^(?:sudo\s+)?(?:(?:ba|z|k|da)?sh|xargs|eval|source|\.|node|deno|bun|python\d?(?:\.\d+)?|ruby|perl|psql|mysql|mariadb|sqlite3?)\b/;
@@ -1178,6 +1185,11 @@ const RUNS_PIPED_TEXT_RE =
 export function blankTextCommandArgs(command: string): string {
   return splitTopLevel(command, { pipes: false })
     .map((step) => {
+      if (SCRIPT_FILE_STEP_RE.test(step)) {
+        if (splitTopLevel(step).slice(1).some((p) => RUNS_PIPED_TEXT_RE.test(p))) return step;
+        return step.replace(LONG_OPTION_QUOTED_VALUE_RE, (_m, opt: string, q: string) =>
+          opt + q[0] + " ".repeat(Math.max(0, q.length - 2)) + q[0]);
+      }
       if (!TEXT_ARG_COMMAND_RE.test(step)) return step;
       if (splitTopLevel(step).slice(1).some((p) => RUNS_PIPED_TEXT_RE.test(p))) return step;
       // A quoted redirect target (`>> "$HOME/.ssh/authorized_keys"`) is a path, not text.
