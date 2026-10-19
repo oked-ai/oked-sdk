@@ -245,6 +245,10 @@ const HIGH_STAKES_STAGE = [
   /^git\s+branch\s+(?:-D|--delete)\b/,
   /^git\s+tag\s+(?:-d|--delete)\b/,
   /^git\s+stash\s+(?:drop|clear)\b/,
+  // Remote branch delete: it leaves the machine and removes the branch for
+  // everyone (`git push origin --delete feat`, `git push origin :feat`).
+  /^git\s+push\b.*\s(?:--delete|-d)\b/,
+  /^git\s+push\b.*\s\+?:[^\s:]+(?:\s|$)/,
   // Process termination.
   /^kill\b/,
   /^pkill\b/,
@@ -1091,8 +1095,13 @@ export interface ShellWriteOp {
 const HEREDOC_INTERPRETER_RE =
   /(?:^|\||&&|;|\$\(|`)\s*(?:\w+=\S+\s+)*(?:sudo\s+)?(?:psql|mysql|mariadb|sqlite3?|node|python\d?|ruby|perl|deno|bun|bash|sh|zsh|ksh|fish)\b/;
 
+// Only the step that holds the heredoc reads its body. An interpreter in an
+// earlier step on the same line (`V=$(node -p '…'); cat > f <<'EOF'`) does not.
+// splitTopLevel keeps the opener and the rest of the line in the last step, so
+// a pipe after the opener (`cat <<EOF | bash`) still counts.
 function openerFeedsInterpreter(line: string): boolean {
-  return HEREDOC_INTERPRETER_RE.test(line);
+  const steps = splitTopLevel(line, { pipes: false });
+  return HEREDOC_INTERPRETER_RE.test(steps[steps.length - 1] ?? line);
 }
 
 /**
@@ -1104,6 +1113,9 @@ function openerFeedsInterpreter(line: string): boolean {
  * otherwise wreck classification). Only heredocs whose opener line invokes an
  * interpreter (`psql <<EOF`, `node - <<EOF`, `cat <<EOF | bash`) keep their
  * body, so SQL/code detection still runs. The opener line is always preserved.
+ * The closing delimiter line is kept too: without it, splitTopLevel cannot see
+ * where the heredoc ends and joins every later step (`; rm -rf …`) into the
+ * heredoc's step, where a delete or merge after `;` is not seen.
  */
 export function stripHeredocBodies(command: string): string {
   const lines = command.split("\n");
@@ -1120,7 +1132,7 @@ export function stripHeredocBodies(command: string): string {
       const delim = openers[openers.length - 1][2];
       i++;
       while (i < lines.length && lines[i].trim() !== delim) i++; // drop body
-      if (i < lines.length) i++; // drop the closing delimiter line
+      if (i < lines.length) out.push(lines[i++]); // keep the closing delimiter line
       continue;
     }
     i++;
@@ -1138,8 +1150,9 @@ const CODE_HEREDOC_RE =
  * scans only (the same policy as `-e`/`-c` bodies below). A Python script that
  * edits a file whose text says "git push --force" or "npm publish" is not a
  * force push or a publish. SQL detection still reads the intact body.
+ * `dropClose` also drops the closing delimiter line, for card text only.
  */
-export function stripCodeHeredocBodies(command: string): string {
+export function stripCodeHeredocBodies(command: string, opts: { dropClose?: boolean } = {}): string {
   const lines = command.split("\n");
   const out: string[] = [];
   let i = 0;
@@ -1151,7 +1164,10 @@ export function stripCodeHeredocBodies(command: string): string {
       const delim = openers[openers.length - 1][2];
       i++;
       while (i < lines.length && lines[i].trim() !== delim) i++;
-      if (i < lines.length) i++;
+      if (i < lines.length) {
+        if (!opts.dropClose) out.push(lines[i]); // keep the closing line (see stripHeredocBodies)
+        i++;
+      }
       continue;
     }
     i++;
