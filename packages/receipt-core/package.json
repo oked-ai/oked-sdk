@@ -1,6 +1,6 @@
 {
   "name": "@oked/receipt-core",
-  "version": "0.6.9",
+  "version": "0.6.10",
   "description": "OKed signed approval receipts: format, canonical JSON, digests, signing and verification",
   "type": "module",
   "main": "dist/index.js",

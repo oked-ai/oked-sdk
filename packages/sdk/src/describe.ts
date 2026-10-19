@@ -220,7 +220,7 @@ function summarizeBash(command: string, sizeBytes?: number, cwd?: string): Rende
   // ("npm publish", "git push --force") does not name the card.
   const script = summarizeCodeHeredoc(cmd);
   if (script) return script;
-  cmd = stripCodeHeredocBodies(cmd);
+  cmd = stripCodeHeredocBodies(cmd, { dropClose: true });
 
   // Text piped into a shell runs as a script that no step shows by name.
   const toShell = cmd.match(/^(.*?)\|\s*(?:sudo\s+)?((?:ba|z|k|da)?sh)\b(?!\s+-n\b)/s);
@@ -306,9 +306,13 @@ function summarizeBash(command: string, sizeBytes?: number, cwd?: string): Rende
     const remote = args[0] ?? (repo?.remotes.has("origin") ? "origin" : undefined);
     const branch = args[1] ?? (args[0] === undefined ? repo?.branch : undefined);
     const dest = remote ? repoSlug(repo?.remotes.get(remote)) ?? remote : undefined;
-    const target = dest && branch ? `${branch} → ${dest}` : dest || "current branch";
     // Name the local repo when the remote did not.
     const annotation = repo && dest !== repo.name && !(remote && repo.remotes.has(remote)) ? `in ${repo.name}` : undefined;
+    const deleted = /\s(?:--delete|-d)\b/.test(after) ? args[1] : args[1]?.match(/^\+?:([^\s:]+)$/)?.[1];
+    if (dest && deleted) {
+      return { title: "Delete remote Git branch", target: `${deleted} on ${dest}`, annotation, kind: "git_branch_delete" };
+    }
+    const target = dest && branch ? `${branch} → ${dest}` : dest || "current branch";
     const forced = /\bgit\s+push\b[^\n]*\s(?:--force(?:-with-lease)?|-f)\b/.test(gitCmd);
     return forced
       ? { title: "Force push", target, annotation, kind: "git_force_push" }
@@ -587,7 +591,9 @@ function summarizeNpmPublish(cmd: string, cwd?: string): Rendered | null {
       if (value === true && VALUE_FLAGS.has(name) && i + 1 < tokens.length) value = tokens[++i];
       if ((name === "--workspace" || name === "-w") && typeof value === "string") workspaces.push(value);
       else flags[name] = value;
-    } else if (positional === undefined) {
+    } else if (positional === undefined && /^[\w.~/@-][\w.~/@+-]*$/.test(t)) {
+      // A folder or tarball. Quote and bracket leftovers from quoted data
+      // (`…publish\"]'`) are not a path.
       positional = t;
     }
   }
@@ -598,7 +604,8 @@ function summarizeNpmPublish(cmd: string, cwd?: string): Rendered | null {
   const cds = [...before.matchAll(/(?:^|[\n;&|(])\s*cd\s+("[^"]+"|'[^']+'|\S+)/g)];
   if (cds.length) {
     const dir = stripQuotes(cds[cds.length - 1][1]);
-    baseDir = isAbsolute(dir) ? dir : baseDir ? resolve(baseDir, dir) : undefined;
+    // `cd $SP/pkg`: the variable is not known here, so the folder is not known.
+    baseDir = /[$`]/.test(dir) ? undefined : isAbsolute(dir) ? dir : baseDir ? resolve(baseDir, dir) : undefined;
   }
 
   const allWorkspaces = flags["--workspaces"] === true || flags["-ws"] === true;
