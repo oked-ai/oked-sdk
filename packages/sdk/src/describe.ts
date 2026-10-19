@@ -8,8 +8,9 @@
  * backwards-compatible single-line consumers (audit logs, SMS).
  */
 
-import { existsSync, readFileSync, readdirSync } from "node:fs";
-import { basename, isAbsolute, join, resolve } from "node:path";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
+import { homedir } from "node:os";
+import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import { blankTextCommandArgs, classify, extractShellWriteOps, splitTopLevel, stripCodeHeredocBodies, stripInlineScriptBodies } from "./classify.js";
 import { TIER_ORDER } from "./degraded.js";
 
@@ -286,28 +287,43 @@ function summarizeBash(command: string, sizeBytes?: number, cwd?: string): Rende
     };
   }
 
-  // git
-  if (/\bgit\s+push\b/.test(shellText(cmd))) {
+  // git. Each card names the repo: the folder the command runs in (after a
+  // `cd` or `git -C`), shown as owner/name from its origin remote.
+  const gitCmd = cmd.replace(GIT_C_RE, "git ");
+  const repoAt = (re: RegExp) => gitRepoFor(cmd, re, cwd);
+  const inRepo = (re: RegExp) => {
+    const repo = repoAt(re);
+    return repo ? ` in ${repo.name}` : "";
+  };
+  if (/\bgit\s+push\b/.test(shellText(gitCmd))) {
     // Parse the remote + branch ignoring flags (-u, --force, --set-upstream, …)
     // so `git push -u origin feat` renders "feat → origin", not "origin → -u".
-    const after = cmd.match(/\bgit\s+push\b(.*)$/s)?.[1] ?? "";
+    // The arguments end at a quote or a separator: `node x '["git push origin
+    // main","git push …"]'` pushes main, not `main","git`.
+    const after = gitCmd.match(/\bgit\s+push\b([^\n;&|"'`)]*)/)?.[1] ?? "";
     const args = after.split(/\s+/).filter((a) => a && !a.startsWith("-"));
-    const [remote, branch] = args;
-    const deleted = /\s(?:--delete|-d)\b/.test(after) ? branch : branch?.match(/^\+?:([^\s:]+)$/)?.[1];
-    if (remote && deleted) {
-      return { title: "Delete remote Git branch", target: `${deleted} on ${remote}`, kind: "git_branch_delete" };
+    const repo = repoAt(/\bgit\s+(?:-C\s+\S+\s+)?push\b/);
+    const remote = args[0] ?? (repo?.remotes.has("origin") ? "origin" : undefined);
+    const branch = args[1] ?? (args[0] === undefined ? repo?.branch : undefined);
+    const dest = remote ? repoSlug(repo?.remotes.get(remote)) ?? remote : undefined;
+    // Name the local repo when the remote did not.
+    const annotation = repo && dest !== repo.name && !(remote && repo.remotes.has(remote)) ? `in ${repo.name}` : undefined;
+    const deleted = /\s(?:--delete|-d)\b/.test(after) ? args[1] : args[1]?.match(/^\+?:([^\s:]+)$/)?.[1];
+    if (dest && deleted) {
+      return { title: "Delete remote Git branch", target: `${deleted} on ${dest}`, annotation, kind: "git_branch_delete" };
     }
-    const target = remote && branch ? `${branch} → ${remote}` : remote || "current branch";
-    const forced = /\bgit\s+push\b[^\n]*\s(?:--force(?:-with-lease)?|-f)\b/.test(cmd);
+    const target = dest && branch ? `${branch} → ${dest}` : dest || "current branch";
+    const forced = /\bgit\s+push\b[^\n]*\s(?:--force(?:-with-lease)?|-f)\b/.test(gitCmd);
     return forced
-      ? { title: "Force push", target, kind: "git_force_push" }
-      : { title: "Push", target, kind: "git_push" };
+      ? { title: "Force push", target, annotation, kind: "git_force_push" }
+      : { title: "Push", target, annotation, kind: "git_push" };
   }
-  const branchDelete = cmd.match(/\bgit\s+branch\s+(?:-D|--delete\s+--force|-d|--delete)\s+([^\s;&|]+)/);
+  const BRANCH_DELETE_RE = /\bgit\s+(?:-C\s+\S+\s+)?branch\s+(?:-D|--delete\s+--force|-d|--delete)\s+([^\s;&|]+)/;
+  const branchDelete = cmd.match(BRANCH_DELETE_RE);
   if (branchDelete) {
-    const forced = /\bgit\s+branch\s+(?:-D|--delete\s+--force)\b/.test(cmd);
+    const forced = /\bgit\s+branch\s+(?:-D|--delete\s+--force)\b/.test(gitCmd);
     return {
-      title: "Delete local Git branch",
+      title: `Delete local Git branch${inRepo(BRANCH_DELETE_RE)}`,
       target: branchDelete[1],
       annotation: forced ? "even if not merged" : undefined,
       kind: "git_branch_delete",
@@ -315,17 +331,25 @@ function summarizeBash(command: string, sizeBytes?: number, cwd?: string): Rende
   }
   const prisma = summarizePrismaDeploy(cmd);
   if (prisma) return prisma;
-  if (/\bgit\s+reset\s+--hard\b/.test(cmd)) return { title: "Hard reset — discard all local changes", kind: "git_reset_hard" };
-  if (/\bgit\s+clean\s+-f/.test(cmd)) return { title: "Remove all untracked files", kind: "git_clean" };
-  if (/\bgit\s+checkout\s+--\s+\./.test(cmd)) return { title: "Discard all unstaged changes", kind: "git_checkout" };
-  if (/\bgit\s+restore\s+--staged\s+\./.test(cmd)) return { title: "Unstage all staged changes", kind: "git_restore" };
-  if (/\bgit\s+commit\b/.test(cmd)) {
+  const GIT_RESET_RE = /\bgit\s+(?:-C\s+\S+\s+)?reset\s+--hard\b/;
+  if (GIT_RESET_RE.test(cmd)) return { title: `Hard reset${inRepo(GIT_RESET_RE)}, discard all local changes`, kind: "git_reset_hard" };
+  const GIT_CLEAN_RE = /\bgit\s+(?:-C\s+\S+\s+)?clean\s+-f/;
+  if (GIT_CLEAN_RE.test(cmd)) return { title: `Remove all untracked files${inRepo(GIT_CLEAN_RE)}`, kind: "git_clean" };
+  const GIT_CHECKOUT_RE = /\bgit\s+(?:-C\s+\S+\s+)?checkout\s+--\s+\./;
+  if (GIT_CHECKOUT_RE.test(cmd)) return { title: `Discard all unstaged changes${inRepo(GIT_CHECKOUT_RE)}`, kind: "git_checkout" };
+  const GIT_RESTORE_RE = /\bgit\s+(?:-C\s+\S+\s+)?restore\s+--staged\s+\./;
+  if (GIT_RESTORE_RE.test(cmd)) return { title: `Unstage all staged changes${inRepo(GIT_RESTORE_RE)}`, kind: "git_restore" };
+  const GIT_COMMIT_RE = /\bgit\s+(?:-C\s+\S+\s+)?commit\b/;
+  if (GIT_COMMIT_RE.test(cmd)) {
     // Pull a simple quoted -m message. Bail (show plain "Git commit") when the
     // message is a command substitution / heredoc — `-m "$(cat <<'EOF' … )"` —
     // since that has no clean inline title to extract.
     const m = cmd.match(/-m\s+["']([^"'$]+)["']/);
     // The subject line only: a multi-line message made a multi-line title.
-    return m ? { title: `Git commit "${truncate(m[1].split("\n")[0].trim(), 60)}"`, kind: "git_commit" } : { title: "Git commit", kind: "git_commit" };
+    const where = inRepo(GIT_COMMIT_RE);
+    return m
+      ? { title: `Git commit "${truncate(m[1].split("\n")[0].trim(), 60)}"${where}`, kind: "git_commit" }
+      : { title: `Git commit${where}`, kind: "git_commit" };
   }
 
   const gh = summarizeGh(cmd);
@@ -457,23 +481,23 @@ function summarizeCompoundBash(cmd: string, sizeBytes?: number, cwd?: string): R
   const step = expandVars(steps[lead], vars);
   // npm publish reads the package.json a preceding `cd` points at; prisma reads
   // a DATABASE_URL an earlier step exported.
+  // A step runs in the folder that the `cd` steps before it moved to.
+  const dirAt = (i: number) => cwdAfterCds(steps.slice(0, i), vars, cwd);
   const r = (/\bnpm\s+publish\b/.test(step) && summarizeNpmPublish(cmd, cwd)) ||
     summarizePrismaDeploy(/\bprisma\s+migrate\s+deploy\b/.test(step) ? cmd : "") ||
-    summarizeBash(step, sizeBytes, cwd);
+    summarizeBash(step, sizeBytes, dirAt(lead));
   const also = [...new Set(
     steps
-      .filter((_, i) => i !== lead && rank[i] >= TIER_ORDER.review)
-      .map((s) => describeStep(expandVars(s, vars), cwd)),
-  )].filter((t) => t !== describeStep(step, cwd));
+      .map((s, i) => (i !== lead && rank[i] >= TIER_ORDER.review ? describeStep(expandVars(s, vars), dirAt(i)) : ""))
+      .filter(Boolean),
+  )].filter((t) => t !== describeStep(step, dirAt(lead)));
   // The body shows the steps that need approval, not the setup and polling
-  // around them; the footnote says there are other steps.
+  // around them.
   const risky = steps.filter((_, i) => rank[i] >= TIER_ORDER.review);
-  const quiet = steps.length - risky.length;
   return {
     ...r,
     subline: also.length ? `Also: ${also.join("; ")}` : r.subline,
     body: r.body ?? truncateBody(risky.join("\n")),
-    footnote: r.footnote ?? (quiet ? "Other steps in this command need no approval" : undefined),
   };
 }
 
@@ -1749,6 +1773,87 @@ function summarizePrismaDeploy(cmd: string): Rendered | null {
  * bodies (`node -e '…'`) blanked, so words in them do not name the card. */
 function shellText(cmd: string): string {
   return blankTextCommandArgs(stripInlineScriptBodies(cmd));
+}
+
+const GIT_C_RE = /\bgit\s+-C\s+(?:"[^"]+"|'[^']+'|[^\s;&|]+)\s+/;
+
+/** The folder a shell is in after these steps, following each `cd`. Unknown
+ *  when a `cd` goes to a relative path with no known start, or to `$VAR`. */
+function cwdAfterCds(steps: string[], vars: Map<string, string>, cwd?: string): string | undefined {
+  let dir = cwd;
+  for (const s of steps) {
+    const m = s.match(/^\s*cd\s+("[^"]+"|'[^']+'|[^\s;&|]+)\s*$/);
+    if (m) dir = resolveDir(stripQuotes(expandVars(m[1], vars)), dir);
+  }
+  return dir;
+}
+
+function resolveDir(dir: string, base?: string): string | undefined {
+  const d = dir.replace(/^~(?=\/|$)/, homedir());
+  if (d.includes("$")) return undefined;
+  return isAbsolute(d) ? d : base ? resolve(base, d) : undefined;
+}
+
+interface GitRepo {
+  name: string;                  // owner/name from origin, else the folder name
+  remotes: Map<string, string>;  // remote name → URL
+  branch?: string;               // checked-out branch
+}
+
+/** The repo the git command matched by `re` runs in: after the `cd` steps
+ *  before it, and its own `git -C`. */
+function gitRepoFor(cmd: string, re: RegExp, cwd?: string): GitRepo | null {
+  const m = re.exec(cmd);
+  if (!m) return null;
+  const before = splitTopLevel(cmd.slice(0, m.index), { pipes: false });
+  let dir = cwdAfterCds(before, literalAssignments(cmd), cwd);
+  const c = m[0].match(/\bgit\s+-C\s+("[^"]+"|'[^']+'|\S+)/)?.[1];
+  if (c) dir = resolveDir(stripQuotes(expandVars(c, literalAssignments(cmd))), dir);
+  return dir ? readGitRepo(dir) : null;
+}
+
+function readGitRepo(start: string): GitRepo | null {
+  try {
+    for (let top = resolve(start); ; top = dirname(top)) {
+      const dotGit = join(top, ".git");
+      if (existsSync(dotGit)) {
+        // A worktree's `.git` is a file that points at its git dir, which
+        // points at the main repo's git dir (`commondir`).
+        let gitDir = dotGit;
+        const pointer = statSync(dotGit).isFile() ? readFileSync(dotGit, "utf8").match(/^gitdir:\s*(.+)$/m) : null;
+        if (pointer) gitDir = resolve(top, pointer[1].trim());
+        const commonFile = join(gitDir, "commondir");
+        const commonDir = existsSync(commonFile) ? resolve(gitDir, readFileSync(commonFile, "utf8").trim()) : gitDir;
+        const remotes = new Map<string, string>();
+        let section: string | undefined;
+        for (const line of readFileSync(join(commonDir, "config"), "utf8").split("\n")) {
+          const head = line.match(/^\s*\[\s*remote\s+"([^"]+)"\s*\]/);
+          if (head) section = head[1];
+          else if (/^\s*\[/.test(line)) section = undefined;
+          else if (section && !remotes.has(section)) {
+            const url = line.match(/^\s*url\s*=\s*(.+?)\s*$/)?.[1];
+            if (url) remotes.set(section, url);
+          }
+        }
+        const head = existsSync(join(gitDir, "HEAD")) ? readFileSync(join(gitDir, "HEAD"), "utf8") : "";
+        const mainTop = basename(commonDir) === ".git" ? dirname(commonDir) : top;
+        return {
+          name: repoSlug(remotes.get("origin")) ?? basename(mainTop),
+          remotes,
+          branch: head.match(/^ref:\s*refs\/heads\/(.+?)\s*$/m)?.[1],
+        };
+      }
+      if (dirname(top) === top) return null;
+    }
+  } catch {
+    return null;
+  }
+}
+
+/** `git@github.com:oked-ai/oked-sdk.git` or `https://github.com/oked-ai/oked-sdk` → `oked-ai/oked-sdk`. */
+function repoSlug(url?: string): string | undefined {
+  const path = url?.match(/^(?:[a-z][a-z0-9+.-]*:\/\/[^/]+\/|[^@\s/]+@[^:\s]+:)(.+?)(?:\.git)?\/?$/i)?.[1];
+  return path?.split("/").slice(-2).join("/") || undefined;
 }
 
 /** `NAME=value` assignments with a literal value (no `$(…)`, no backticks), in order. */
