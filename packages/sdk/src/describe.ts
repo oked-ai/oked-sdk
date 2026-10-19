@@ -596,6 +596,9 @@ function summarizeNpmPublish(cmd: string, cwd?: string): Rendered | null {
   const VALUE_FLAGS = new Set(["--tag", "--access", "--registry", "--otp", "--workspace", "-w"]);
   for (let i = 0; i < tokens.length; i++) {
     const t = tokens[i];
+    // Quote and bracket leftovers from quoted data (`…publish","node p.mjs`) end
+    // the publish arguments. The words after them belong to the data, not npm.
+    if (!/^[\w.~/@=+:-]+$/.test(t)) break;
     if (t.startsWith("-")) {
       const eq = t.indexOf("=");
       const name = eq > 0 ? t.slice(0, eq) : t;

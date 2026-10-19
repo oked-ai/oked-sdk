@@ -576,6 +576,24 @@ describe("compound commands — worst tier wins", () => {
   it("safe && safe → safe", () => {
     assert.equal(bash("echo hi && ls"), "safe");
   });
+
+  // A backslash escapes the next char. `\"` does not close a double-quoted
+  // string, and `\|` is not a pipe, so a grep pattern is not split into steps.
+  it('grep "a\\"b\\|git branch -D" → safe (escaped quote and pipe stay in the pattern)', () => {
+    assert.equal(bash('grep -n "describe(\\"\\|git branch -D\\|mktemp" a.ts | head -20; sed -n 1,20p a.ts'), "safe");
+  });
+  it("grep a\\|b\\;c unquoted → safe (escaped operators are literal)", () => {
+    assert.equal(bash("grep -n foo\\|git\\ branch\\ -D a.ts"), "safe");
+  });
+  it('echo "a\\" ; rm -rf /x" → safe (the rm is inside the string)', () => {
+    assert.equal(bash('echo "a\\" ; rm -rf /x"'), "safe");
+  });
+  it('echo "a\\\\" ; rm -rf /x → high_stakes (escaped backslash closes the string)', () => {
+    assert.equal(bash('echo "a\\\\" ; rm -rf /x'), "high_stakes");
+  });
+  it("cmd \\\\ newline continuation still joins lines", () => {
+    assert.equal(bash("ls \\\n  -la && rm -rf /important/data"), "high_stakes");
+  });
 });
 
 describe("agent scratch files — plan/todo writes are warning", () => {

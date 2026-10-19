@@ -5,6 +5,36 @@ Built from `changes.jsonl` by `node scripts/approval-review/record.mjs log`. Do 
 
 ## 2026-10-19 · text · `Bash`
 
+**Why:** The card showed p.mjs as the package to publish. This was not true. The words npm publish were in quoted data, and the parser took the next word from that data. The parser now stops at the first word that is not an npm argument. The tier does not change.
+
+| | Before | After |
+|---|---|---|
+| Tier | 🔴 high stakes (Face ID) | 🔴 high stakes (Face ID) |
+| Title | Publish package to npm | Publish package to npm |
+| Target | ~/Dev/OKed/$S/sdk-wt/,"node | · |
+| Subline | tag latest | tag latest |
+| Body | S=/private/tmp/claude-501/-Users-oren-Dev-OKed/c09c967e-e074-4d51-9dab-1b4f1dd76fdf/scratchpad; cd $S/sdk-wt && cat > $S/probe.mjs <<'EOF'<br>const s = await import(process.argv[2]);<br>const items = JSON.… | S=/private/tmp/claude-501/-Users-oren-Dev-OKed/c09c967e-e074-4d51-9dab-1b4f1dd76fdf/scratchpad; cd $S/sdk-wt && cat > $S/probe.mjs <<'EOF'<br>const s = await import(process.argv[2]);<br>const items = JSON.… |
+| Footnote | Other steps in this command need no approval | · |
+| Kind | npm_publish | npm_publish |
+
+Seen 2× (✅ 1, ❌ 0) · Corpus: `2026-10-19-npm-publish-in-quoted-data`
+
+## 2026-10-19 · tier · `Bash`
+
+**Why:** The step splitter did not read a backslash as an escape. It cut a grep pattern at an escaped pipe and read the words git branch -D as a command. A grep and sed command that only reads files got a high_stakes card. The splitter now keeps escaped quotes and escaped pipes in the string. The command is now safe.
+
+| | Before | After |
+|---|---|---|
+| Tier | 🔴 high stakes (Face ID) | ⚪ safe (no card) |
+| Title | Run command | Run command |
+| Body | grep -n "npm_publish\\|describe(\"\\|^describe(" packages/sdk/test/describe-fields.test.ts \| head -20; grep -n "^describe(\\|git branch -D\\|mktemp" packages/sdk/test/classify.test.ts \| head -20; sed -n… | S=/private/tmp/claude-501/-Users-oren-Dev-OKed/c09c967e-e074-4d51-9dab-1b4f1dd76fdf/scratchpad; cd $S/sdk-wt && grep -n "npm_publish\\|describe(\"\\|^describe(" packages/sdk/test/describe-fields.test.t… |
+| Footnote | Other steps in this command need no approval | · |
+| Kind | shell_pipeline | shell_pipeline |
+
+Seen 1× (✅ 1, ❌ 0) · Corpus: `2026-10-19-grep-escaped-quote-pipe`
+
+## 2026-10-19 · text · `Bash`
+
 **Why:** The target was ~/Dev/OKed/$SP/oked-sdk/], which is not a real folder. The card joined an unknown shell variable to the cwd and read a bracket from quoted data as the folder. Now the card shows no target when the folder is not known. The tier stays high_stakes, because a quoted argument to a node script can run as a command.
 
 | | Before | After |

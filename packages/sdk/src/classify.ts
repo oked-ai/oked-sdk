@@ -584,9 +584,23 @@ export function splitTopLevel(cmd: string, opts: { pipes?: boolean } = {}): stri
   while (i < cmd.length) {
     const ch = cmd[i];
     if (quote) {
+      // In double quotes a backslash escapes the next char (`"a\"b\|c"` is one
+      // string). Single quotes have no escapes.
+      if (quote === '"' && ch === "\\" && i + 1 < cmd.length) {
+        cur += ch + cmd[i + 1];
+        i += 2;
+        continue;
+      }
       cur += ch;
       if (ch === quote) quote = null;
       i++;
+      continue;
+    }
+    // Outside quotes a backslash makes the next char literal: `\|`, `\;` and
+    // `\"` are not operators or quotes. `\` + newline stays a line continuation.
+    if (ch === "\\" && i + 1 < cmd.length && subDepth === 0) {
+      cur += ch + cmd[i + 1];
+      i += 2;
       continue;
     }
     if (ch === '"' || ch === "'") {

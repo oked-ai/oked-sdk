@@ -954,6 +954,12 @@ describe("Bash — npm publish", () => {
     assert.equal(f!.Title, "Publish package to npm (dry run)");
     assert.equal(f!.Body, "npm publish --dry-run --otp ***");
   });
+
+  it("does not take words from quoted data after `npm publish` as the target", () => {
+    const f = describeFields("Bash", { command: `node probe.mjs '["cd x && npm publish","node p.mjs"]'` });
+    assert.equal(f!.Title, "Publish package to npm");
+    assert.notEqual(f!.Target, "p.mjs");
+  });
 });
 
 describe("desktop app folder access (ccd_directory)", () => {
