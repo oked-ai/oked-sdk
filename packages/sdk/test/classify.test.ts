@@ -1390,3 +1390,16 @@ describe("approval review 2026-10-18T1713: tiers", () => {
     assert.equal(bash(`rm -rf build 2>/dev/null`), "high_stakes");
   });
 });
+
+describe("approval review 2026-10-19T0606: tiers", () => {
+  it("a quoted option value of a node script file is text", () => {
+    assert.equal(bash(`node scripts/approval-review/record.mjs add --run R --reason "The git push titles now ignore quoted text."`), "safe");
+    assert.equal(bash(`node scripts/x.mjs --reason="run npm publish later"`), "safe");
+    assert.equal(bash(`R=1; \\\nnode scripts/x.mjs add --shape "Bash · npm_publish" --reason "npm publish was a grep"`), "safe");
+    // A positional argument may be run by the script, so it keeps its tier.
+    assert.equal(bash(`node scripts/x.mjs "git push --force"`), "high_stakes");
+    // Inline code and a pipe into a shell keep their tier.
+    assert.equal(bash(`node scripts/x.mjs --cmd "npm publish" | sh`), "high_stakes");
+    assert.equal(bash(`node scripts/x.mjs --x "a" && npm publish`), "high_stakes");
+  });
+});

@@ -1128,3 +1128,16 @@ describe("approval review 2026-10-18T1713: text", () => {
     assert.equal(bashFields("git push --force origin main").Title, "Force push");
   });
 });
+
+describe("approval review 2026-10-19T0606: text", () => {
+  const bashFields = (command: string) => describeFields("Bash", { command })!;
+
+  it("words in a quoted option value or a commit message do not name the card", () => {
+    assert.equal(bashFields(`node scripts/x.mjs add --reason "The git push titles now ignore it."`).Kind, "unknown_bash");
+    assert.equal(bashFields(`node scripts/x.mjs add --reason "rmdir of an empty temp folder made a card"`).Kind, "unknown_bash");
+    assert.equal(bashFields(`git commit -m "rmdir of a b c"`).Kind, "git_commit");
+    // The real deletes keep their titles.
+    assert.equal(bashFields("rmdir a b").Title, "Delete 2 empty folders");
+    assert.equal(bashFields(`git commit -m "x" && rm -rf build`).Title, "Delete file recursively");
+  });
+});
