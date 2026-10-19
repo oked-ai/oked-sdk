@@ -17,6 +17,9 @@ interface CorpusCase {
   fields: Record<string, string>;
 }
 
+// A `cd ~/…` in a case must not read repos on the machine that runs the tests.
+process.env.HOME = "/nonexistent-oked-test-home";
+
 const file = fileURLToPath(new URL("./fixtures/approval-corpus.jsonl", import.meta.url));
 const cases: CorpusCase[] = readFileSync(file, "utf8")
   .split("\n")
