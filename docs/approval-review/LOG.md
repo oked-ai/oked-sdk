@@ -16,7 +16,7 @@ Built from `changes.jsonl` by `node scripts/approval-review/record.mjs log`. Do 
 | Footnote | Other steps in this command need no approval | · |
 | Kind | git_push | shell_pipeline |
 
-Seen 1× (✅ 1, ❌ 0) · Corpus: `2026-10-19-node-script-reason-mentions-git-push`
+Seen 1× (✅ 1, ❌ 0) · Corpus: `2026-10-19-node-script-reason-mentions-git-push` · PR: https://github.com/oked-ai/oked-sdk/pull/74
 
 ## 2026-10-19 · tier · `Bash`
 
@@ -31,7 +31,7 @@ Seen 1× (✅ 1, ❌ 0) · Corpus: `2026-10-19-node-script-reason-mentions-git-p
 | Footnote | Other steps in this command need no approval | · |
 | Kind | unknown_bash | shell_pipeline |
 
-Seen 1× (✅ 1, ❌ 0) · Corpus: `2026-10-19-node-script-reason-mentions-push`
+Seen 1× (✅ 1, ❌ 0) · Corpus: `2026-10-19-node-script-reason-mentions-push` · PR: https://github.com/oked-ai/oked-sdk/pull/74
 
 ## 2026-10-18 · text · `Bash`
 
