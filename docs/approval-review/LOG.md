@@ -3,6 +3,20 @@
 Every change the approval review loop made to a card's tier, text or layout, newest first.
 Built from `changes.jsonl` by `node scripts/approval-review/record.mjs log`. Do not edit by hand.
 
+## 2026-10-19 · tier · `Bash`
+
+**Why:** The command splitter did not read backslash escapes. It ended a double-quoted grep pattern at an escaped quote and split on an escaped pipe. Thus the text git branch -D in a grep pattern became a separate step and the card was high_stakes. The command only reads files, so the tier is now safe. A real step after quoted text keeps its tier. The card was approved in 15 seconds.
+
+| | Before | After |
+|---|---|---|
+| Tier | 🔴 high stakes (Face ID) | ⚪ safe (no card) |
+| Title | Run command | Run command |
+| Body | grep -n "npm_publish\\|describe(\"\\|^describe(" packages/sdk/test/describe-fields.test.ts \| head -20; grep -n "^describe(\\|git branch -D\\|mktemp" packages/sdk/test/classify.test.ts \| head -20; sed -n… | S=/private/tmp/claude-501/-Users-oren-Dev-OKed/c09c967e-e074-4d51-9dab-1b4f1dd76fdf/scratchpad; cd $S/sdk-wt && grep -n "npm_publish\\|describe(\"\\|^describe(" packages/sdk/test/describe-fields.test.t… |
+| Footnote | Other steps in this command need no approval | · |
+| Kind | shell_pipeline | shell_pipeline |
+
+Seen 1× (✅ 1, ❌ 0) · Corpus: `2026-10-19-grep-escaped-pattern`
+
 ## 2026-10-19 · text · `Bash`
 
 **Why:** The target was ~/Dev/OKed/$SP/oked-sdk/], which is not a real folder. The card joined an unknown shell variable to the cwd and read a bracket from quoted data as the folder. Now the card shows no target when the folder is not known. The tier stays high_stakes, because a quoted argument to a node script can run as a command.

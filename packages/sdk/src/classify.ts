@@ -583,6 +583,14 @@ export function splitTopLevel(cmd: string, opts: { pipes?: boolean } = {}): stri
   let i = 0;
   while (i < cmd.length) {
     const ch = cmd[i];
+    // A backslash escapes the next character outside quotes and inside double
+    // quotes (`grep "a\|b(\"\|c"`), so `\"` does not end the string and `\|` or
+    // `\;` is not an operator. Inside single quotes it is a plain character.
+    if (ch === "\\" && quote !== "'" && i + 1 < cmd.length) {
+      cur += ch + cmd[i + 1];
+      i += 2;
+      continue;
+    }
     if (quote) {
       cur += ch;
       if (ch === quote) quote = null;
