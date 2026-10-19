@@ -1,6 +1,6 @@
 {
   "name": "@oked/verify",
-  "version": "0.6.8",
+  "version": "0.6.9",
   "description": "Verify OKed signed approval receipts offline: signatures, keys, hash chain, subject",
   "type": "module",
   "main": "dist/index.js",
@@ -47,7 +47,7 @@
     "access": "public"
   },
   "dependencies": {
-    "@oked/receipt-core": "0.6.8"
+    "@oked/receipt-core": "0.6.9"
   },
   "devDependencies": {
     "@types/node": "^22.13.10",
