@@ -3,7 +3,7 @@
  * approvals. Output is a sentence-shaped Rendered value: title + optional
  * subline + optional body (quoted block) + optional footnote.
  *
- * Surfaces (Telegram, dashboard) consume Title/Subline/Body/Footnote keys
+ * Surfaces (Telegram, dashboard) consume Title/Subline/Body/Footnote/Link keys
  * from the `fields` payload. `describe()` returns just the title for
  * backwards-compatible single-line consumers (audit logs, SMS).
  */
@@ -27,6 +27,7 @@ export interface Rendered {
   subline?: string;
   body?: string;
   footnote?: string;
+  link?: string;        // web page of the thing the action changes, e.g. the PR
   kind: OperationKind;  // stable analytics category
 }
 
@@ -66,6 +67,7 @@ export function describeFields(
   if (r.subline) out.Subline = r.subline;
   if (r.body) out.Body = r.body;
   if (r.footnote) out.Footnote = r.footnote;
+  if (r.link) out.Link = r.link;
   return out;
 }
 
@@ -352,7 +354,7 @@ function summarizeBash(command: string, sizeBytes?: number, cwd?: string): Rende
       : { title: `Git commit${where}`, kind: "git_commit" };
   }
 
-  const gh = summarizeGh(cmd);
+  const gh = summarizeGh(cmd, cwd);
   if (gh) return gh;
 
   // gh pr create — reversible (PRs can be closed). Extract --title when present.
@@ -507,16 +509,24 @@ function describeStep(step: string, cwd?: string): string {
 }
 
 /** GitHub CLI writes: which PR, issue or release, in which repo. */
-function summarizeGh(cmd: string): Rendered | null {
-  const m = cmd.match(/\bgh\s+(pr|issue|release|repo|workflow|run|secret|variable|api)\s+(\S+)(.*)$/s);
+const GH_RE = /\bgh\s+(pr|issue|release|repo|workflow|run|secret|variable|api)\s+(\S+)(.*)$/s;
+
+function summarizeGh(cmd: string, cwd?: string): Rendered | null {
+  const m = cmd.match(GH_RE);
   if (!m) return null;
   const [, noun, verb, rest] = m;
   const url = rest.match(/https:\/\/github\.com\/([^/\s]+\/[^/\s]+)\/(?:pull|issues)\/(\d+)/);
   const repoFlag = rest.match(/\s(?:-R|--repo)[\s=]+(\S+)/)?.[1];
-  const repo = url?.[1] ?? repoFlag;
+  // With no URL and no --repo, gh acts on the GitHub repo of its folder.
+  const repo = url?.[1] ?? (repoFlag ? stripQuotes(repoFlag) : undefined) ?? gitRepoFor(cmd, GH_RE, cwd)?.github;
   const num = url?.[2] ?? rest.match(/^\s+#?(\d+)\b/)?.[1];
   const ref = num ? `#${num}` : "";
   const where = repo ? ` in ${repo}` : "";
+  // `-R github.com/owner/name` and `-R owner/name` are on github.com; other hosts get no link.
+  const slug = repo?.replace(/^github\.com\//, "");
+  const link = slug && /^[^/]+\/[^/]+$/.test(slug) && num && (noun === "pr" || noun === "issue")
+    ? `https://github.com/${slug}/${noun === "pr" ? "pull" : "issues"}/${num}`
+    : undefined;
   if (noun === "pr" && verb === "merge") {
     const how = /\s(?:--squash|-s)\b/.test(rest) ? "squash" : /\s(?:--rebase|-r)\b/.test(rest) ? "rebase" : undefined;
     const auto = /\s--auto\b/.test(rest);
@@ -524,6 +534,7 @@ function summarizeGh(cmd: string): Rendered | null {
       title: `Merge PR ${ref}${where}`.replace(/\s+/g, " ").trim(),
       annotation: [how, auto ? "when checks pass" : undefined, /\s(?:--delete-branch|-d)\b/.test(rest) ? "deletes branch" : undefined]
         .filter(Boolean).join(", ") || undefined,
+      link,
       kind: "git_pr_merge",
     };
   }
@@ -561,6 +572,7 @@ function summarizeGh(cmd: string): Rendered | null {
   return {
     title: `${phrase}${where}`,
     body: body ? truncateBody(body[1] ?? body[2] ?? "") : undefined,
+    link,
     kind: noun === "pr" ? "git_pr_write" : "gh_write",
   };
 }
@@ -1796,6 +1808,7 @@ function resolveDir(dir: string, base?: string): string | undefined {
 
 interface GitRepo {
   name: string;                  // owner/name from origin, else the folder name
+  github?: string;               // owner/name when origin is on github.com
   remotes: Map<string, string>;  // remote name → URL
   branch?: string;               // checked-out branch
 }
@@ -1839,6 +1852,7 @@ function readGitRepo(start: string): GitRepo | null {
         const mainTop = basename(commonDir) === ".git" ? dirname(commonDir) : top;
         return {
           name: repoSlug(remotes.get("origin")) ?? basename(mainTop),
+          github: /^(?:https?:\/\/(?:[^@/]+@)?|ssh:\/\/[^@/]+@|[^@\s/]+@)github\.com[:/]/i.test(remotes.get("origin") ?? "") ? repoSlug(remotes.get("origin")) : undefined,
           remotes,
           branch: head.match(/^ref:\s*refs\/heads\/(.+?)\s*$/m)?.[1],
         };
