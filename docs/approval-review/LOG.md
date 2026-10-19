@@ -17,7 +17,7 @@ Built from `changes.jsonl` by `node scripts/approval-review/record.mjs log`. Do 
 | Footnote | Other steps in this command need no approval | Other steps in this command need no approval |
 | Kind | npm_publish | npm_publish |
 
-Seen 1× (✅ 1, ❌ 0) · Corpus: `2026-10-19-publish-in-quoted-probe-args`
+Seen 1× (✅ 1, ❌ 0) · Corpus: `2026-10-19-publish-in-quoted-probe-args` · PR: https://github.com/oked-ai/oked-sdk/pull/75
 
 ## 2026-10-19 · text · `Bash`
 
@@ -33,7 +33,7 @@ Seen 1× (✅ 1, ❌ 0) · Corpus: `2026-10-19-publish-in-quoted-probe-args`
 | Footnote | Other steps in this command need no approval | Other steps in this command need no approval |
 | Kind | git_pr_merge | git_pr_merge |
 
-Seen 1× (✅ 1, ❌ 0) · Corpus: `2026-10-19-merge-then-delete-remote-branch`
+Seen 1× (✅ 1, ❌ 0) · Corpus: `2026-10-19-merge-then-delete-remote-branch` · PR: https://github.com/oked-ai/oked-sdk/pull/75
 
 ## 2026-10-19 · tier · `Bash`
 
@@ -48,7 +48,7 @@ Seen 1× (✅ 1, ❌ 0) · Corpus: `2026-10-19-merge-then-delete-remote-branch`
 | Footnote | Other steps in this command need no approval | · |
 | Kind | file_delete | file_create |
 
-Seen 1× (✅ 1, ❌ 0) · Corpus: `2026-10-19-smoke-heredoc-after-node-p`
+Seen 1× (✅ 1, ❌ 0) · Corpus: `2026-10-19-smoke-heredoc-after-node-p` · PR: https://github.com/oked-ai/oked-sdk/pull/75
 
 ## 2026-10-19 · tier · `Bash`
 
