@@ -3,6 +3,51 @@
 Every change the approval review loop made to a card's tier, text or layout, newest first.
 Built from `changes.jsonl` by `node scripts/approval-review/record.mjs log`. Do not edit by hand.
 
+## 2026-10-18 · text · `Bash`
+
+**Why:** The title said Apply Prisma database migrations to prod.example.com. That text was only a string in a node -e test script, and no migration ran. The npm publish, Prisma, npx deploy and git push titles now ignore quoted search text and inline script bodies.
+
+| | Before | After |
+|---|---|---|
+| Tier | 🔴 high stakes (Face ID) | ⚪ safe (no card) |
+| Title | Run command | Run command |
+| Body | python3 -I - <<'EOF'<br>p='packages/sdk/src/classify.ts'<br>s=open(p).read()<br>old='''  const ghApiTier = classifyGhApiStage(bareStage);'''<br>assert s.count(old)==1<br>s=s.replace(old,'''  // `DATABASE_URL=<local… | cd /private/tmp/claude-501/-Users-oren-Dev-OKed--claude-worktrees-approval-quality-fatigue-a3223c/2645de95-3217-4731-b368-267a937e308b/scratchpad/review && python3 -I - <<'EOF'<br>npm run build --worksp… |
+| Footnote | Other steps in this command need no approval | · |
+| Kind | shell_pipeline | shell_pipeline |
+
+Seen 1× (✅ 1, ❌ 0) · Corpus: `2026-10-18-node-e-string-mentions-prisma-deploy` · PR: https://github.com/oked-ai/oked-sdk/pull/73
+
+## 2026-10-18 · tier · `Bash`
+
+**Why:** rmdir of an empty temp folder from mktemp made a high-stakes card because of the 2>/dev/null redirect. A redirect is not a target now. rmdir removes only empty folders, so no data is lost and mkdir undoes it. rmdir is now warning. The title is now Delete empty folder.
+
+| | Before | After |
+|---|---|---|
+| Tier | 🔴 high stakes (Face ID) | 🟡 warning (logged, no card) |
+| Title | Delete file | Delete empty folder |
+| Target | $EMPTYHOME | $EMPTYHOME |
+| Body | rmdir "$EMPTYHOME" 2>/dev/null | · |
+| Footnote | Other steps in this command need no approval | · |
+| Kind | file_delete | file_delete |
+
+Seen 1× (✅ 1, ❌ 0) · Corpus: `2026-10-18-rmdir-mktemp-home-with-redirect` · PR: https://github.com/oked-ai/oked-sdk/pull/73
+
+## 2026-10-18 · tier · `Bash`
+
+**Why:** A grep search for the words npm publish, piped to head, made a high-stakes publish card. The card timed out once. The command only reads files. Quoted text of a search command is now blank for the scan when the pipe goes to a reader, not to a shell. Text piped to sh, xargs or an interpreter keeps its tier.
+
+| | Before | After |
+|---|---|---|
+| Tier | 🔴 high stakes (Face ID) | ⚪ safe (no card) |
+| Title | Publish package to npm | Run command |
+| Target | oked-sdk-repo@0.0.0 | · |
+| Subline | tag latest | · |
+| Body | cd ~/Dev/OKed/oked-sdk && grep -n "verify\\|workspace\\|npm publish" .github/workflows/publish.yml \| head; npm view @oked/verify versions --json 2>/dev/null \| tail -4; grep -n '"private"\\|"ve… | cd ~/Dev/OKed/oked-sdk && grep -n "verify\\|workspace\\|npm publish" .github/workflows/publish.yml \| head; npm view @oked/verify versions --json 2>/dev/null \| tail -4; grep -n '"private"\\|"ve… |
+| Footnote | package.json is marked private, npm will refuse to publish it | · |
+| Kind | npm_publish | shell_pipeline |
+
+Seen 1× (✅ 1, ❌ 0) · Corpus: `2026-10-18-grep-pattern-mentions-npm-publish` · PR: https://github.com/oked-ai/oked-sdk/pull/73
+
 ## 2026-10-18 · tier · `Bash: pkill / killall / kill of a local dev server`
 
 **Why:** You chose this on 2026-10-18. Stopping a local dev server (pkill -f "tsx src/main.ts", killall node, kill $(lsof -t -iTCP:3000), kill $(pgrep -f vite)) was high stakes with Face ID. It is now review: it asks, without Face ID. The card says Stop processes matching and names the pattern or port. A bare kill <pid> and other processes stay high stakes. 13 kill cards in 2 weeks, 4 timed out while the agent waited.
