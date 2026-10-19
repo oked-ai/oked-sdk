@@ -219,7 +219,7 @@ function summarizeBash(command: string, sizeBytes?: number, cwd?: string): Rende
   // ("npm publish", "git push --force") does not name the card.
   const script = summarizeCodeHeredoc(cmd);
   if (script) return script;
-  cmd = stripCodeHeredocBodies(cmd);
+  cmd = stripCodeHeredocBodies(cmd, { dropClose: true });
 
   // Text piped into a shell runs as a script that no step shows by name.
   const toShell = cmd.match(/^(.*?)\|\s*(?:sudo\s+)?((?:ba|z|k|da)?sh)\b(?!\s+-n\b)/s);
@@ -293,6 +293,10 @@ function summarizeBash(command: string, sizeBytes?: number, cwd?: string): Rende
     const after = cmd.match(/\bgit\s+push\b(.*)$/s)?.[1] ?? "";
     const args = after.split(/\s+/).filter((a) => a && !a.startsWith("-"));
     const [remote, branch] = args;
+    const deleted = /\s(?:--delete|-d)\b/.test(after) ? branch : branch?.match(/^\+?:([^\s:]+)$/)?.[1];
+    if (remote && deleted) {
+      return { title: "Delete remote Git branch", target: `${deleted} on ${remote}`, kind: "git_branch_delete" };
+    }
     const target = remote && branch ? `${branch} → ${remote}` : remote || "current branch";
     const forced = /\bgit\s+push\b[^\n]*\s(?:--force(?:-with-lease)?|-f)\b/.test(cmd);
     return forced
@@ -563,7 +567,9 @@ function summarizeNpmPublish(cmd: string, cwd?: string): Rendered | null {
       if (value === true && VALUE_FLAGS.has(name) && i + 1 < tokens.length) value = tokens[++i];
       if ((name === "--workspace" || name === "-w") && typeof value === "string") workspaces.push(value);
       else flags[name] = value;
-    } else if (positional === undefined) {
+    } else if (positional === undefined && /^[\w.~/@-][\w.~/@+-]*$/.test(t)) {
+      // A folder or tarball. Quote and bracket leftovers from quoted data
+      // (`…publish\"]'`) are not a path.
       positional = t;
     }
   }
@@ -574,7 +580,8 @@ function summarizeNpmPublish(cmd: string, cwd?: string): Rendered | null {
   const cds = [...before.matchAll(/(?:^|[\n;&|(])\s*cd\s+("[^"]+"|'[^']+'|\S+)/g)];
   if (cds.length) {
     const dir = stripQuotes(cds[cds.length - 1][1]);
-    baseDir = isAbsolute(dir) ? dir : baseDir ? resolve(baseDir, dir) : undefined;
+    // `cd $SP/pkg`: the variable is not known here, so the folder is not known.
+    baseDir = /[$`]/.test(dir) ? undefined : isAbsolute(dir) ? dir : baseDir ? resolve(baseDir, dir) : undefined;
   }
 
   const allWorkspaces = flags["--workspaces"] === true || flags["-ws"] === true;

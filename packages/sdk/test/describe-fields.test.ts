@@ -940,6 +940,13 @@ describe("Bash — npm publish", () => {
     assert.match(all!.Target!, /@oked\/sdk@/);
   });
 
+  it("shows no target when the folder is not known", () => {
+    const cmd = `cd $SP/oked-sdk && node probe.mjs '["cd $S/x && npm ${"publish"}"]'`;
+    const f = describeFields("Bash", { command: cmd }, { cwd: repo });
+    assert.equal(f!.Title, "Publish package to npm");
+    assert.equal(f!.Target, undefined);
+  });
+
   it("marks dry runs and redacts --otp", () => {
     const f = describeFields("Bash", { command: "npm publish --dry-run --otp 123456" });
     assert.equal(f!.Title, "Publish package to npm (dry run)");
@@ -1078,6 +1085,15 @@ describe("approval review 2026-10-18 (2 weeks of cards): text", () => {
     assert.equal(f.Title, "Delete local Git branch");
     assert.equal(f.Target, "claude/feature-x");
     assert.equal(f.Annotation, "even if not merged");
+  });
+
+  it("git push --delete names the remote branch, and a merge card lists it", () => {
+    const f = describeFields("Bash", { command: "git push -q origin --delete chore/bump-sdk-0.6.9" })!;
+    assert.equal(f.Title, "Delete remote Git branch");
+    assert.equal(f.Target, "chore/bump-sdk-0.6.9 on origin");
+    const g = describeFields("Bash", { command: "gh pr merge 130 --repo aml11/oked-app --squash; git push -q origin --delete chore/x" })!;
+    assert.equal(g.Title, "Merge PR #130 in aml11/oked-app");
+    assert.equal(g.Subline, "Also: Delete remote Git branch chore/x on origin");
   });
 
   it("prisma migrate deploy names the database", () => {

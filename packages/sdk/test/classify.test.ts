@@ -204,6 +204,14 @@ describe("git push: plain → warning, force → high_stakes", () => {
   it("git push --force-with-lease → high_stakes", () => {
     assert.equal(bash("git push --force-with-lease"), "high_stakes");
   });
+
+  it("remote branch delete → high_stakes (--delete, -d, :branch)", () => {
+    assert.equal(bash("git push -q origin --delete chore/bump-sdk-0.6.9"), "high_stakes");
+    assert.equal(bash("git push origin -d feat"), "high_stakes");
+    assert.equal(bash("git push origin :feat"), "high_stakes");
+    assert.equal(bash("git push origin HEAD:main"), "warning");
+    assert.equal(bash(`git commit -m "git push -d x"`), "warning");
+  });
 });
 
 describe("himalaya email CLI - read ops safe, send review, delete high_stakes", () => {
@@ -612,6 +620,23 @@ describe("heredoc handling", () => {
   it("heredoc fed to an interpreter is still scanned (psql DROP → high_stakes)", () => {
     const cmd = [`psql <<'SQL'`, `DROP TABLE users;`, `SQL`].join("\n");
     assert.equal(bash(cmd), "high_stakes");
+  });
+
+  it("steps after a data heredoc are still split and scanned", () => {
+    const head = [`cat > notes.txt <<'EOF'`, `hello`, `EOF`].join("\n");
+    assert.equal(bash(`${head}\necho a; rm -rf ~/important`), "high_stakes");
+    assert.equal(bash(`${head}\nls; gh pr merge 5`), "high_stakes");
+  });
+
+  it("an interpreter in an earlier step does not make a cat heredoc body code", () => {
+    const cmd = [
+      `OLD=$(node -p 'require("./backend/package.json").version') && cat > _smoke.mjs <<'EOF'`,
+      `console.log(sdk.classify("Bash", { command: "git push --force" }));`,
+      `EOF`,
+      `node _smoke.mjs; rm -f _smoke.mjs; git status --short`,
+    ].join("\n");
+    assert.equal(bash(cmd), "warning");
+    assert.equal(bash([`X=$(node -p 1); cat <<'EOF' | bash`, `rm -rf ~/x`, `EOF`].join("\n")), "high_stakes");
   });
 });
 

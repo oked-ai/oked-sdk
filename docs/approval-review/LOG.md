@@ -3,6 +3,53 @@
 Every change the approval review loop made to a card's tier, text or layout, newest first.
 Built from `changes.jsonl` by `node scripts/approval-review/record.mjs log`. Do not edit by hand.
 
+## 2026-10-19 · text · `Bash`
+
+**Why:** The target was ~/Dev/OKed/$SP/oked-sdk/], which is not a real folder. The card joined an unknown shell variable to the cwd and read a bracket from quoted data as the folder. Now the card shows no target when the folder is not known. The tier stays high_stakes, because a quoted argument to a node script can run as a command.
+
+| | Before | After |
+|---|---|---|
+| Tier | 🔴 high stakes (Face ID) | 🔴 high stakes (Face ID) |
+| Title | Publish package to npm | Publish package to npm |
+| Target | ~/Dev/OKed/$SP/oked-sdk/] | · |
+| Subline | tag latest | tag latest |
+| Body | SP=/private/tmp/claude-501/-Users-oren-Dev-OKed/e08403ec-f24b-4277-9fff-0b9e09d49e93/scratchpad; cd $SP/oked-sdk && cat > $SP/probe.mjs <<'EOF'<br>const s = await import(process.argv[2]);<br>for (const c o… | SP=/private/tmp/claude-501/-Users-oren-Dev-OKed/e08403ec-f24b-4277-9fff-0b9e09d49e93/scratchpad; cd $SP/oked-sdk && cat > $SP/probe.mjs <<'EOF'<br>const s = await import(process.argv[2]);<br>for (const c o… |
+| Footnote | Other steps in this command need no approval | Other steps in this command need no approval |
+| Kind | npm_publish | npm_publish |
+
+Seen 1× (✅ 1, ❌ 0) · Corpus: `2026-10-19-publish-in-quoted-probe-args` · PR: https://github.com/oked-ai/oked-sdk/pull/75
+
+## 2026-10-19 · text · `Bash`
+
+**Why:** The command merged PR #130 and then deleted the remote branch with git push --delete. The card did not show the branch delete, and the footnote said that other steps need no approval. A remote branch delete leaves the machine and is hard to undo, so it is now high_stakes with the title Delete remote Git branch. The merge card now lists it on the Also line.
+
+| | Before | After |
+|---|---|---|
+| Tier | 🔴 high stakes (Face ID) | 🔴 high stakes (Face ID) |
+| Title | Merge PR #130 in aml11/oked-app | Merge PR #130 in aml11/oked-app |
+| Annotation | squash | squash |
+| Subline | · | Also: Delete remote Git branch chore/bump-sdk-0.6.9 on origin |
+| Body | gh pr merge 130 --repo aml11/oked-app --squash 2>&1 \| tail -2 | gh pr merge 130 --repo aml11/oked-app --squash 2>&1 \| tail -2<br>git push -q origin --delete chore/bump-sdk-0.6.9 2>&1 \| tail -1 |
+| Footnote | Other steps in this command need no approval | Other steps in this command need no approval |
+| Kind | git_pr_merge | git_pr_merge |
+
+Seen 1× (✅ 1, ❌ 0) · Corpus: `2026-10-19-merge-then-delete-remote-branch` · PR: https://github.com/oked-ai/oked-sdk/pull/75
+
+## 2026-10-19 · tier · `Bash`
+
+**Why:** The command made _smoke.mjs with a heredoc, ran it, and then deleted it. That is a local change that you can undo, so the tier is warning. Two bugs caused the card. A node -p step earlier on the same line made the cat heredoc body count as code, so its text was scanned. Also, the heredoc strip removed the closing line, so all later steps were joined into one step. That second bug also hid real risks: after a data heredoc, echo a; rm -rf ~/important got warning and no card. Now those steps get high_stakes.
+
+| | Before | After |
+|---|---|---|
+| Tier | 🔴 high stakes (Face ID) | 🟡 warning (logged, no card) |
+| Title | Delete file | Create file |
+| Target | _smoke.mjs | _smoke.mjs |
+| Body | rm -f _smoke.mjs | SP=/private/tmp/claude-501/-Users-oren-Dev-OKed/e08403ec-f24b-4277-9fff-0b9e09d49e93/scratchpad; cd ~/Dev/OKed/oked-app && git fetch -q origin && git worktree add -q -b chore/bump-sdk-0.6.9… |
+| Footnote | Other steps in this command need no approval | · |
+| Kind | file_delete | file_create |
+
+Seen 1× (✅ 1, ❌ 0) · Corpus: `2026-10-19-smoke-heredoc-after-node-p` · PR: https://github.com/oked-ai/oked-sdk/pull/75
+
 ## 2026-10-19 · tier · `Bash`
 
 **Why:** The card said Push to now → titles. No push ran. The words git push were in a quoted --reason value of a node script. Quoted long-option values of a node script file are now text, so this card is not sent. A real git push in the same command keeps its tier.
