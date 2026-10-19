@@ -15,7 +15,7 @@ Built from `changes.jsonl` by `node scripts/approval-review/record.mjs log`. Do 
 | Footnote | Other steps in this command need no approval | · |
 | Kind | shell_pipeline | shell_pipeline |
 
-Seen 1× (✅ 1, ❌ 0) · Corpus: `2026-10-19-grep-escaped-pattern`
+Seen 1× (✅ 1, ❌ 0) · Corpus: `2026-10-19-grep-escaped-pattern` · PR: https://github.com/oked-ai/oked-sdk/pull/78
 
 ## 2026-10-19 · text · `Bash`
 
