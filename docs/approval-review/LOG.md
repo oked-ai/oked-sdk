@@ -3,6 +3,36 @@
 Every change the approval review loop made to a card's tier, text or layout, newest first.
 Built from `changes.jsonl` by `node scripts/approval-review/record.mjs log`. Do not edit by hand.
 
+## 2026-10-19 · tier · `Bash`
+
+**Why:** The card said Push to now → titles. No push ran. The words git push were in a quoted --reason value of a node script. Quoted long-option values of a node script file are now text, so this card is not sent. A real git push in the same command keeps its tier.
+
+| | Before | After |
+|---|---|---|
+| Tier | 🔴 high stakes (Face ID) | ⚪ safe (no card) |
+| Title | Push | Run command |
+| Target | now → titles | · |
+| Body | \<br>node scripts/approval-review/record.mjs add --run $R --type text --diff $S/diff.json --shape "Bash · shell_pipeline · Run command" --reason "The title said Apply Prisma database migrations to prod.… | S=/private/tmp/claude-501/-Users-oren-Dev-OKed/a75756dd-3fa5-4a6f-9896-47c50f106b36/scratchpad; W=$S/sdk-2026-10-18T1713; cd $W && R=2026-10-18T1713; F1=packages/sdk/src/classify.ts,packages/sdk/src/… |
+| Footnote | Other steps in this command need no approval | · |
+| Kind | git_push | shell_pipeline |
+
+Seen 1× (✅ 1, ❌ 0) · Corpus: `2026-10-19-node-script-reason-mentions-git-push`
+
+## 2026-10-19 · tier · `Bash`
+
+**Why:** A node script command got a high-stakes card. The words that set the tier were in a quoted --reason value, and that value is only text. Quoted long-option values of a node script file are now text for the scan. Quoted positional arguments keep their tier, because the script can run them. The rmdir title now ignores quoted text too.
+
+| | Before | After |
+|---|---|---|
+| Tier | 🔴 high stakes (Face ID) | ⚪ safe (no card) |
+| Title | Run command | Run command |
+| Subline | Also: Push now → titles | · |
+| Body | \<br>node scripts/approval-review/record.mjs add --run 2026-10-18T1713 --type tier --diff /private/tmp/claude-501/-Users-oren-Dev-OKed/a75756dd-3fa5-4a6f-9896-47c50f106b36/scratchpad/diff.json --shape "… | S=/private/tmp/claude-501/-Users-oren-Dev-OKed/a75756dd-3fa5-4a6f-9896-47c50f106b36/scratchpad; W=$S/sdk-2026-10-18T1713; cd $W && R=2026-10-18T1713; F1=packages/sdk/src/classify.ts,packages/sdk/src/… |
+| Footnote | Other steps in this command need no approval | · |
+| Kind | unknown_bash | shell_pipeline |
+
+Seen 1× (✅ 1, ❌ 0) · Corpus: `2026-10-19-node-script-reason-mentions-push`
+
 ## 2026-10-18 · text · `Bash`
 
 **Why:** The title said Apply Prisma database migrations to prod.example.com. That text was only a string in a node -e test script, and no migration ran. The npm publish, Prisma, npx deploy and git push titles now ignore quoted search text and inline script bodies.

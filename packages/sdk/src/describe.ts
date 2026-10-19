@@ -247,8 +247,9 @@ function summarizeBash(command: string, sizeBytes?: number, cwd?: string): Rende
   // `(.+)$`: without the `m` flag `$` only reaches end-of-string, so a `rm` on
   // an interior line of a multi-line script (e.g. `rm "$WT/node_modules"` before
   // a trailing `cd … && git status`) wouldn't match and the card fell back to
-  // the generic "Run command".
-  const rmMatch = cmd.match(/\b(rm|trash|trash-put|rmdir)\s+(?:(-rf?|-fr|--recursive|-r)\s+)?([^\n]+)/);
+  // the generic "Run command". Match the shell text, so `rmdir` in a commit
+  // message or a `--reason "…"` value is not a delete.
+  const rmMatch = shellText(cmd).match(/\b(rm|trash|trash-put|rmdir)\s+(?:(-rf?|-fr|--recursive|-r)\s+)?([^\n]+)/);
   if (rmMatch && rmMatch[1] === "rmdir") {
     // rmdir removes empty folders only.
     const vars = literalAssignments(cmd);
