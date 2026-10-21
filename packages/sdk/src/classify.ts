@@ -380,31 +380,42 @@ const MKTEMP_ASSIGN_RE =
 const DEV_PROCESS_RE =
   /\b(?:node|nodemon|tsx|ts-node|vite|next|nuxt|astro|remix|webpack(?:-dev-server)?|esbuild|parcel|turbo|npm|pnpm|yarn|bun|deno|wrangler|miniflare|uvicorn|gunicorn|flask|runserver|rails|puma|http\.server|http-server|live-server|serve|hugo|jekyll|storybook|expo|metro)\b|\.(?:[cm]?js|tsx?)\b/;
 
+// Command lines of read-only watchers: a CI watcher (`gh pr checks 136 --watch`,
+// `gh run watch`), a log tail, or a sleep. Stopping one loses nothing, and the
+// agent can start it again.
+const WATCHER_PROCESS_RE =
+  /^(?:gh\s+(?:pr\s+checks|run\s+watch)\b|tail(?:\s+-\w*[fF]\b|$)|sleep\b|watch\b)/;
+
+function isRestartableProcess(pattern: string): boolean {
+  return DEV_PROCESS_RE.test(pattern) || WATCHER_PROCESS_RE.test(pattern);
+}
+
 /**
- * A kill of a local dev server: `pkill -f "tsx src/main.ts"`, `killall node`,
- * `kill $(pgrep -f vite)`, or a kill of whatever listens on a port
- * (`kill $(lsof -t -iTCP:3000 -sTCP:LISTEN)`). Oren chose `review` (no Face
- * ID) for these on 2026-10-18. A bare `kill <pid>` names no process, so it
- * stays high stakes.
+ * A kill of a local dev server or a read-only watcher: `pkill -f "tsx src/main.ts"`,
+ * `pkill -f "gh pr checks 136"`, `killall node`, `kill $(pgrep -f vite)`, or a
+ * kill of whatever listens on a port (`kill $(lsof -t -iTCP:3000 -sTCP:LISTEN)`).
+ * Oren chose `review` (no Face ID) for dev servers on 2026-10-18 and for
+ * watchers on 2026-10-21. A bare `kill <pid>` names no process, so it stays
+ * high stakes.
  */
-function isDevServerKill(stage: string): boolean {
+function isRestartableKill(stage: string): boolean {
   const pkill = stage.match(/^pkill\s+(.+)$/);
   if (pkill) {
     const args = splitArgs(pkill[1]).filter((a) => !a.startsWith("-") || a === "-f");
     const pattern = unquote(args[args.indexOf("-f") + 1] ?? args[args.length - 1] ?? "");
-    return DEV_PROCESS_RE.test(pattern);
+    return isRestartableProcess(pattern);
   }
   const killall = stage.match(/^killall\s+(.+)$/);
   if (killall) {
     const names = splitArgs(killall[1]).filter((a) => !a.startsWith("-")).map(unquote);
-    return names.length > 0 && names.every((n) => DEV_PROCESS_RE.test(n));
+    return names.length > 0 && names.every((n) => isRestartableProcess(n));
   }
   const kill = stage.match(/^kill\s+(?:-\w+\s+)*\$\((.+)\)\s*(?:2>\/dev\/null)?$/);
   if (kill) {
     const inner = kill[1].trim();
     if (/^lsof\b/.test(inner) && /-i\s*(?:tcp|TCP|udp)?:?\d+|-iTCP:\d+/.test(inner)) return true;
     const pg = inner.match(/^pgrep\s+(?:-\w+\s+)*(?:-f\s+)?(.+)$/);
-    if (pg) return DEV_PROCESS_RE.test(unquote(pg[1].trim()));
+    if (pg) return isRestartableProcess(unquote(pg[1].trim()));
   }
   return false;
 }
@@ -972,8 +983,9 @@ function classifyStageShellEffects(stage: string, ephemeralVars: Set<string> = n
     const pattern = unquote(splitArgs(bareStage.replace(/^pkill\s+(?:-\w+\s+)*-f\s+/, ""))[0] ?? "");
     if (/(?:^|\/)scratchpad\//.test(pattern) || EPHEMERAL_PATH_RE.test(pattern)) return "warning";
   }
-  // Stopping a local dev server is review: it asks, without Face ID.
-  if (isDevServerKill(bareStage)) return "review";
+  // Stopping a local dev server or a read-only watcher is review: it asks,
+  // without Face ID.
+  if (isRestartableKill(bareStage)) return "review";
   for (const pattern of HIGH_STAKES_STAGE) {
     if (pattern.test(bareStage)) return "high_stakes";
   }
