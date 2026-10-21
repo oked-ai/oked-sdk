@@ -1238,6 +1238,23 @@ describe("git cards name the repo", () => {
     assert.equal(at("gh pr merge --squash", sdk).Link, undefined);
   });
 
+  it("a merge with a commit subject names the PR in the title", () => {
+    const f = at(`gh pr merge 49 --repo aml11/oked-static-web-site --squash --subject "feat: OG image without the beta pill (#49)" --body "x" 2>&1 | tail -3`);
+    assert.equal(f.Title, 'Merge PR #49 "feat: OG image without the beta pill" in aml11/oked-static-web-site');
+    assert.equal(f.Annotation, "squash");
+    assert.equal(at("gh pr merge 76 -s -t 'fix: x'", local).Title, 'Merge PR #76 "fix: x"');
+    assert.equal(at('gh pr merge 76 --subject "$(git log -1 --format=%s)"', sdk).Title, "Merge PR #76 in oked-ai/oked-sdk");
+  });
+
+  it("a PR title from GitHub goes after the PR number", () => {
+    const named = (cmd: string, prTitle: string) => describeFields("Bash", { command: cmd }, { cwd: sdk, prTitle })!;
+    assert.equal(named("gh pr merge 76 --squash", "Fix the card\nmore").Title, 'Merge PR #76 "Fix the card" in oked-ai/oked-sdk');
+    assert.equal(named("gh pr close 5", "Old idea").Title, 'Close PR #5 "Old idea" in oked-ai/oked-sdk');
+    assert.equal(named("gh pr merge 76 -t 'From the command'", "From GitHub").Title, 'Merge PR #76 "From the command" in oked-ai/oked-sdk');
+    assert.equal(named("git branch -D old", "x").Title, "Delete local Git branch in oked-ai/oked-sdk");
+    assert.equal(describeOne("Bash", { command: "gh pr merge 76" }, { cwd: sdk, prTitle: "Fix" }), 'Merge PR #76 "Fix" in oked-ai/oked-sdk');
+  });
+
   it("a command of several steps has no footnote", () => {
     assert.equal(at("git status; git push --force origin main").Footnote, undefined);
   });

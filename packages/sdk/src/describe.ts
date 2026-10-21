@@ -35,6 +35,9 @@ export interface Rendered {
  *  package.json behind `npm publish`) to show what an action will touch. */
 export interface DescribeContext {
   cwd?: string;
+  /** Title of the PR the card links to, when the command does not say it.
+   *  `lookupPrTitle()` gets it from GitHub. */
+  prTitle?: string;
 }
 
 export function describe(
@@ -76,6 +79,24 @@ export function describeFields(
 // ───────────────────────────────────────────────────────────────────────
 
 function summarize(toolName: string, toolInput: Record<string, unknown>, ctx: DescribeContext): Rendered {
+  const r = summarizeTool(toolName, toolInput, ctx);
+  return ctx.prTitle ? namePr(r, ctx.prTitle) : r;
+}
+
+/**
+ * "Merge PR #49 in o/r" says which PR, not what it does. Put the PR title after
+ * the number: `Merge PR #49 "feat: OG image" in o/r`. A title that already
+ * quotes something keeps it.
+ */
+function namePr(r: Rendered, prTitle: string): Rendered {
+  const num = r.title.match(/\bPR #(\d+)\b/)?.[1];
+  // A subject made by `$(…)` or a variable is not known here.
+  const name = prTitle.split("\n")[0].replace(new RegExp(`\\s*\\(#${num}\\)$`), "").trim();
+  if (!num || !name || /[$`]/.test(name) || r.title.includes('"')) return r;
+  return { ...r, title: r.title.replace(`PR #${num}`, `PR #${num} "${truncate(name, 60)}"`) };
+}
+
+function summarizeTool(toolName: string, toolInput: Record<string, unknown>, ctx: DescribeContext): Rendered {
   const fileSizeBytes = typeof toolInput._file_size_bytes === "number" ? toolInput._file_size_bytes : undefined;
   switch (toolName) {
     case "Bash":
@@ -530,13 +551,16 @@ function summarizeGh(cmd: string, cwd?: string): Rendered | null {
   if (noun === "pr" && verb === "merge") {
     const how = /\s(?:--squash|-s)\b/.test(rest) ? "squash" : /\s(?:--rebase|-r)\b/.test(rest) ? "rebase" : undefined;
     const auto = /\s--auto\b/.test(rest);
-    return {
+    // The squash or merge commit subject is the PR title in most merges.
+    const subject = rest.match(/\s(?:-t|--subject)[\s=]+(?:'([^']*)'|"((?:[^"\\]|\\.)*)")/);
+    const r: Rendered = {
       title: `Merge PR ${ref}${where}`.replace(/\s+/g, " ").trim(),
       annotation: [how, auto ? "when checks pass" : undefined, /\s(?:--delete-branch|-d)\b/.test(rest) ? "deletes branch" : undefined]
         .filter(Boolean).join(", ") || undefined,
       link,
       kind: "git_pr_merge",
     };
+    return subject ? namePr(r, subject[1] ?? subject[2] ?? "") : r;
   }
   if (noun === "api") {
     const args = ` ${verb}${rest}`;
