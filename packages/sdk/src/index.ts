@@ -452,6 +452,7 @@ export {
 export { TIER_ORDER, degradedDecision } from "./degraded.js";
 export { classify } from "./classify.js";
 export { describe, describeFields } from "./describe.js";
+export { lookupPrTitle } from "./pr-title.js";
 export { applyRules } from "./rules.js";
 export type {
   Rule,
