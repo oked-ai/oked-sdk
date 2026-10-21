@@ -296,6 +296,9 @@ const CURL_HIGH_STAKES_STAGE = [
   /\bcurl\b.*\s(?:-d|--data(?:-binary|-ascii|-raw)?|--json)(?:\s+|=)['"]?@/,
   /\bcurl\b.*\s--data-urlencode(?:\s+|=)['"]?[^\s'"=]*@/,
   /\bcurl\b.*\s(?:-F|--form)(?:\s+|=)['"]?[^\s'"]*=[@<]/,
+  // A body built by the shell (`-d "$(cat ~/.ssh/id_rsa)"`) can carry any
+  // local file, like `-d @file`.
+  /\bcurl\b.*\s(?:-d|--data(?:-[a-z]+)?|--json|-F|--form)(?:\s+|=)(?:"[^"]*|[^\s'"]*)(?:\$\(|`)/,
 ];
 
 // Hosts whose write APIs pay, charge or send a message. Matched as the host or
@@ -1359,9 +1362,11 @@ export function stripCurlDataBodies(command: string): string {
           if (quote === '"' && command[j] === "\\") j++;
           j++;
         }
-        // A file reference (`'@secrets.json'`, `'file=@x'`) is an upload, not
-        // payload text: keep it so the curl upload rules still see it.
-        if (isCurlFileBody(m[0], command.slice(bodyStart, j))) {
+        // A file reference (`'@secrets.json'`, `'file=@x'`) or a double-quoted
+        // command substitution is an upload, not payload text: keep it so the
+        // curl upload rules still see it.
+        const body = command.slice(bodyStart, j);
+        if (isCurlFileBody(m[0], body) || (quote === '"' && /\$\(|`/.test(body))) {
           out += command.slice(i, j + 1);
         } else {
           out += command.slice(i, bodyStart) + quote;
