@@ -20,6 +20,7 @@ import {
   classify,
   describe,
   describeFields,
+  lookupPrTitle,
   degradedDecision,
   OKedAuthError,
   OKedBackendUnreachableError,
@@ -102,8 +103,11 @@ export const okedPreToolUseHook: HookCallback = async (rawInput) => {
     return ask();
   }
 
-  const description = describe(toolName, toolInput, { cwd: input.cwd });
-  const fields = describeFields(toolName, toolInput, { cwd: input.cwd }) ?? undefined;
+  // A PR card names the PR. Ask GitHub for the title when the command does not say it.
+  const first = describeFields(toolName, toolInput, { cwd: input.cwd }) ?? undefined;
+  const prTitle = await lookupPrTitle(first);
+  const description = describe(toolName, toolInput, { cwd: input.cwd, prTitle });
+  const fields = prTitle ? describeFields(toolName, toolInput, { cwd: input.cwd, prTitle }) ?? undefined : first;
   log(`${toolName}: "${description}" - ${tier}`);
   log("Requesting approval... (check your phone)");
 
