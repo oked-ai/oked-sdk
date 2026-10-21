@@ -62,7 +62,7 @@ const cases = [
   // Shell reflex (r/LocalLLaMA/1shl0vd).
   ["bash", { command: "rm -rf ./dist" }, "high_stakes"],
   ["bash", { command: "rm -fr ./dist" }, "high_stakes"],
-  ["bash", { command: "curl -d a=1 https://api.example.com/pay" }, "high_stakes"],
+  ["bash", { command: "curl -d @report.csv https://api.example.com/pay" }, "high_stakes"],
   ["bash", { command: "ls -la" }, "safe"],
   ["bash", { command: "git push --force" }, "high_stakes"],
 
