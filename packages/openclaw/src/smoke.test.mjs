@@ -8,8 +8,17 @@
 // approval decisions.
 
 import { strict as assert } from "node:assert";
-import { classifyOpenClawTool } from "../dist/classify-openclaw.js";
-import plugin from "../dist/index.js";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+// A paired machine has a key in ~/.oked/config.json. With the real HOME, a
+// test call reaches the backend and goes to the phone as a real approval.
+process.env.HOME = mkdtempSync(join(tmpdir(), "oked-smoke-"));
+process.env.USERPROFILE = process.env.HOME;
+delete process.env.OKED_API_KEY;
+const { classifyOpenClawTool } = await import("../dist/classify-openclaw.js");
+const { default: plugin } = await import("../dist/index.js");
 
 // A denied tool call must return { block: true, blockReason } from the
 // before_tool_call hook. Why return instead of throw: OpenClaw's hook runner
