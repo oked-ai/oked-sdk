@@ -18,11 +18,13 @@ import { TIER_ORDER } from "./degraded.js";
 //                code-exec, SQL INSERT/CREATE).
 // Tier 3 - review: push notification, tap to approve. Prompt-worthy but not
 //                catastrophic: sensitive-path writes (~/.ssh, shell rc, system
-//                dirs, OKed's own config), sudo, outward message/email sends.
+//                dirs, OKed's own config), sudo, outward message/email sends,
+//                curl POST/PUT/PATCH with an inline body.
 // Tier 4 - high_stakes: push + number matching. Destructive / irreversible /
 //                external: rm of non-temp data, DROP/TRUNCATE/DELETE FROM,
 //                git push --force / reset --hard / branch -D, mkfs / dd-to-device /
-//                shutdown, curl POST/DELETE, ssh/scp, npm publish, kill.
+//                shutdown, curl DELETE / file upload / pay-or-send API, ssh/scp,
+//                npm publish, kill.
 
 // Tools that are always safe (read-only, no side effects)
 const SAFE_TOOLS = new Set([
@@ -198,7 +200,7 @@ const HIGH_STAKES_COMMANDS = [
   // grab a flag belonging to a LATER command (e.g. `curl -o … && unzip … -d dir`
   // false-matched the curl `-d` POST-body pattern on unzip's destination flag).
   // They belong to a single curl invocation, so they're scanned PER-STAGE in
-  // HIGH_STAKES_CURL_STAGE below. Only the download-and-execute patterns
+  // OUTWARD_CURL_STAGE below. Only the download-and-execute patterns
   // (`curl|wget … | sh`) genuinely span a pipe and stay in this full scan.
   /\bwget\s+.*\|\s*(bash|sh|zsh)\b/,
   /\bcurl\s+.*\|\s*(bash|sh|zsh)\b/,
@@ -267,11 +269,12 @@ const HIGH_STAKES_STAGE = [
 // curl request-method / request-body flags, scanned PER-STAGE (a single stage
 // has no top-level pipe, so `\bcurl\b.*` can't cross into another command — the
 // `-d`/`-T`/etc. it finds belongs to THIS curl). A curl that sends a body or a
-// mutating method (POST/PUT/PATCH/DELETE) is an outward write → high_stakes.
+// mutating method (POST/PUT/PATCH/DELETE) is an outward write → at least review
+// (see CURL_HIGH_STAKES_STAGE for the ones that stay high_stakes).
 // A plain `curl -o file URL` download has none of these and stays safe.
-const HIGH_STAKES_CURL_STAGE = [
+const OUTWARD_CURL_STAGE = [
   /\bcurl\s+.*-X\s*(DELETE|PUT|POST|PATCH)\b/i,
-  /\bcurl\s+.*--request\s*(DELETE|PUT|POST|PATCH)\b/i,
+  /\bcurl\s+.*--request[\s=]*(DELETE|PUT|POST|PATCH)\b/i,
   // curl flags that send a request body (POST/PUT/PATCH) without an explicit -X
   /\bcurl\b.*\s-d[\s=]/,
   /\bcurl\b.*\s--data(-raw|-binary|-urlencode|-ascii)?[\s=]/,
@@ -280,6 +283,36 @@ const HIGH_STAKES_CURL_STAGE = [
   /\bcurl\b.*\s(-T|--upload-file)[\s=]/,
   /\bcurl\b.*\s--json[\s=]/,
 ];
+
+// An outward curl that is hard to undo, or that sends local files, stays
+// high_stakes: a DELETE, a file upload (`-T f`, `-d @f`, `-F x=@f`) that can
+// carry secrets off the machine, and a request to an API that pays or sends
+// messages. Any other inline-body write (a waitlist signup, a webhook ping) is
+// review: it asks, without Face ID.
+const CURL_HIGH_STAKES_STAGE = [
+  /\bcurl\s+.*-X\s*DELETE\b/i,
+  /\bcurl\s+.*--request[\s=]*DELETE\b/i,
+  /\bcurl\b.*\s(-T|--upload-file)[\s=]/,
+  /\bcurl\b.*\s(?:-d|--data(?:-binary|-ascii|-raw)?|--json)(?:\s+|=)['"]?@/,
+  /\bcurl\b.*\s--data-urlencode(?:\s+|=)['"]?[^\s'"=]*@/,
+  /\bcurl\b.*\s(?:-F|--form)(?:\s+|=)['"]?[^\s'"]*=[@<]/,
+];
+
+// Hosts whose write APIs pay, charge or send a message. Matched as the host or
+// a parent domain of a curl URL.
+const PAY_OR_SEND_HOSTS = [
+  "stripe.com", "paypal.com", "squareup.com", "braintreegateway.com",
+  "slack.com", "discord.com", "discordapp.com", "api.telegram.org",
+  "twilio.com", "sendgrid.com", "sendgrid.net", "mailgun.net", "postmarkapp.com",
+  "resend.com", "api.mailchimp.com", "api.github.com",
+];
+
+function isPayOrSendCurlStage(stage: string): boolean {
+  return [...stage.matchAll(/\bhttps?:\/\/(?:[^@/\s'"]*@)?([^/:\s'"]+)/g)].some((m) => {
+    const host = m[1].toLowerCase();
+    return PAY_OR_SEND_HOSTS.some((h) => host === h || host.endsWith(`.${h}`));
+  });
+}
 
 // Outward-but-recoverable commands → review (prompt, simple approve). Sending
 // mail/messages can't be unsent, but it isn't destructive to local state, so it
@@ -990,15 +1023,18 @@ function classifyStageShellEffects(stage: string, ephemeralVars: Set<string> = n
     if (pattern.test(bareStage)) return "high_stakes";
   }
 
-  // curl with a mutating method or request body → high_stakes. Scanned per-stage
-  // (not on the full compound command) so the greedy `.*` can't reach across a
-  // `&&`/`|` and match a `-d`/`-T`/etc. flag belonging to a different command.
+  // curl with a mutating method or request body → review, or high_stakes for a
+  // DELETE, a file upload or a pay/send API. Scanned per-stage (not on the full
+  // compound command) so the greedy `.*` can't reach across a `&&`/`|` and match
+  // a `-d`/`-T`/etc. flag belonging to a different command.
   // A request to a LOOPBACK host (localhost/127.x/::1) is a local action, not an
   // outward one, so it downgrades to `warning` (logged, no prompt).
-  for (const pattern of HIGH_STAKES_CURL_STAGE) {
-    if (pattern.test(stage)) {
-      return isLoopbackHttpStage(stage) ? "warning" : "high_stakes";
+  if (OUTWARD_CURL_STAGE.some((pattern) => pattern.test(stage))) {
+    if (isLoopbackHttpStage(stage)) return "warning";
+    if (CURL_HIGH_STAKES_STAGE.some((pattern) => pattern.test(stage)) || isPayOrSendCurlStage(stage)) {
+      return "high_stakes";
     }
+    return "review";
   }
 
   // `DATABASE_URL=<local> npx prisma migrate deploy`: the assignment prefix
@@ -1280,6 +1316,12 @@ export function stripInlineScriptBodies(command: string): string {
 // never run locally.
 const CURL_DATA_FLAG_RE = /^(?:-d|--data(?:-raw|-binary|-urlencode|-ascii)?|--json|-F|--form)(?:\s+|=)(['"])/;
 
+function isCurlFileBody(flag: string, body: string): boolean {
+  if (/^(?:-F|--form)\b/.test(flag)) return /=[@<]/.test(body);
+  if (/^--data-urlencode\b/.test(flag)) return /^[^\s=]*@/.test(body);
+  return body.startsWith("@");
+}
+
 /**
  * Blank the interior of quoted curl request bodies, keeping the quotes and the
  * flag so the per-stage curl rules still see a POST. A JSON payload that
@@ -1317,7 +1359,13 @@ export function stripCurlDataBodies(command: string): string {
           if (quote === '"' && command[j] === "\\") j++;
           j++;
         }
-        out += command.slice(i, bodyStart) + quote;
+        // A file reference (`'@secrets.json'`, `'file=@x'`) is an upload, not
+        // payload text: keep it so the curl upload rules still see it.
+        if (isCurlFileBody(m[0], command.slice(bodyStart, j))) {
+          out += command.slice(i, j + 1);
+        } else {
+          out += command.slice(i, bodyStart) + quote;
+        }
         i = j + 1;
         continue;
       }
