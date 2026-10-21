@@ -2,7 +2,16 @@
 // local decision paths (safe → allow; missing key → ask). Run via
 // `npm test` (builds first, then executes against dist/).
 import assert from "node:assert";
-import { okedPreToolUseHook, okedHooks } from "../dist/index.js";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+// A paired machine has a key in ~/.oked/config.json. With the real HOME, a
+// test call reaches the backend and goes to the phone as a real approval.
+process.env.HOME = mkdtempSync(join(tmpdir(), "oked-smoke-"));
+process.env.USERPROFILE = process.env.HOME;
+delete process.env.OKED_API_KEY;
+const { okedPreToolUseHook, okedHooks } = await import("../dist/index.js");
 
 function mkInput(tool_name, tool_input) {
   return { hook_event_name: "PreToolUse", tool_name, tool_input, session_id: "s", cwd: "/tmp" };
