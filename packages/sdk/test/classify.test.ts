@@ -1375,6 +1375,18 @@ describe("approval review 2026-10-18 (2 weeks of cards): false high stakes", () 
     assert.equal(bash("kill 85257"), "high_stakes");
   });
 
+  it("stopping a read-only watcher asks without Face ID (review)", () => {
+    assert.equal(bash('pkill -f "gh pr checks 136"'), "review");
+    assert.equal(bash("pkill -f 'gh run watch 1234'"), "review");
+    assert.equal(bash('kill $(pgrep -f "tail -f server.log")'), "review");
+    assert.equal(bash("pkill sleep"), "review");
+    assert.equal(bash("killall tail"), "review");
+    // gh that is not a watcher, and a pattern that only names gh, stay high stakes.
+    assert.equal(bash('pkill -f "gh pr merge 136"'), "high_stakes");
+    assert.equal(bash("pkill gh"), "high_stakes");
+    assert.equal(bash("killall gh"), "high_stakes");
+  });
+
   it("prisma migrate deploy to a local database is logged, any other database is high stakes", () => {
     assert.equal(bash("export DATABASE_URL=postgresql://u:p@localhost:5433/t; npx prisma migrate deploy"), "warning");
     assert.equal(bash("DATABASE_URL=postgresql://u@127.0.0.1/t npx prisma migrate deploy"), "warning");
