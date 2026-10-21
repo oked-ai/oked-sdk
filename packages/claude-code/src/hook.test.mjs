@@ -13,7 +13,7 @@ import { fileURLToPath } from "node:url";
 
 const HOOK = join(dirname(fileURLToPath(import.meta.url)), "..", "bin", "oked-hook.js");
 const SECRET = "SECRETTOKEN123";
-const HIGH_STAKES = { tool_name: "Bash", tool_input: { command: `curl -X POST -H "Authorization: Bearer ${SECRET}" https://example.com/api` } };
+const HIGH_STAKES = { tool_name: "Bash", tool_input: { command: `curl -X DELETE -H "Authorization: Bearer ${SECRET}" https://example.com/api` } };
 const REVIEW = { tool_name: "mcp__github__create_issue", tool_input: { title: "x", body: SECRET } };
 
 let reply = { status: 200, headers: {}, body: "{}" };
@@ -184,7 +184,7 @@ try {
     assert.equal(statSync(logPath).mode & 0o777, 0o600);
     const text = readFileSync(logPath, "utf8");
     assert.ok(!text.includes(SECRET), "the log never holds tool input");
-    assert.ok(!text.includes("curl -X POST"), "the log never holds the command");
+    assert.ok(!text.includes("curl -X DELETE"), "the log never holds the command");
     for (const l of lines) assert.ok(l.ts && l.decision && l.reason && l.client, "each line has ts, decision, reason, client");
     passed++;
   }

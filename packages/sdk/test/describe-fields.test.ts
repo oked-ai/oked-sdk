@@ -627,14 +627,14 @@ describe("classify — shell write tier rules", () => {
     assert.equal(tier, "review");
   });
 
-  it("curl data upload is high_stakes", () => {
-    const tier = classify("Bash", { command: "curl -d a=1 https://api.example.com/pay" });
+  it("curl file upload is high_stakes", () => {
+    const tier = classify("Bash", { command: "curl -d @report.csv https://api.example.com/pay" });
     assert.equal(tier, "high_stakes");
   });
 
-  it("curl PATCH is high_stakes", () => {
+  it("curl PATCH asks for approval (review)", () => {
     const tier = classify("Bash", { command: "curl -X PATCH https://api.example.com/item/1" });
-    assert.equal(tier, "high_stakes");
+    assert.equal(tier, "review");
   });
 
   it("curl file upload is high_stakes", () => {
