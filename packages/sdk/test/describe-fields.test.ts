@@ -515,6 +515,14 @@ describe("Bash — shell file writes", () => {
     assert.notEqual(f!.Title, "Create file");
   });
 
+  it("a redirect inside $(...) ends at the closing parenthesis", () => {
+    const quiet = describeFields("Bash", { command: "V=$(npm view @oked/sdk version 2>/dev/null); echo $V" });
+    assert.notEqual(quiet!.Title, "Create file");
+    const f = describeFields("Bash", { command: "x=$(make > build.log)" });
+    assert.equal(f!.Title, "Create file");
+    assert.equal(f!.Target, "build.log");
+  });
+
   it("cp → title 'Copy file', target = 'src → dest'", () => {
     const f = describeFields("Bash", { command: "cp /etc/passwd /tmp/backup" });
     assert.equal(f!.Title, "Copy file");
