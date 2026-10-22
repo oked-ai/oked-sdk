@@ -1411,7 +1411,9 @@ function findRedirects(cmd: string): { append: boolean; target: string }[] {
         while (j < cmd.length && cmd[j] !== q) target += cmd[j++];
         if (j < cmd.length) j++; // closing quote
       } else {
-        while (j < cmd.length && !/[\s>|&;]/.test(cmd[j])) target += cmd[j++];
+        // A `)` ends the target too: `$(npm view x 2>/dev/null)` redirects to
+        // /dev/null, not to a file named `/dev/null)`.
+        while (j < cmd.length && !/[\s>|&;)]/.test(cmd[j])) target += cmd[j++];
       }
       if (target && !/^\d+$/.test(target) && !isDevNullish(target)) {
         res.push({ append: op[1] === ">>" || op[1] === "&>>", target });
