@@ -18,7 +18,7 @@
   <a href="https://www.npmjs.com/package/@oked/claude-code"><img src="https://img.shields.io/npm/v/@oked/claude-code?label=%40oked%2Fclaude-code" alt="@oked/claude-code on npm"></a>
   <a href="https://www.npmjs.com/package/@oked/claude-agent-sdk"><img src="https://img.shields.io/npm/v/@oked/claude-agent-sdk?label=%40oked%2Fclaude-agent-sdk" alt="@oked/claude-agent-sdk on npm"></a>
   <a href="https://www.npmjs.com/package/@oked/openclaw"><img src="https://img.shields.io/npm/v/@oked/openclaw?label=%40oked%2Fopenclaw" alt="@oked/openclaw on npm"></a>
-  <img src="https://img.shields.io/npm/l/@oked/sdk" alt="MIT license">
+  <img src="https://img.shields.io/npm/l/@oked/sdk" alt="Apache-2.0 license">
 </p>
 
 <p align="center">
@@ -127,7 +127,7 @@ git push origin main --tags
 
 ## License
 
-[MIT](./LICENSE)
+[Apache-2.0](./LICENSE)
 
 ---
 

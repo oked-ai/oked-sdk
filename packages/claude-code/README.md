@@ -1,7 +1,7 @@
 # @oked/claude-code
 
 [![npm version](https://img.shields.io/npm/v/@oked/claude-code.svg)](https://www.npmjs.com/package/@oked/claude-code)
-[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](./LICENSE)
+[![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](./LICENSE)
 
 Zero-code integration for Claude Code. Installs a `PreToolUse` hook that routes sensitive actions (destructive Bash commands, payment MCP tools, etc.) through the OKed backend and waits for a human decision before Claude Code proceeds.
 
@@ -77,4 +77,4 @@ The hook writes one JSON line to `~/.oked/hook.log` (mode 600) for each deny and
 
 ## License
 
-[MIT](./LICENSE)
+[Apache-2.0](./LICENSE)
