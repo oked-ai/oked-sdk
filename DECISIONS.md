@@ -4,6 +4,19 @@ Where the code and the PRD "Signed Approval Receipts" (Oct 5, 2026) disagree, th
 code wins and the conflict is written down here. The backend's side is in
 oked-app's DECISIONS.md. Newest first.
 
+## Approval trail (October 2026)
+
+**The "How it got here" trail is an optional upgrade, not built now.** The design "OKed
+Approval Trail" adds the steps before an action to the phone card. A prototype on 170
+real cards (Oct 2026) showed it can be built: the Claude Code hook gets
+`transcript_path`, `tool_use_id` and `prompt_id`. Three parts helped: who started the
+run (a person or a scheduled task), what a short prompt like "do it" answered, and the
+agent's words, marked "Not checked by OKed". The step list did not help (58% of steps
+read "Run command"; median 14 steps). The check "Traces back to your request" gave
+false confidence. The trail also sends prompts and the agent's words off the Mac for
+the first time, so it needs data limits, local redaction, an opt-in setting and a
+retention time first. That work is too large for the value now.
+
 ## Signed approval receipts (October 2026)
 
 **A held request is a timeout, not an outage.** Node's fetch (undici) drops a response
