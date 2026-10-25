@@ -515,6 +515,14 @@ describe("Bash — shell file writes", () => {
     assert.notEqual(f!.Title, "Create file");
   });
 
+  it("a redirect inside $(...) ends at the closing parenthesis", () => {
+    const quiet = describeFields("Bash", { command: "V=$(npm view @oked/sdk version 2>/dev/null); echo $V" });
+    assert.notEqual(quiet!.Title, "Create file");
+    const f = describeFields("Bash", { command: "x=$(make > build.log)" });
+    assert.equal(f!.Title, "Create file");
+    assert.equal(f!.Target, "build.log");
+  });
+
   it("cp → title 'Copy file', target = 'src → dest'", () => {
     const f = describeFields("Bash", { command: "cp /etc/passwd /tmp/backup" });
     assert.equal(f!.Title, "Copy file");
@@ -627,14 +635,14 @@ describe("classify — shell write tier rules", () => {
     assert.equal(tier, "review");
   });
 
-  it("curl data upload is high_stakes", () => {
-    const tier = classify("Bash", { command: "curl -d a=1 https://api.example.com/pay" });
+  it("curl file upload is high_stakes", () => {
+    const tier = classify("Bash", { command: "curl -d @report.csv https://api.example.com/pay" });
     assert.equal(tier, "high_stakes");
   });
 
-  it("curl PATCH is high_stakes", () => {
+  it("curl PATCH asks for approval (review)", () => {
     const tier = classify("Bash", { command: "curl -X PATCH https://api.example.com/item/1" });
-    assert.equal(tier, "high_stakes");
+    assert.equal(tier, "review");
   });
 
   it("curl file upload is high_stakes", () => {
@@ -1236,6 +1244,23 @@ describe("git cards name the repo", () => {
     assert.equal(f.Link, undefined);
     assert.equal(at("gh pr merge 76 -R git.example.com/a/b").Link, undefined);
     assert.equal(at("gh pr merge --squash", sdk).Link, undefined);
+  });
+
+  it("a merge with a commit subject names the PR in the title", () => {
+    const f = at(`gh pr merge 49 --repo aml11/oked-static-web-site --squash --subject "feat: OG image without the beta pill (#49)" --body "x" 2>&1 | tail -3`);
+    assert.equal(f.Title, 'Merge PR #49 "feat: OG image without the beta pill" in aml11/oked-static-web-site');
+    assert.equal(f.Annotation, "squash");
+    assert.equal(at("gh pr merge 76 -s -t 'fix: x'", local).Title, 'Merge PR #76 "fix: x"');
+    assert.equal(at('gh pr merge 76 --subject "$(git log -1 --format=%s)"', sdk).Title, "Merge PR #76 in oked-ai/oked-sdk");
+  });
+
+  it("a PR title from GitHub goes after the PR number", () => {
+    const named = (cmd: string, prTitle: string) => describeFields("Bash", { command: cmd }, { cwd: sdk, prTitle })!;
+    assert.equal(named("gh pr merge 76 --squash", "Fix the card\nmore").Title, 'Merge PR #76 "Fix the card" in oked-ai/oked-sdk');
+    assert.equal(named("gh pr close 5", "Old idea").Title, 'Close PR #5 "Old idea" in oked-ai/oked-sdk');
+    assert.equal(named("gh pr merge 76 -t 'From the command'", "From GitHub").Title, 'Merge PR #76 "From the command" in oked-ai/oked-sdk');
+    assert.equal(named("git branch -D old", "x").Title, "Delete local Git branch in oked-ai/oked-sdk");
+    assert.equal(describeOne("Bash", { command: "gh pr merge 76" }, { cwd: sdk, prTitle: "Fix" }), 'Merge PR #76 "Fix" in oked-ai/oked-sdk');
   });
 
   it("a command of several steps has no footnote", () => {

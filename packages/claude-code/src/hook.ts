@@ -4,6 +4,7 @@ import {
   classify,
   describe,
   describeFields,
+  lookupPrTitle,
   applyRules,
   degradedDecision,
   OKedAuthError,
@@ -81,7 +82,7 @@ async function main(): Promise<void> {
   // and only the once/day send actually waits.
   if (client.apiKey) await client.heartbeat();
 
-  const fields = describeFields(toolName, toolInput, { cwd: input.cwd }) ?? undefined;
+  let fields = describeFields(toolName, toolInput, { cwd: input.cwd }) ?? undefined;
 
   // safe/warning normally short-circuit locally with no network call. But a
   // user rule can escalate (or auto-decide) such an action, and rules live
@@ -122,8 +123,12 @@ async function main(): Promise<void> {
     return;
   }
 
+  // A PR card names the PR. Ask GitHub for the title when the command does not say it.
+  const prTitle = await lookupPrTitle(fields);
+  if (prTitle) fields = describeFields(toolName, toolInput, { cwd: input.cwd, prTitle }) ?? undefined;
+
   // Generate human-readable description
-  const description = describe(toolName, toolInput, { cwd: input.cwd });
+  const description = describe(toolName, toolInput, { cwd: input.cwd, prTitle });
   log(`${toolName}: "${description}" - ${tier}`);
   log("Requesting approval... (check your phone)");
 

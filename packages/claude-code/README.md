@@ -38,8 +38,8 @@ outward-facing operations put a human in the loop.
 |---|---|---|
 | `safe` | Auto-allow, no notification | Reads & queries, a DB `SELECT`, and any command with no detected side effect — `ls`, `grep`, `jq`, `node`, `npx`, plain `curl` GET (the default) |
 | `warning` | Terminal log only, no push | A reversible local mutation: file create / `cp` / `mv`, a `/tmp` delete, local git (`add`/`commit`), `npm install`, SQL `INSERT`/`CREATE` |
-| `review` | Push notification, tap to approve | Sensitive-path writes (`~/.ssh`, shell rc, system dirs, OKed config), `sudo`, outward message/email sends, MCP `create_*` / `send_*` / `update_*` |
-| `high_stakes` | Push notification with confirmation | Destructive / irreversible / external: `rm` of non-temp data, `DROP TABLE` / `DELETE FROM`, `git push` / `reset --hard` / `branch -D`, `mkfs` / `dd`-to-device / `shutdown`, `curl` POST/DELETE, `ssh`/`scp`, `npm publish`, `kill` |
+| `review` | Push notification, tap to approve | Sensitive-path writes (`~/.ssh`, shell rc, system dirs, OKed config), `sudo`, outward message/email sends, `curl` POST/PUT/PATCH with an inline body, MCP `create_*` / `send_*` / `update_*` |
+| `high_stakes` | Push notification with confirmation | Destructive / irreversible / external: `rm` of non-temp data, `DROP TABLE` / `DELETE FROM`, `git push` / `reset --hard` / `branch -D`, `mkfs` / `dd`-to-device / `shutdown`, `curl` DELETE / file upload / pay-or-send API, `ssh`/`scp`, `npm publish`, `kill` |
 
 A Bash command that matches none of the prompt-worthy effect categories defaults
 to `safe` — running a command is not, by itself, something we interrupt you for.
