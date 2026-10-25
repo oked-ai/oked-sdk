@@ -1,7 +1,7 @@
 # @oked/openclaw
 
 [![npm version](https://img.shields.io/npm/v/@oked/openclaw.svg)](https://www.npmjs.com/package/@oked/openclaw)
-[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](./LICENSE)
+[![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](./LICENSE)
 [![Types: included](https://img.shields.io/npm/types/@oked/openclaw.svg)](./dist/index.d.ts)
 
 Zero-code integration for OpenClaw. Registers a `before_tool_call` hook that fires for **every** tool the OpenClaw agent calls (built-in or skill-registered), classifies it, and freezes the agent on dangerous actions until you approve from the OKed mobile app.
@@ -95,4 +95,4 @@ npm test
 
 ## License
 
-[MIT](./LICENSE)
+[Apache-2.0](./LICENSE)

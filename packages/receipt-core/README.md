@@ -30,4 +30,4 @@ const check = verifyReceipt(receipt, { keys });
 | `verifyChain(receipts, heads?)` | Seq gaps, broken `prev_receipt_digest` links, duplicates, and agreement with saved chain heads. |
 | `signerFromSeed(seed, kid)`, `signBody(body, signer)` | Signing, for the issuer. |
 
-Node 18+, ESM, no dependencies (uses `node:crypto`). MIT.
+Node 18+, ESM, no dependencies (uses `node:crypto`). Apache-2.0.
