@@ -1,7 +1,7 @@
 # @oked/sdk
 
 [![npm version](https://img.shields.io/npm/v/@oked/sdk.svg)](https://www.npmjs.com/package/@oked/sdk)
-[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](./LICENSE)
+[![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](./LICENSE)
 [![Types: included](https://img.shields.io/npm/types/@oked/sdk.svg)](./dist/index.d.ts)
 
 Core library - programmatic approval API for AI agents. Sends sensitive actions to the OKed backend, waits for a human decision, and resolves only when the user approves or denies.
@@ -112,4 +112,4 @@ npm run build
 
 ## License
 
-[MIT](./LICENSE)
+[Apache-2.0](./LICENSE)

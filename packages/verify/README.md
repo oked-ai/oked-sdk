@@ -52,4 +52,4 @@ const report = verifyBundle(bundle, bundle.keys ?? (await fetchKeys()));
 ```
 
 What a receipt proves and what it does not:
-[docs/receipts.md](https://github.com/oked-ai/oked-sdk/blob/main/docs/receipts.md). MIT.
+[docs/receipts.md](https://github.com/oked-ai/oked-sdk/blob/main/docs/receipts.md). Apache-2.0.
