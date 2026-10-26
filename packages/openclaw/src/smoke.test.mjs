@@ -60,8 +60,8 @@ const cases = [
   ["publish_release", {}, "high_stakes"],
 
   // Shell reflex (r/LocalLLaMA/1shl0vd).
-  ["bash", { command: "rm -rf ./dist" }, "high_stakes"],
-  ["bash", { command: "rm -fr ./dist" }, "high_stakes"],
+  ["bash", { command: "rm -rf ./src" }, "high_stakes"],
+  ["bash", { command: "rm -fr ./src" }, "high_stakes"],
   ["bash", { command: "curl -d @report.csv https://api.example.com/pay" }, "high_stakes"],
   ["bash", { command: "ls -la" }, "safe"],
   ["bash", { command: "git push --force" }, "high_stakes"],

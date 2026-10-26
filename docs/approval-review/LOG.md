@@ -3,6 +3,74 @@
 Every change the approval review loop made to a card's tier, text or layout, newest first.
 Built from `changes.jsonl` by `node scripts/approval-review/record.mjs log`. Do not edit by hand.
 
+## 2026-10-26 · text · `Bash`
+
+**Why:** The target had a stray closing parenthesis. The curl ran inside a $( ) substitution, and the URL took its closing parenthesis. Now the URL drops a closing parenthesis that has no opening one.
+
+| | Before | After |
+|---|---|---|
+| Tier | 🔴 high stakes (Face ID) | 🔴 high stakes (Face ID) |
+| Title | DELETE request to api.oked.ai | DELETE request to api.oked.ai |
+| Target | /api/mobile/v1/account) | /api/mobile/v1/account |
+| Body | do c=$(curl -s -o /dev/null -w '%{http_code}' -X DELETE https://api.oked.ai/api/mobile/v1/account) | do c=$(curl -s -o /dev/null -w '%{http_code}' -X DELETE https://api.oked.ai/api/mobile/v1/account) |
+| Kind | http_delete | http_delete |
+
+Seen 1× (✅ 1, ❌ 0) · Corpus: `2026-10-26-curl-delete-in-substitution`
+
+## 2026-10-26 · text · `Bash`
+
+**Why:** The title showed the notes file, not the GitHub release that set the tier. The card read each step alone, so the step that deletes the notes file looked high_stakes. Now each step sees the files that earlier steps made, and the title names the release.
+
+| | Before | After |
+|---|---|---|
+| Tier | 🔵 review (asks you) | 🔵 review (asks you) |
+| Title | Create file | Create release v0.1.0 in oked-ai/oked-openshell |
+| Target | ../../.v010-notes.md | · |
+| Body | sed -n '/^## 0.1.0/,$p' CHANGELOG.md \| tail -n +3 > ../../.v010-notes.md && gh release create v0.1.0 -R oked-ai/oked-openshell --target 6303c4164d124cd616a2f8842300a04f9f8820a1 --title "v0.1.0" --not… | gh release create v0.1.0 -R oked-ai/oked-openshell --target 6303c4164d124cd616a2f8842300a04f9f8820a1 --title "v0.1.0" --notes-file ../../.v010-notes.md 2>&1 \| tail -2 |
+| Kind | file_create | gh_write |
+
+Seen 1× (✅ 1, ❌ 0) · Corpus: `2026-10-26-release-notes-file`
+
+## 2026-10-26 · tier · `Bash`
+
+**Why:** The command deleted an old archive in the build folder before a new build. The next build makes a build output folder again, so the delete is a reversible local change: warning. This applies only to a relative path in build, dist, .build, DerivedData or .next. A path with .., an absolute path or a variable stays high_stakes.
+
+| | Before | After |
+|---|---|---|
+| Tier | 🔴 high stakes (Face ID) | 🟡 warning (logged, no card) |
+| Title | Delete 2 files recursively | Create file |
+| Target | build/OKed.xcarchive<br>build/upload | build/archive.log |
+| Body | rm -rf build/OKed.xcarchive build/upload | git checkout -q -b release/build-2 origin/main && sed -i '' 's/CURRENT_PROJECT_VERSION: "1"/CURRENT_PROJECT_VERSION: "2"/' project.yml && git diff --stat && export DEVELOPER_DIR=/Applications/Xcode.a… |
+| Kind | file_delete | file_create |
+
+Seen 2× (✅ 2, ❌ 0) · Corpus: `2026-10-26-rm-build-output`
+
+## 2026-10-26 · tier · `Bash`
+
+**Why:** The deploy step had --dry-run. It builds into a local folder and sends nothing. Thus it is safe now. The same rule applies to a publish dry run. A deploy or a publish without the flag, or with --dry-run=false, stays high_stakes.
+
+| | Before | After |
+|---|---|---|
+| Tier | 🔴 high stakes (Face ID) | ⚪ safe (no card) |
+| Title | Deploy via npx | Run command |
+| Body | npx -y wrangler@4 deploy --dry-run --outdir /private/tmp/claude-501/-Users-oren-Dev-OKed--claude-worktrees-oked-homepage-redesign-073a28/73e6fa31-d082-41a8-ad0e-cf3610ecd8fc/scratchpad/dryrun 2>&1 \|… | python3 - <<'EOF'<br>cat wrangler.toml; npx -y wrangler@4 deploy --dry-run --outdir /private/tmp/claude-501/-Users-oren-Dev-OKed--claude-worktrees-oked-homepage-redesign-073a28/73e6fa31-d082-41a8-ad0e-c… |
+| Kind | npx_deploy | shell_pipeline |
+
+Seen 1× (✅ 1, ❌ 0) · Corpus: `2026-10-26-wrangler-dry-run`
+
+## 2026-10-26 · tier · `Bash`
+
+**Why:** The command only asked the Railway CLI for its help text. A step with --help or --dry-run changes nothing, so it is safe now. A real deploy stays high_stakes.
+
+| | Before | After |
+|---|---|---|
+| Tier | 🔴 high stakes (Face ID) | ⚪ safe (no card) |
+| Title | Deploy to Railway | Run command |
+| Body | railway up --help 2>&1 \| grep -E "^\s+-" \| head -20 | cd ~/Dev/OKed/oked-app && git show origin/main:backend/src/health/health.controller.ts \| grep -n -i "VERSION" \| head -5; git grep -n "RAILWAY_GIT_COMMIT_SHA\\|export const VERSION" origin/ma… |
+| Kind | deploy | shell_pipeline |
+
+Seen 1× (✅ 1, ❌ 0) · Corpus: `2026-10-26-railway-help`
+
 ## 2026-10-26 · tier · `Bash`
 
 **Why:** The classifier did not see the git subcommand after global options such as -C dir or -c key=value. Thus git -C repo branch -D was safe, and git -C repo push --force was safe too. Now the classifier removes the global options and classifies the subcommand. The same branch delete without -C was already high_stakes, so the tier is now the same for both forms. A -c alias option can run a shell command, so it gets at least review. No card was denied.
