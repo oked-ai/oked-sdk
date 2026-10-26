@@ -15,7 +15,7 @@ Built from `changes.jsonl` by `node scripts/approval-review/record.mjs log`. Do 
 | Body | do c=$(curl -s -o /dev/null -w '%{http_code}' -X DELETE https://api.oked.ai/api/mobile/v1/account) | do c=$(curl -s -o /dev/null -w '%{http_code}' -X DELETE https://api.oked.ai/api/mobile/v1/account) |
 | Kind | http_delete | http_delete |
 
-Seen 1× (✅ 1, ❌ 0) · Corpus: `2026-10-26-curl-delete-in-substitution`
+Seen 1× (✅ 1, ❌ 0) · Corpus: `2026-10-26-curl-delete-in-substitution` · PR: https://github.com/oked-ai/oked-sdk/pull/87
 
 ## 2026-10-26 · text · `Bash`
 
@@ -29,7 +29,7 @@ Seen 1× (✅ 1, ❌ 0) · Corpus: `2026-10-26-curl-delete-in-substitution`
 | Body | sed -n '/^## 0.1.0/,$p' CHANGELOG.md \| tail -n +3 > ../../.v010-notes.md && gh release create v0.1.0 -R oked-ai/oked-openshell --target 6303c4164d124cd616a2f8842300a04f9f8820a1 --title "v0.1.0" --not… | gh release create v0.1.0 -R oked-ai/oked-openshell --target 6303c4164d124cd616a2f8842300a04f9f8820a1 --title "v0.1.0" --notes-file ../../.v010-notes.md 2>&1 \| tail -2 |
 | Kind | file_create | gh_write |
 
-Seen 1× (✅ 1, ❌ 0) · Corpus: `2026-10-26-release-notes-file`
+Seen 1× (✅ 1, ❌ 0) · Corpus: `2026-10-26-release-notes-file` · PR: https://github.com/oked-ai/oked-sdk/pull/87
 
 ## 2026-10-26 · tier · `Bash`
 
@@ -43,7 +43,7 @@ Seen 1× (✅ 1, ❌ 0) · Corpus: `2026-10-26-release-notes-file`
 | Body | rm -rf build/OKed.xcarchive build/upload | git checkout -q -b release/build-2 origin/main && sed -i '' 's/CURRENT_PROJECT_VERSION: "1"/CURRENT_PROJECT_VERSION: "2"/' project.yml && git diff --stat && export DEVELOPER_DIR=/Applications/Xcode.a… |
 | Kind | file_delete | file_create |
 
-Seen 2× (✅ 2, ❌ 0) · Corpus: `2026-10-26-rm-build-output`
+Seen 2× (✅ 2, ❌ 0) · Corpus: `2026-10-26-rm-build-output` · PR: https://github.com/oked-ai/oked-sdk/pull/87
 
 ## 2026-10-26 · tier · `Bash`
 
@@ -56,7 +56,7 @@ Seen 2× (✅ 2, ❌ 0) · Corpus: `2026-10-26-rm-build-output`
 | Body | npx -y wrangler@4 deploy --dry-run --outdir /private/tmp/claude-501/-Users-oren-Dev-OKed--claude-worktrees-oked-homepage-redesign-073a28/73e6fa31-d082-41a8-ad0e-cf3610ecd8fc/scratchpad/dryrun 2>&1 \|… | python3 - <<'EOF'<br>cat wrangler.toml; npx -y wrangler@4 deploy --dry-run --outdir /private/tmp/claude-501/-Users-oren-Dev-OKed--claude-worktrees-oked-homepage-redesign-073a28/73e6fa31-d082-41a8-ad0e-c… |
 | Kind | npx_deploy | shell_pipeline |
 
-Seen 1× (✅ 1, ❌ 0) · Corpus: `2026-10-26-wrangler-dry-run`
+Seen 1× (✅ 1, ❌ 0) · Corpus: `2026-10-26-wrangler-dry-run` · PR: https://github.com/oked-ai/oked-sdk/pull/87
 
 ## 2026-10-26 · tier · `Bash`
 
@@ -69,7 +69,7 @@ Seen 1× (✅ 1, ❌ 0) · Corpus: `2026-10-26-wrangler-dry-run`
 | Body | railway up --help 2>&1 \| grep -E "^\s+-" \| head -20 | cd ~/Dev/OKed/oked-app && git show origin/main:backend/src/health/health.controller.ts \| grep -n -i "VERSION" \| head -5; git grep -n "RAILWAY_GIT_COMMIT_SHA\\|export const VERSION" origin/ma… |
 | Kind | deploy | shell_pipeline |
 
-Seen 1× (✅ 1, ❌ 0) · Corpus: `2026-10-26-railway-help`
+Seen 1× (✅ 1, ❌ 0) · Corpus: `2026-10-26-railway-help` · PR: https://github.com/oked-ai/oked-sdk/pull/87
 
 ## 2026-10-26 · tier · `Bash`
 
