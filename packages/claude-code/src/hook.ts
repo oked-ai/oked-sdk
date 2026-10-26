@@ -169,9 +169,14 @@ async function main(): Promise<void> {
       log(`Approval receipt did not verify (${err.problems.join(", ")}) - action denied`);
       respond("deny", `OKed: the approval receipt did not verify (${err.problems.join(", ")}); action denied`, failed);
     } else if (err instanceof OKedAuthError) {
-      // Auth misconfig is not an outage - always deny.
+      // Auth misconfig is not an outage - always deny. A deleted account ends
+      // here too, so name the way out as well as the way back.
       log(`Invalid API key (HTTP ${err.status}) - action denied`);
-      respond("deny", `OKed: invalid API key (HTTP ${err.status}). Run \`oked init\` to pair again.`, failed);
+      respond(
+        "deny",
+        `OKed: invalid API key (HTTP ${err.status}). Run \`oked init\` to pair again, or \`oked uninstall\` to remove OKed.`,
+        failed,
+      );
     } else if (err instanceof OKedTooManyPendingError) {
       // Not an outage: the backend works, and too many approvals wait.
       log(`Too many pending approvals (HTTP 429) - action denied`);
