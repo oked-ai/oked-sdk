@@ -134,7 +134,10 @@ try {
     reply = { status: 401, headers: {}, body: JSON.stringify({ message: "API key required" }) };
     const out = await runHook(REVIEW);
     assert.equal(out.permissionDecision, "deny");
-    assert.match(out.permissionDecisionReason, /invalid API key \(HTTP 401\)/);
+    assert.equal(
+      out.permissionDecisionReason,
+      "OKed: invalid API key (HTTP 401). Run `oked init` to pair again, or `oked uninstall` to remove OKed.",
+    );
     passed++;
   }
 
