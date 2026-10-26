@@ -156,6 +156,13 @@ const DELETE_COMMAND_RE =
   /(?:^|[\n`({]|\$\()\s*(?:rm|rmdir|trash|trash-put)\b/;
 
 const NPX_DEPLOY_RE = /\bnpx\s+.*\s+deploy\b/;
+const NPM_PUBLISH_RE = /\bnpm\s+publish\b/;
+
+// `--help` prints help and `--dry-run` only shows what would happen. A publish
+// or deploy step with one of these flags changes nothing (`railway up --help`,
+// `npx wrangler deploy --dry-run`). `--dry-run=false` is a real run.
+const PREVIEW_FLAG_RE = /\s--(?:help|dry-run)(?:=true)?(?=\s|$)/;
+const PREVIEWABLE_COMMANDS = new Set<RegExp>([NPM_PUBLISH_RE, NPX_DEPLOY_RE]);
 
 /**
  * `prisma migrate deploy` against a DATABASE_URL on this machine (localhost,
@@ -204,7 +211,7 @@ const HIGH_STAKES_COMMANDS = [
   // (`curl|wget … | sh`) genuinely span a pipe and stay in this full scan.
   /\bwget\s+.*\|\s*(bash|sh|zsh)\b/,
   /\bcurl\s+.*\|\s*(bash|sh|zsh)\b/,
-  /\bnpm\s+publish\b/,
+  NPM_PUBLISH_RE,
   /\bnpm\s+unpublish\b/,
   NPX_DEPLOY_RE,
   // NOTE: ssh is intentionally NOT a blanket high_stakes here. ssh is a
@@ -608,6 +615,21 @@ export function classify(
   return "review";
 }
 
+/**
+ * Tier of each step of a compound command, read the way the whole command is
+ * read: a step sees the temp files and temp folders that earlier steps made
+ * (`cat > _s.mjs <<EOF … && rm _s.mjs`). `classify` of one step alone does not.
+ */
+export function classifyBashSteps(steps: string[]): RiskTier[] {
+  const vars = new Set<string>();
+  for (const step of steps) for (const stage of splitTopLevel(step)) collectMktempVars(stage, vars);
+  return steps.map((step) => {
+    const tier = classifyBashCommand(step, vars);
+    for (const stage of splitTopLevel(step)) noteEphemeralEffects(stripHeredocBodies(stage), vars);
+    return tier;
+  });
+}
+
 function maxTier(a: RiskTier, b: RiskTier): RiskTier {
   return TIER_ORDER[a] >= TIER_ORDER[b] ? a : b;
 }
@@ -719,6 +741,24 @@ function isEphemeralOnlyDeletion(command: string, ephemeralVars: Set<string> = n
     const t = unquote(a);
     return isEphemeralPath(t) || isEphemeralVar(t, ephemeralVars) || ephemeralVars.has(CREATED_PATH + t) ||
       (ephemeralVars.has(TEMP_CWD) && /^[\w.-][\w./-]*$/.test(t) && !t.split("/").includes(".."));
+  });
+}
+
+// Build output folders in the project. The next build makes them again, so
+// deleting them is a reversible local change.
+const BUILD_OUTPUT_DIRS = new Set(["build", "dist", ".build", "DerivedData", ".next"]);
+
+// rm/trash whose every target is a relative path inside a build output folder
+// (`rm -rf build/OKed.xcarchive dist`). An absolute path, `..`, a variable or a
+// glob in the first segment can point anywhere, so it stays a real deletion.
+function isBuildOutputOnlyDeletion(command: string): boolean {
+  const m = command.match(/^(?:rm|trash|trash-put)\b\s+(.+)$/s);
+  if (!m) return false;
+  const targets = splitArgs(m[1]).filter((a) => !a.startsWith("-") && !/^(?:\d|&)?>>?\S+$/.test(a));
+  if (targets.length === 0) return false;
+  return targets.every((a) => {
+    const parts = unquote(a).replace(/^(?:\.\/)+/, "").split("/");
+    return BUILD_OUTPUT_DIRS.has(parts[0]) && !parts.includes("..");
   });
 }
 
@@ -1004,6 +1044,8 @@ function classifyBashCommand(command: string, ephemeralVars: Set<string> = new S
   for (const pattern of HIGH_STAKES_COMMANDS) {
     if (pattern === NPX_DEPLOY_RE && (isLocalPrismaDeploy(stripped) ||
       (ephemeralVars.has(LOCAL_DB) && /\bprisma\s+migrate\s+deploy\b/.test(stripped)))) continue;
+    if (PREVIEWABLE_COMMANDS.has(pattern) &&
+      !splitTopLevel(stripped).some((s) => pattern.test(s) && !PREVIEW_FLAG_RE.test(s))) continue;
     if (pattern.test(stripped)) return "high_stakes";
   }
 
@@ -1069,6 +1111,7 @@ function classifyStageShellEffects(stage: string, ephemeralVars: Set<string> = n
   // global options, so the git patterns below and in the full scan apply.
   const gitTier = classifyGitGlobalOptsStage(stage, ephemeralVars);
   if (gitTier !== null) return gitTier;
+  if (isBuildOutputOnlyDeletion(stage.replace(DELETE_LEAD, ""))) return "warning";
   // rmdir removes only EMPTY folders (it fails on a folder with files), so no
   // data is lost and `mkdir` undoes it: a reversible local change.
   const deleteStage = stage.replace(DELETE_LEAD, "");
@@ -1090,6 +1133,7 @@ function classifyStageShellEffects(stage: string, ephemeralVars: Set<string> = n
   // Stopping a local dev server or a read-only watcher is review: it asks,
   // without Face ID.
   if (isRestartableKill(bareStage)) return "review";
+  if (/^railway\s/.test(bareStage) && PREVIEW_FLAG_RE.test(bareStage)) return "safe";
   for (const pattern of HIGH_STAKES_STAGE) {
     if (pattern.test(bareStage)) return "high_stakes";
   }

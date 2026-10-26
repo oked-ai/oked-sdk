@@ -11,7 +11,7 @@
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
-import { blankTextCommandArgs, classify, extractShellWriteOps, splitTopLevel, stripCodeHeredocBodies, stripInlineScriptBodies } from "./classify.js";
+import { blankTextCommandArgs, classify, classifyBashSteps, extractShellWriteOps, splitTopLevel, stripCodeHeredocBodies, stripInlineScriptBodies } from "./classify.js";
 import { TIER_ORDER } from "./degraded.js";
 
 const BODY_PREVIEW_MAX = 200;
@@ -165,7 +165,9 @@ function summarizeMutatingCurl(command: string): Rendered | null {
     /(?:^|\s)-X\s*(DELETE|POST|PUT|PATCH)\b|(?:^|\s)--request[=\s]+(DELETE|POST|PUT|PATCH)\b/i,
   );
   const method = (methodM?.[1] || methodM?.[2] || "POST").toUpperCase();
-  const url = cmd.match(/https?:\/\/[^\s'"]+/)?.[0] || "";
+  // In `$(curl … https://host/path)` the `)` closes the substitution, not the URL.
+  let url = cmd.match(/https?:\/\/[^\s'"]+/)?.[0] || "";
+  while (url.endsWith(")") && url.split("(").length < url.split(")").length) url = url.slice(0, -1);
   const host = url ? extractHost(url) : "URL";
   const kind: OperationKind =
     method === "DELETE" ? "http_delete" : method === "PUT" ? "http_put" : "http_post";
@@ -493,8 +495,9 @@ function summarizeBash(command: string, sizeBytes?: number, cwd?: string): Rende
 function summarizeCompoundBash(cmd: string, sizeBytes?: number, cwd?: string): Rendered | null {
   const steps = splitTopLevel(cmd, { pipes: false });
   if (steps.length < 2) return null;
-  const tiers = steps.map((s) => classify("Bash", { command: s }));
-  const rank = tiers.map((t) => TIER_ORDER[t]);
+  // Each step sees what earlier steps made (a temp file a later `rm` deletes),
+  // as the whole command does. Alone, that `rm` would outrank the real step.
+  const rank = classifyBashSteps(steps).map((t) => TIER_ORDER[t]);
   const top = Math.max(...rank);
   if (top < TIER_ORDER.review) return null;
   if (TIER_ORDER[classify("Bash", { command: cmd })] !== top) return null;

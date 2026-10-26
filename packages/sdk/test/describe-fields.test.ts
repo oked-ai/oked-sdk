@@ -290,6 +290,17 @@ describe("Bash — multi-file rm", () => {
     );
   });
 
+  it("a curl inside $( ) does not take the closing ) into the path", () => {
+    const cmd = "for i in 1 2; do c=$(curl -s -X DELETE https://api.example.com/api/v1/account); done";
+    assert.equal(describeFields("Bash", { command: cmd })!.Target, "/api/v1/account");
+    assert.equal(describeFields("Bash", { command: `curl -X DELETE "https://h.io/a(b)"` })!.Target, "/a(b)");
+  });
+
+  it("a release headlines over the notes file it reads and then deletes", () => {
+    const cmd = "sed -n 1p CHANGELOG.md > ../../n.md && gh release create v0.1.0 -R o/r --notes-file ../../n.md 2>&1 | tail -2; rm ../../n.md";
+    assert.equal(describeFields("Bash", { command: cmd })!.Title, "Create release v0.1.0 in o/r");
+  });
+
   it("loopback DELETE in a for-loop headlines the request", () => {
     const cmd = "for id in 1 2 3; do curl -s -X DELETE http://localhost:3997/api/tweet-drafts/$id; done";
     assert.equal(describeFields("Bash", { command: cmd })!.Title, "DELETE request to localhost");
@@ -591,7 +602,7 @@ describe("classify — shell write tier rules", () => {
   });
 
   it("rm -fr is high_stakes", () => {
-    const tier = classify("Bash", { command: "rm -fr ./dist" });
+    const tier = classify("Bash", { command: "rm -fr ./src" });
     assert.equal(tier, "high_stakes");
   });
 
