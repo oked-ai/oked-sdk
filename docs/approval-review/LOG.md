@@ -16,7 +16,7 @@ Built from `changes.jsonl` by `node scripts/approval-review/record.mjs log`. Do 
 | Body | git branch -D approval-review/2026-10-25T1014 | git branch -D approval-review/2026-10-25T1014 |
 | Kind | git_branch_delete | git_branch_delete |
 
-Seen 6× (✅ 6, ❌ 0) · Corpus: `2026-10-26-git-dash-c-branch-delete`
+Seen 6× (✅ 6, ❌ 0) · Corpus: `2026-10-26-git-dash-c-branch-delete` · PR: https://github.com/oked-ai/oked-sdk/pull/86
 
 ## 2026-10-19 · tier · `Bash`
 
