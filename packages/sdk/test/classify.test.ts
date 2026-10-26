@@ -1442,6 +1442,17 @@ describe("approval review 2026-10-18 (2 weeks of cards): false high stakes", () 
   });
 });
 
+describe("approval review 2026-10-19T1814: backslash escapes", () => {
+  it("an escaped quote or pipe in a grep pattern does not split the command", () => {
+    assert.equal(bash(`grep -n "a\\|describe(\\"\\|^describe(" x.ts | head; grep -n "^describe(\\|git branch -D\\|mktemp" y.ts | head`), "safe");
+    assert.equal(bash(`grep -n "say \\"hi\\"; git push --force" x.ts`), "safe");
+    // A real step after the quoted text keeps its tier.
+    assert.equal(bash(`grep -n "a\\|b" x.ts; git branch -D old`), "high_stakes");
+    // In single quotes a backslash is a plain character, so the quote still ends.
+    assert.equal(bash(`grep 'a\\' x.ts; git branch -D old`), "high_stakes");
+  });
+});
+
 describe("approval review 2026-10-18T1713: tiers", () => {
   it("a grep pattern piped to a reader is text, not a command", () => {
     assert.equal(bash(`cd /repo && grep -n "verify\\|workspace\\|npm publish" .github/workflows/publish.yml | head`), "safe");
