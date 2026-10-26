@@ -3,6 +3,21 @@
 Every change the approval review loop made to a card's tier, text or layout, newest first.
 Built from `changes.jsonl` by `node scripts/approval-review/record.mjs log`. Do not edit by hand.
 
+## 2026-10-26 · tier · `Bash`
+
+**Why:** The classifier did not see the git subcommand after global options such as -C dir or -c key=value. Thus git -C repo branch -D was safe, and git -C repo push --force was safe too. Now the classifier removes the global options and classifies the subcommand. The same branch delete without -C was already high_stakes, so the tier is now the same for both forms. A -c alias option can run a shell command, so it gets at least review. No card was denied.
+
+| | Before | After |
+|---|---|---|
+| Tier | 🟡 warning (logged, no card) | 🔴 high stakes (Face ID) |
+| Title | Delete local Git branch in oked-ai/oked-sdk | Delete local Git branch in oked-ai/oked-sdk |
+| Target | approval-review/2026-10-25T1014 | approval-review/2026-10-25T1014 |
+| Annotation | even if not merged | even if not merged |
+| Body | git branch -D approval-review/2026-10-25T1014 | git branch -D approval-review/2026-10-25T1014 |
+| Kind | git_branch_delete | git_branch_delete |
+
+Seen 6× (✅ 6, ❌ 0) · Corpus: `2026-10-26-git-dash-c-branch-delete` · PR: https://github.com/oked-ai/oked-sdk/pull/86
+
 ## 2026-10-19 · tier · `Bash`
 
 **Why:** The command splitter did not read backslash escapes. It ended a double-quoted grep pattern at an escaped quote and split on an escaped pipe. Thus the text git branch -D in a grep pattern became a separate step and the card was high_stakes. The command only reads files, so the tier is now safe. A real step after quoted text keeps its tier. The card was approved in 15 seconds.

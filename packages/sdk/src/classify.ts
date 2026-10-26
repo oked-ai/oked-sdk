@@ -816,6 +816,62 @@ function classifyEnvStage(stage: string): RiskTier | null {
   return "safe"; // `env` / `env -u X` with no command just prints the environment
 }
 
+// git global options that consume a following argument token (`-C dir`,
+// `-c key=value`, `--git-dir dir`, …). The `--opt=value` forms are one token.
+const GIT_GLOBAL_ARG_OPTS = new Set([
+  "-C", "-c", "--git-dir", "--work-tree", "--namespace", "--config-env", "--super-prefix",
+]);
+
+/**
+ * `git [global options] <subcommand> [args]`: global options such as `-C dir`,
+ * `-c key=value`, `--git-dir=…` and `--no-pager` come BEFORE the subcommand, so
+ * the `^git\s+push` / `^git\s+branch -D` patterns never saw them
+ * (`git -C repo push --force origin main` was safe). Strips the global options
+ * and classifies `git <subcommand> [args]` by the same rules. A `-c alias.*`
+ * can define a shell command, so it gets a `review` floor. Returns null if the
+ * stage is not a git call with global options.
+ */
+function classifyGitGlobalOptsStage(stage: string, ephemeralVars: Set<string>): RiskTier | null {
+  const lead = /^git[ \t]+(?=-)/.exec(stage);
+  if (!lead) return null;
+  const readToken = (from: number): number => {
+    let i = from;
+    let quote: '"' | "'" | null = null;
+    while (i < stage.length) {
+      const ch = stage[i];
+      if (quote) { if (ch === quote) quote = null; i++; continue; }
+      if (ch === '"' || ch === "'") { quote = ch; i++; continue; }
+      if (/\s/.test(ch)) break;
+      i++;
+    }
+    return i;
+  };
+  let floor: RiskTier = "safe";
+  let i = lead[0].length;
+  while (i < stage.length) {
+    while (i < stage.length && /\s/.test(stage[i])) i++;
+    if (i >= stage.length) break;
+    const start = i;
+    i = readToken(i);
+    const tok = stage.slice(start, i);
+    if (!tok.startsWith("-")) {
+      const inner = classifyBashCommand(`git ${stage.slice(start).trim()}`, ephemeralVars);
+      return maxTier(floor, inner);
+    }
+    let value = "";
+    if (GIT_GLOBAL_ARG_OPTS.has(tok)) {
+      while (i < stage.length && /\s/.test(stage[i])) i++;
+      const vStart = i;
+      i = readToken(i);
+      value = unquote(stage.slice(vStart, i));
+    } else if (tok.startsWith("-c") && tok.length > 2) {
+      value = unquote(tok.slice(2));                          // `-ckey=value`
+    }
+    if ((tok === "-c" || tok.startsWith("-c")) && /^alias\./i.test(value)) floor = "review";
+  }
+  return floor; // `git -C dir` with no subcommand prints help
+}
+
 // ssh options that consume a following argument token (the rest are flags).
 const SSH_ARG_OPTS = new Set([
   "-b", "-c", "-D", "-E", "-e", "-F", "-I", "-i", "-J", "-L", "-l", "-m",
@@ -1009,6 +1065,10 @@ function classifyStageShellEffects(stage: string, ephemeralVars: Set<string> = n
   // A delete word sitting in an argument (filename, branch name, echo text) is
   // NOT a deletion — that's the false positive DELETE_COMMAND_RE avoids.
   if (isEphemeralOnlyDeletion(stage, ephemeralVars)) return "warning";
+  // `git -C repo …` / `git -c k=v …`: classify the subcommand without the
+  // global options, so the git patterns below and in the full scan apply.
+  const gitTier = classifyGitGlobalOptsStage(stage, ephemeralVars);
+  if (gitTier !== null) return gitTier;
   // rmdir removes only EMPTY folders (it fails on a folder with files), so no
   // data is lost and `mkdir` undoes it: a reversible local change.
   const deleteStage = stage.replace(DELETE_LEAD, "");

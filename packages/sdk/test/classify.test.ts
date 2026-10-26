@@ -252,6 +252,32 @@ describe("git push: plain → warning, force → high_stakes", () => {
   });
 });
 
+describe("git global options (-C, -c, --git-dir) do not hide the subcommand", () => {
+  it("git -C repo branch -D → high_stakes (was safe)", () => {
+    assert.equal(bash("git -C /Users/oren/Dev/OKed/oked-sdk branch -D approval-review/2026-10-26T0146"), "high_stakes");
+    assert.equal(bash(`git -C "/a b" branch -D foo`), "high_stakes");
+  });
+
+  it("destructive git with global options → high_stakes", () => {
+    assert.equal(bash("git -C /r push --force origin main"), "high_stakes");
+    assert.equal(bash("git -c user.name=x push -f origin main"), "high_stakes");
+    assert.equal(bash("git --git-dir=/r/.git reset --hard HEAD~1"), "high_stakes");
+    assert.equal(bash("git -C /r clean -fdx"), "high_stakes");
+    assert.equal(bash("git -C /r push origin --delete feat"), "high_stakes");
+  });
+
+  it("the same tier as without the options for other subcommands", () => {
+    assert.equal(bash("git -C /r push origin main"), "warning");
+    assert.equal(bash("git -C /r commit -m x"), "warning");
+    assert.equal(bash("git -C /r status"), "safe");
+    assert.equal(bash("git --no-pager log --oneline -3"), "safe");
+  });
+
+  it("-c alias.* can run a shell command → review floor", () => {
+    assert.equal(bash(`git -c alias.x="!rm -rf /" x`), "review");
+  });
+});
+
 describe("himalaya email CLI - read ops safe, send review, delete high_stakes", () => {
   it("envelope list -> safe", () => {
     assert.equal(bash("himalaya envelope list"), "safe");
