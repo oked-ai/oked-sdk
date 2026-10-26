@@ -807,6 +807,21 @@ describe("rm of ephemeral temp files → warning", () => {
   });
 });
 
+describe("rm of build output → warning", () => {
+  it("rm -rf of folders the next build makes again → warning", () => {
+    assert.equal(bash("rm -rf build/OKed.xcarchive build/upload"), "warning");
+    assert.equal(bash("rm -rf ./dist"), "warning");
+    assert.equal(bash("cd app && rm -rf .next"), "warning");
+  });
+
+  it("a build path that can point anywhere stays high_stakes", () => {
+    assert.equal(bash("rm -rf build/../src"), "high_stakes");
+    assert.equal(bash("rm -rf /build"), "high_stakes");
+    assert.equal(bash("rm -rf $X/build"), "high_stakes");
+    assert.equal(bash("rm -rf build src"), "high_stakes");
+  });
+});
+
 describe("heredoc consumer awareness (data vs interpreter)", () => {
   it("gh pr create body mentioning SQL words → warning, not SQL", () => {
     const cmd = [
@@ -1367,6 +1382,15 @@ describe("GitHub CLI and Railway", () => {
     assert.equal(bash("railway logs"), "safe");
     assert.equal(bash("railway status"), "safe");
   });
+
+  it("help and dry runs of a deploy or a publish are safe", () => {
+    assert.equal(bash("railway up --help"), "safe");
+    assert.equal(bash("npx -y wrangler@4 deploy --dry-run --outdir /tmp/d"), "safe");
+    assert.equal(bash("npm publish --dry-run"), "safe");
+    assert.equal(bash("npm publish --dry-run=false"), "high_stakes");
+    assert.equal(bash("npx wrangler deploy"), "high_stakes");
+    assert.equal(bash("cd pkg && npm publish --dry-run && npm publish"), "high_stakes");
+  });
 });
 
 describe("desktop app turn and session tools", () => {
@@ -1499,7 +1523,7 @@ describe("approval review 2026-10-18T1713: tiers", () => {
 
   it("a redirect after a temp delete is not a target", () => {
     assert.equal(bash(`T=$(mktemp -d); rm -rf "$T" 2>/dev/null`), "warning");
-    assert.equal(bash(`rm -rf build 2>/dev/null`), "high_stakes");
+    assert.equal(bash(`rm -rf src 2>/dev/null`), "high_stakes");
   });
 });
 
