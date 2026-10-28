@@ -123,9 +123,39 @@ try {
     assert.equal(user.hooks.PreToolUse[0].hooks[0].timeout, 690);
     passed++;
   }
+
+  // 5. The pairing QR code: the right size and fixed patterns, and only in a terminal.
+  {
+    const { encodeQR, renderQR } = await import("../dist/qr.js");
+    const url = "https://oked.ai/pair?code=ABCD-EF23";
+    const m = encodeQR(url);
+    assert.equal(m.length, 29, "a pairing link fits version 3");
+    const finderRow = [true, true, true, true, true, true, true, false];
+    assert.deepEqual(m[0].slice(0, 8), finderRow, "top-left finder");
+    assert.deepEqual(m[0].slice(-7), finderRow.slice(0, 7), "top-right finder");
+    assert.equal(m[m.length - 8][8], true, "the dark module");
+    for (let i = 8; i < m.length - 8; i++) assert.equal(m[6][i], i % 2 === 0, "timing pattern");
+    // Format bits (top-left copy) must be a valid level M word.
+    let bits = 0;
+    for (let i = 0; i <= 5; i++) bits |= (m[i][8] ? 1 : 0) << i;
+    bits |= (m[7][8] ? 1 : 0) << 6;
+    bits |= (m[8][8] ? 1 : 0) << 7;
+    bits |= (m[8][7] ? 1 : 0) << 8;
+    for (let i = 9; i < 15; i++) bits |= (m[8][14 - i] ? 1 : 0) << i;
+    const data = (bits ^ 0x5412) >>> 10;
+    assert.equal(data >>> 3, 0, "error correction level M");
+    assert.throws(() => encodeQR("x".repeat(300)), /too long/);
+    const lines = renderQR(url).split("\n");
+    assert.equal(lines.length, 17, "two modules per line, with a 2-module quiet zone");
+    assert.ok(lines.every((l) => l.includes("\x1b[30;107m")), "black on white");
+    // The CLI runs here without a terminal, so it prints no QR code.
+    const { out } = await runCli(["init", "--key-only"]);
+    assert.doesNotMatch(out, /scan this/i);
+    passed++;
+  }
 } finally {
   server.close();
   rmSync(root, { recursive: true, force: true });
 }
 
-console.log(`ok - @oked/claude-code cli: ${passed}/4 passed`);
+console.log(`ok - @oked/claude-code cli: ${passed}/5 passed`);
