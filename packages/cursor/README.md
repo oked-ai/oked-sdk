@@ -3,7 +3,7 @@
 [![npm version](https://img.shields.io/npm/v/@oked/cursor.svg)](https://www.npmjs.com/package/@oked/cursor)
 [![License: Apache-2.0](https://img.shields.io/npm/l/@oked/cursor.svg)](./LICENSE)
 
-Cursor agent hook. Sensitive actions wait for a person in Telegram or on the [web dashboard](https://oked.ai/dashboard?ref=github-cursor) before Cursor continues. The iPhone app is coming soon. Questions: [contact@oked.ai](mailto:contact@oked.ai).
+Cursor agent hook. Sensitive actions wait for a person in Telegram or on the [web dashboard](https://oked.ai/dashboard) before Cursor continues. The iPhone app is coming soon. Questions: [contact@oked.ai](mailto:contact@oked.ai).
 
 Safe actions are allowed by the hook, with no notification. Warning actions are allowed and logged. OKed asks only for `review` and `high_stakes`.
 
@@ -118,7 +118,7 @@ Init never deletes the Claude hook. `oked uninstall` from `@oked/claude-code` re
 
 Every decision comes with a receipt signed by OKed. The hook verifies it before allowing the action and keeps a copy in `~/.oked/receipts.jsonl`. Since 0.6.0 the hook denies an approval that has no valid receipt. Set `OKED_REQUIRE_RECEIPT=0` only for a backend that does not sign receipts.
 
-You can paste one receipt at [oked.ai/docs/#verify](https://oked.ai/docs?ref=github-cursor#verify), or check an export with `npx @oked/verify`. See [docs/receipts.md](../../docs/receipts.md).
+You can paste one receipt at [oked.ai/docs/#verify](https://oked.ai/docs#verify), or check an export with `npx @oked/verify`. See [docs/receipts.md](../../docs/receipts.md).
 
 ## Degraded-mode behavior
 

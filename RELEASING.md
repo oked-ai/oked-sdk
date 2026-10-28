@@ -25,18 +25,9 @@ cd packages/<name> && npm publish --access public
 
 Then add the Trusted Publisher on npmjs (same fields as above) and list the package in the `publish.yml` matrix. From the next tag on, CI publishes it with the others. A tag pushed before the manual publish fails that package's job (`ENEEDAUTH`) while the rest publish.
 
-### Not on npm yet
+### On npm
 
-These packages are already in `publish.yml` and still need that first manual publish, then a Trusted Publisher, before a tag can publish them:
-
-| Package | Directory |
-|---|---|
-| `@oked/hook-core` | `packages/hook-core` |
-| `@oked/codex` | `packages/codex` |
-| `@oked/cursor` | `packages/cursor` |
-| `@oked/copilot` | `packages/copilot` |
-
-Do not publish them from a pull request. After the Trusted Publisher exists, the next `vX.Y.Z` tag publishes them with the rest.
+All eleven packages are on npm. Each one has a Trusted Publisher: organization `oked-ai`, repository `oked-sdk`, workflow `publish.yml`. A `vX.Y.Z` tag publishes all of them. A package that does not exist on npm yet still needs the manual first publish above, then a Trusted Publisher, before a tag can publish it. Do not publish from a pull request.
 
 ### Why the workflow publishes one package per job
 

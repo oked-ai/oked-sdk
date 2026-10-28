@@ -1,6 +1,6 @@
 # Docs
 
-Decisions are made in Telegram and on the [web dashboard](https://oked.ai/dashboard?ref=github-oked-sdk). The iPhone app is coming soon. Contact is [contact@oked.ai](mailto:contact@oked.ai).
+Decisions are made in Telegram and on the [web dashboard](https://oked.ai/dashboard). The iPhone app is coming soon. Contact is [contact@oked.ai](mailto:contact@oked.ai).
 
 | Doc | What it covers |
 |---|---|

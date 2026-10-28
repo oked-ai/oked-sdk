@@ -1,17 +1,17 @@
 # Contributing
 
-Questions and security reports go to [contact@oked.ai](mailto:contact@oked.ai). Do not send vulnerability reports to a personal address. The iPhone app is coming soon. People decide in Telegram and on the [web dashboard](https://oked.ai/dashboard?ref=github-oked-sdk).
+Questions and security reports go to [contact@oked.ai](mailto:contact@oked.ai). Do not send vulnerability reports to a personal address. The iPhone app is coming soon. People decide in Telegram and on the [web dashboard](https://oked.ai/dashboard).
 
 ## Layout
 
 | Path | What it is |
 |---|---|
 | [packages/sdk](./packages/sdk) | `OKedClient.approve()` and the classifier |
-| [packages/hook-core](./packages/hook-core) | Shared hook gate. Host packages call `decide()` |
+| [packages/hook-core](./packages/hook-core) | Shared hook gate. `npm install @oked/hook-core`. Host packages call `decide()` |
 | [packages/claude-code](./packages/claude-code) | Claude Code `PreToolUse` hook. `oked init` |
-| [packages/codex](./packages/codex) | Codex CLI hook. `npx oked-codex init` |
-| [packages/cursor](./packages/cursor) | Cursor hook. `oked-cursor init` |
-| [packages/copilot](./packages/copilot) | Copilot CLI and VS Code hook. `oked-copilot init` |
+| [packages/codex](./packages/codex) | Codex CLI hook. `npm install -g @oked/codex`, then `oked-codex init` |
+| [packages/cursor](./packages/cursor) | Cursor hook. `npm install -g @oked/cursor`, then `oked-cursor init` |
+| [packages/copilot](./packages/copilot) | Copilot CLI and VS Code hook. `npm install -g @oked/copilot`, then `oked-copilot init` |
 | [packages/claude-agent-sdk](./packages/claude-agent-sdk) | Programmatic hook for the Claude Agent SDK |
 | [packages/openclaw](./packages/openclaw) | OpenClaw plugin |
 | [packages/receipt-core](./packages/receipt-core) | Receipt format |
@@ -38,7 +38,7 @@ Do not use an em dash in docs or in user-facing copy.
 
 ## A new host package
 
-Match the existing packages: `package.json` name `@oked/<host>`, version locked to the rest, `engines.node` `>=18`, `license` `Apache-2.0`, `publishConfig.access` `public`, `files` limited to what ships, `repository.directory` set, `bugs` pointing at this repo's issues, `homepage` `https://oked.ai?ref=github-<host>`. Keywords include `oked`, `ai-agent`, `approval`, `human-in-the-loop`, and `hooks`.
+Match the existing packages: `package.json` name `@oked/<host>`, version locked to the rest, `engines.node` `>=18`, `license` `Apache-2.0`, `publishConfig.access` `public`, `files` limited to what ships, `repository.directory` set, `bugs` pointing at this repo's issues, `homepage` `https://oked.ai`. Keywords include `oked`, `ai-agent`, `approval`, `human-in-the-loop`, and `hooks`.
 
 The hook binary calls `decide()` from `@oked/hook-core`. Set the host timeout to `HOOK_TIMEOUT_SECONDS` (690) when the host allows it. Unknown tool names require approval. An unpaired device denies, with `Pair first: run <command> init`, except Claude Code, which still returns `ask`.
 
