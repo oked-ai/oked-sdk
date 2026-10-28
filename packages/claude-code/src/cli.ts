@@ -201,7 +201,8 @@ async function pair(clientType: "claude-code" | "openclaw" | "sdk"): Promise<str
   }
   console.log(`    ${code.verification_uri_complete}`);
   console.log("");
-  console.log(`  (Or visit ${code.verification_uri} and enter the code above.)`);
+  console.log(`  (Or visit ${code.verification_uri} and enter the code above,`);
+  console.log("  or enter it in the OKed app on your iPhone.)");
   console.log("");
   console.log("  Waiting for confirmation...");
 
