@@ -9,7 +9,7 @@
 import { existsSync, readFileSync, writeFileSync } from "fs";
 import { homedir } from "os";
 import { join } from "path";
-import { DEFAULT_APPROVAL_TIMEOUT_MS } from "@oked/sdk";
+import { HOOK_TIMEOUT_SECONDS } from "@oked/hook-core";
 
 export const MCP_TOOL_MATCHER = "mcp__.*";
 export const DEFAULT_TOOL_MATCHER = `Bash|Write|Edit|Agent|${MCP_TOOL_MATCHER}`;
@@ -26,8 +26,9 @@ export const DEFAULT_TOOL_MATCHER = `Bash|Write|Edit|Agent|${MCP_TOOL_MATCHER}`;
  *
  * Claude Code imposes no ceiling of its own: the field is validated as any
  * positive number of seconds, and defaults to 600 when absent.
+ * The number itself lives in `@oked/hook-core` so every host uses the same 690.
  */
-export const HOOK_TIMEOUT_SECONDS = DEFAULT_APPROVAL_TIMEOUT_MS / 1000 + 60;
+export { HOOK_TIMEOUT_SECONDS };
 
 export const HOOK_CONFIG = {
   matcher: DEFAULT_TOOL_MATCHER,

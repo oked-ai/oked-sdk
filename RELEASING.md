@@ -1,6 +1,6 @@
 # Releasing
 
-All `@oked/*` packages are versioned in lockstep. They share one version number and are published together. There are seven: `sdk`, `claude-code`, `claude-agent-sdk`, `openclaw`, `openclaw-cli`, `receipt-core`, and `verify`.
+All `@oked/*` packages are versioned in lockstep. They share one version number and are published together. There are eight: `sdk`, `hook-core`, `claude-code`, `claude-agent-sdk`, `openclaw`, `openclaw-cli`, `receipt-core`, and `verify`.
 
 Releases are cut by hand with a git tag. Pushing a `vX.Y.Z` tag runs `.github/workflows/publish.yml`, which publishes every package with npm's OIDC trusted publishing (the workflow has `id-token: write` and stores no npm token).
 
@@ -52,7 +52,7 @@ Then add the Trusted Publisher on npmjs (same fields as above) and list the pack
    git tag vX.Y.Z
    git push origin main --tags
    ```
-6. Watch the `Publish` workflow. When it is green, all seven packages show the new version on npm.
+6. Watch the `Publish` workflow. When it is green, all eight packages show the new version on npm.
 
 ### Release channels (dist-tags)
 
@@ -70,7 +70,7 @@ npm dist-tag add @oked/sdk@0.2.0 latest   # repeat per package
 ## Verifying a release
 
 ```bash
-npm view @oked/sdk version          # should equal X.Y.Z (repeat for the other six)
+npm view @oked/sdk version          # should equal X.Y.Z (repeat for the other seven)
 npx -y @oked/claude-code@X.Y.Z --help
 ```
 

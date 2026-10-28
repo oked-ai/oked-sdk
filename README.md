@@ -87,6 +87,7 @@ All `@oked/*` packages share one version and are published together. Node.js 18 
 | Package | Purpose |
 |---|---|
 | [`@oked/sdk`](./packages/sdk) | `OKedClient.approve()`, the tier classifier, and action descriptions. Call it from any Node.js agent. |
+| [`@oked/hook-core`](./packages/hook-core) | Shared approval gate for host hooks: classify, wait, check the receipt, fail closed. Host packages call it. It is not installed on its own. |
 | [`@oked/claude-code`](./packages/claude-code) | Claude Code hook. `oked init` writes `oked-hook` into `.claude/settings.json`. |
 | [`@oked/claude-agent-sdk`](./packages/claude-agent-sdk) | `PreToolUse` hook for the Claude Agent SDK. Pass it in `options.hooks`. |
 | [`@oked/openclaw`](./packages/openclaw) | OpenClaw plugin. `before_tool_call` classifies every tool the host reports. |

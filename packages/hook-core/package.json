@@ -1,0 +1,54 @@
+{
+  "name": "@oked/hook-core",
+  "version": "0.6.21",
+  "description": "Shared OKed approval gate for coding-agent hooks. Builds the request, waits for a decision, checks the receipt, and fails closed.",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "prebuild": "npm run build --workspace=@oked/sdk",
+    "build": "tsc",
+    "test": "npm run build && node src/core.test.mjs",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "oked",
+    "approval",
+    "hook",
+    "agents"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/oked-ai/oked-sdk.git",
+    "directory": "packages/hook-core"
+  },
+  "bugs": {
+    "url": "https://github.com/oked-ai/oked-sdk/issues"
+  },
+  "homepage": "https://github.com/oked-ai/oked-sdk/tree/main/packages/hook-core#readme",
+  "license": "Apache-2.0",
+  "engines": {
+    "node": ">=18"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "@oked/sdk": "0.6.21"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.10",
+    "typescript": "^5.6.0"
+  }
+}
