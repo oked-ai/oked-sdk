@@ -20,7 +20,7 @@ oked-openclaw init
 2. Runs `openclaw plugins install --link <path>`.
 3. Reuses `OKED_API_KEY` or an existing `plugins.entries.oked.apiKey`. Otherwise it pairs this device in the browser and saves the key to `~/.oked/config.json`. It does not ask you to paste a key.
 4. Keeps `OKED_MIN_TIER` or an existing `minTier` when one is set. Otherwise a terminal asks (default `review`), and a non-interactive run uses `review`. Accepted values are `safe`, `warning`, `review`, and `high_stakes`.
-5. Adds `"oked"` to `plugins.allow` and writes `plugins.entries.oked` with `enabled`, `apiKey`, `backendUrl`, and `minTier`. Existing keys on that entry are kept.
+5. Adds `"oked"` to `plugins.allow` and writes `plugins.entries.oked` with `enabled`, `apiKey`, and `minTier`. Existing keys on that entry are kept.
 6. Looks for a running gateway (systemd user or system, pm2, launchd, or a bare process) and asks before restarting it.
 
 ## Subcommands

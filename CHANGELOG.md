@@ -6,6 +6,10 @@ Decisions are made in Telegram and on the [web dashboard](https://oked.ai/dashbo
 
 ## Unreleased
 
+### Docs
+
+- Public docs no longer document the backend URL override, either as an environment variable or as a config option. OKed is hosted only at `api.oked.ai`. Code behavior is unchanged.
+
 ### @oked/hook-core
 
 - New package, on npm (`npm install @oked/hook-core`). `decide()` classifies a tool call, waits for a person, checks the signed receipt, and fails closed. `HOOK_TIMEOUT_SECONDS` is 690, which is 60 seconds above the SDK wait of 630. There is no init command.

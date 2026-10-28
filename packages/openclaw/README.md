@@ -32,7 +32,6 @@ Then in `~/.openclaw/openclaw.json`:
       "oked": {
         "enabled": true,
         "apiKey": "ok_...",
-        "backendUrl": "https://api.oked.ai",
         "minTier": "review"
       }
     }
@@ -44,12 +43,11 @@ Restart the OpenClaw gateway after a manual edit. [Sign up](https://oked.ai/sign
 
 ## Configuration
 
-Keys live under `plugins.entries.oked`. The plugin manifest sets `additionalProperties: false`, so only the keys in the table are accepted in `openclaw.json`. `OKED_STRICT_FAIL_CLOSED` is read from the environment, not from this object.
+Keys live under `plugins.entries.oked`. The plugin manifest sets `additionalProperties: false`, so unknown keys are rejected. `OKED_STRICT_FAIL_CLOSED` is read from the environment, not from this object.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
 | `apiKey` | `string` | `OKED_API_KEY` env | OKed API key. Required. With no key, sensitive calls are denied. |
-| `backendUrl` | `string` | `https://api.oked.ai` | Backend URL. |
 | `minTier` | `"safe" \| "warning" \| "review" \| "high_stakes"` | `"review"` | Lowest tier that can ask for approval. `warning` never blocks: only `review` and `high_stakes` do. Env `OKED_MIN_TIER` is the fallback when the config value is absent. |
 | `alwaysApprove` | `string[]` | `[]` | Tool names that are always `high_stakes`, whatever the classifier says. |
 | `alwaysAllow` | `string[]` | `[]` | Tool names that are always `safe`. Use sparingly. |
