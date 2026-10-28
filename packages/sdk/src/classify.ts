@@ -473,13 +473,18 @@ function vercelTier(args: string[]): RiskTier {
 
 /** Tier of a single stage that runs a cloud CLI, or null for any other stage. */
 function classifyCloudCliStage(stage: string): RiskTier | null {
-  const args = splitArgs(stage.replace(CLI_RUNNER_RE, ""));
+  // The same wrappers the delete scan strips (`xargs kubectl delete`, `do aws
+  // s3 rb …`, `time terraform apply`), then a package runner.
+  const args = splitArgs(stage.replace(DELETE_LEAD, "").replace(CLI_RUNNER_RE, ""));
   const tool = (args.shift() ?? "").replace(/^.*\//, "").replace(/(?<=.)@.*$/, "");
   const known = ["aws", "kubectl", "helm", "terraform", "tofu", "terragrunt", "pulumi", "cdk", "serverless",
     "sls", "gcloud", "gsutil", "az", "doctl", "eksctl", "vercel", "netlify", "fly", "flyctl", "heroku",
     "wrangler", "firebase", "stripe"];
   if (!known.includes(tool)) return null;
-  if (args.some((a) => CLI_PREVIEW_ARG_RE.test(a))) return "safe";
+  // Arguments after `--` belong to another command (`kubectl exec pod -- x
+  // --help`), so a `--help` there does not make this one a preview.
+  const sep = args.indexOf("--");
+  if ((sep === -1 ? args : args.slice(0, sep)).some((a) => CLI_PREVIEW_ARG_RE.test(a))) return "safe";
   const pos = cliPositionals(args);
   if (pos[0] === "help") return "safe";
   const has = (re: RegExp) => args.some((a) => re.test(a));
@@ -1332,8 +1337,14 @@ function classifyBashCommand(command: string, ephemeralVars: Set<string> = new S
  * Shell-effect classification of a SINGLE, already-body-stripped stage. No SQL
  * detection here — that runs on the body-intact view in classifyBashCommand and
  * is folded in by the caller. Returns the stage's tier (default `safe`).
+ * A cloud CLI tier is a floor: it never lowers what the other detectors find
+ * (`kubectl exec pod -- curl -X DELETE …` stays high_stakes).
  */
 function classifyStageShellEffects(stage: string, ephemeralVars: Set<string> = new Set()): RiskTier {
+  return maxTier(classifyCloudCliStage(stage) ?? "safe", classifyStageEffects(stage, ephemeralVars));
+}
+
+function classifyStageEffects(stage: string, ephemeralVars: Set<string>): RiskTier {
   // File deletion in COMMAND POSITION, per-stage so the ephemeral-temp carve-out
   // can win: deleting only throwaway temp files (/tmp, $TMPDIR, /var/folders, …)
   // → warning; any non-temp target (or the temp root itself) → high_stakes.
@@ -1370,9 +1381,6 @@ function classifyStageShellEffects(stage: string, ephemeralVars: Set<string> = n
   for (const pattern of HIGH_STAKES_STAGE) {
     if (pattern.test(bareStage)) return "high_stakes";
   }
-  // A cloud CLI read falls through, so a `> file` redirect is still logged.
-  const cloudTier = classifyCloudCliStage(bareStage);
-  if (cloudTier !== null && cloudTier !== "safe") return cloudTier;
 
   // curl with a mutating method or request body → review, or high_stakes for a
   // DELETE, a file upload or a pay/send API. Scanned per-stage (not on the full

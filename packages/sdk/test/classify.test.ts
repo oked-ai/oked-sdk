@@ -1697,4 +1697,24 @@ describe("cloud, cluster, infrastructure, deploy and payment CLIs", () => {
     assert.equal(bash(`echo "kubectl delete namespace staging"`), "safe");
     assert.equal(bash("grep -rn 'aws s3 rm' docs"), "safe");
   });
+
+  it("a cloud tier never lowers what the other detectors find", () => {
+    assert.equal(bash("kubectl exec pod -- curl -X DELETE https://api.x/1"), "high_stakes");
+    assert.equal(bash("gcloud compute ssh vm1 -- curl -X DELETE https://api.x/1"), "high_stakes");
+    assert.equal(bash("kubectl get pods -o yaml > pods.yaml"), "warning");
+  });
+
+  it("a wrapper in front of the CLI does not hide it", () => {
+    assert.equal(bash("kubectl get pods -o name | xargs kubectl delete"), "high_stakes");
+    assert.equal(bash("xargs -n1 kubectl delete pod < pods.txt"), "high_stakes");
+    assert.equal(bash("for b in a c; do aws s3 rb s3://$b --force; done"), "high_stakes");
+    assert.equal(bash("time terraform apply -auto-approve"), "high_stakes");
+    assert.equal(bash("sudo kubectl delete ns prod"), "high_stakes");
+  });
+
+  it("a --help after a -- separator belongs to the other command", () => {
+    assert.equal(bash("kubectl delete ns prod -- --help"), "high_stakes");
+    assert.equal(bash("kubectl exec -it web-1 -- sh --dry-run"), "review");
+    assert.equal(bash("kubectl delete ns prod --help"), "safe");
+  });
 });
