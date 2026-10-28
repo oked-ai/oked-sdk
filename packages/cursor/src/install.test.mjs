@@ -20,12 +20,13 @@ mkdirSync(process.env.CLAUDE_CONFIG_DIR, { recursive: true });
 try {
   const first = upsertCursorHooks({});
   assert.equal(first.changed, true);
-  assert.equal(first.doc.version, 1);
-  const hook = first.doc.hooks.preToolUse[0];
-  assert.equal(hook.command, "oked-cursor-hook");
-  assert.equal(hook.timeout, HOOK_TIMEOUT_SECONDS);
-  assert.equal(hook.timeout, 690);
-  assert.equal(hook.failClosed, true);
+  assert.deepEqual(first.doc, {
+    version: 1,
+    hooks: {
+      preToolUse: [{ command: "oked-cursor-hook", timeout: 690, failClosed: true }],
+    },
+  });
+  assert.equal(first.doc.hooks.preToolUse[0].timeout, HOOK_TIMEOUT_SECONDS);
   assert.equal(upsertCursorHooks(first.doc).changed, false);
   passed++;
 
@@ -65,10 +66,15 @@ try {
   const installed = installCursorHook(project);
   assert.equal(installed.action, "installed");
   assert.equal(cursorHookInstalled(project), true);
-  const raw = JSON.parse(readFileSync(installed.path, "utf8"));
-  assert.equal(raw.hooks.preToolUse[0].timeout, 690);
-  assert.equal(raw.hooks.preToolUse[0].failClosed, true);
+  const rawText = readFileSync(installed.path, "utf8");
+  assert.deepEqual(JSON.parse(rawText), {
+    version: 1,
+    hooks: {
+      preToolUse: [{ command: "oked-cursor-hook", timeout: 690, failClosed: true }],
+    },
+  });
   assert.equal(installCursorHook(project).action, "unchanged");
+  assert.equal(readFileSync(installed.path, "utf8"), rawText, "a second init does not rewrite an up-to-date file");
   writeFileSync(installed.path, "{");
   assert.equal(installCursorHook(project).action, "unreadable");
   assert.equal(readFileSync(installed.path, "utf8"), "{");

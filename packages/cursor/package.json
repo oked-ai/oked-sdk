@@ -10,7 +10,7 @@
   "scripts": {
     "prebuild": "npm run build --workspace=@oked/hook-core",
     "build": "tsc",
-    "test": "npm run build && node src/map.test.mjs && node src/install.test.mjs && node src/hook.test.mjs",
+    "test": "npm run build && node src/map.test.mjs && node src/install.test.mjs && node src/hook.test.mjs && node src/fixture.test.mjs",
     "prepublishOnly": "npm run build"
   },
   "files": [
@@ -20,11 +20,12 @@
     "LICENSE"
   ],
   "keywords": [
+    "oked",
     "cursor",
+    "ai-agent",
     "approval",
-    "hook",
-    "agents",
-    "oked"
+    "human-in-the-loop",
+    "hooks"
   ],
   "repository": {
     "type": "git",
@@ -34,7 +35,7 @@
   "bugs": {
     "url": "https://github.com/oked-ai/oked-sdk/issues"
   },
-  "homepage": "https://github.com/oked-ai/oked-sdk/tree/main/packages/cursor#readme",
+  "homepage": "https://oked.ai?ref=github-cursor",
   "license": "Apache-2.0",
   "engines": {
     "node": ">=18"

@@ -6,8 +6,8 @@
 </p>
 
 <p align="center">
-  <a href="https://oked.ai">oked.ai</a> &middot;
-  <a href="https://oked.ai/docs">Docs</a> &middot;
+  <a href="https://oked.ai?ref=github-oked-sdk">oked.ai</a> &middot;
+  <a href="https://oked.ai/docs?ref=github-oked-sdk">Docs</a> &middot;
   <a href="#quick-start">Quick start</a> &middot;
   <a href="#packages">Packages</a> &middot;
   <a href="#receipts">Receipts</a>
@@ -29,22 +29,22 @@
 
 ## What it does
 
-OKed is an approval layer for AI coding agents ([oked.ai](https://oked.ai)). Before a risky tool call runs, OKed shows it to a person. Approve, and the action continues. Deny, or let the 10 minute window expire, and the action does not run.
+OKed is an approval layer for AI coding agents ([oked.ai](https://oked.ai?ref=github-oked-sdk)). Before a risky tool call runs, OKed shows it to a person. Approve, and the action continues. Deny, or let the 10 minute window expire, and the action does not run.
 
-Decisions are made in **Telegram** and on the **[web dashboard](https://oked.ai/dashboard)**. You can use either or both. Web push is an optional notification for the dashboard. The iPhone app is coming soon.
+Decisions are made in **Telegram** and on the **[web dashboard](https://oked.ai/dashboard?ref=github-oked-sdk)**. You can use either or both. Web push is an optional notification for the dashboard. The iPhone app is coming soon. Questions: [contact@oked.ai](mailto:contact@oked.ai).
 
 Classification looks at the kind of effect, not the command name, and it runs on your machine. Reads and other actions with no detected side effect are `safe` and run with no notification. Reversible local changes are `warning`: they run, and the terminal logs them. Destructive, irreversible, or outward-facing actions are `review` or `high_stakes` and wait for a person.
 
-The Claude Code integration is a `PreToolUse` hook (`oked-hook`) in its own process. Changing Claude's permission mode does not remove that hook. `@oked/sdk` and the other libraries run inside the process that calls them.
+The Claude Code integration is a `PreToolUse` hook (`oked-hook`) in its own process. Changing Claude's permission mode does not remove that hook. The gate inside that process is [`@oked/hook-core`](./packages/hook-core). Claude Code's allow, deny, and unpaired `ask` behavior is unchanged. `@oked/sdk` and the other libraries run inside the process that calls them.
 
 ## Quick start
 
-[Sign up](https://oked.ai/signup), then link Telegram or open the [dashboard](https://oked.ai/dashboard). That is where approvals show up.
+[Sign up](https://oked.ai/signup?ref=github-oked-sdk), then link Telegram or open the [dashboard](https://oked.ai/dashboard?ref=github-oked-sdk). That is where approvals show up.
 
 | Agent | Install |
 |---|---|
 | **Claude Code** | `npm install -g @oked/claude-code`, then `oked init` |
-| **Codex CLI** | `npm install -g @oked/codex`, then `oked-codex init`. In Codex, run `/hooks` and trust the hook. See the [package README](./packages/codex). |
+| **Codex CLI** | `npm install -g @oked/codex`, then `npx oked-codex init`. In Codex, run `/hooks` and trust the hook. See the [package README](./packages/codex). |
 | **Cursor** | `npm install -g @oked/cursor`, then `oked-cursor init`. See the [package README](./packages/cursor). |
 | **GitHub Copilot** | `npm install -g @oked/copilot`, then `oked-copilot init`. CLI and VS Code. See the [package README](./packages/copilot). |
 | **Claude Agent SDK** | `npm install @oked/claude-agent-sdk`, then pass `okedHooks()` in `options.hooks`. See the [package README](./packages/claude-agent-sdk). |
@@ -80,11 +80,11 @@ An explicit denial is final. An invalid API key, a receipt that does not verify,
 
 If the backend is unreachable, OKed denies `high_stakes` and, by default, allows lower tiers. Set `OKED_STRICT_FAIL_CLOSED=1` (or `strictFailClosed: true`) to deny every sensitive action during an outage. HTTP 429 (too many approvals already waiting) is not an outage: the action is denied until those are decided in Telegram or on the dashboard.
 
-On Claude Code, a device that is not paired returns `ask`, so Claude's own permission prompt can decide. The OpenClaw plugin denies sensitive calls when no API key is set.
+On Claude Code, a device that is not paired returns `ask`, so Claude's own permission prompt can decide. Codex, Cursor, and Copilot deny that case (`Pair first: run` the host's init command). Codex treats `ask` as a failed hook and still runs the tool. Cursor accepts `ask` on `preToolUse` and does not enforce it. Copilot cloud agent and CLI autopilot turn `ask` into deny. The OpenClaw plugin denies sensitive calls when no API key is set.
 
 ### Rules
 
-A rule can always allow, always deny, or change the tier. Rules match kind, title, target, body, and the working directory, and the first match wins. On Telegram, use Rule on the card. On the dashboard, use the gear on a card, or open Rules. A rule's decision gets a receipt marked as a rule. See [Rules](https://oked.ai/docs/#rules).
+A rule can always allow, always deny, or change the tier. Rules match kind, title, target, body, and the working directory, and the first match wins. On Telegram, use Rule on the card. On the dashboard, use the gear on a card, or open Rules. A rule's decision gets a receipt marked as a rule. See [Rules](https://oked.ai/docs?ref=github-oked-sdk#rules).
 
 ## Packages
 
@@ -93,11 +93,11 @@ All `@oked/*` packages share one version and are published together. Node.js 18 
 | Package | Purpose |
 |---|---|
 | [`@oked/sdk`](./packages/sdk) | `OKedClient.approve()`, the tier classifier, and action descriptions. Call it from any Node.js agent. |
-| [`@oked/hook-core`](./packages/hook-core) | Shared approval gate for host hooks: classify, wait, check the receipt, fail closed. Host packages call it. It is not installed on its own. |
+| [`@oked/hook-core`](./packages/hook-core) | Shared approval gate: classify, wait, check the receipt, fail closed. No init command. Host packages call `decide()`. |
 | [`@oked/claude-code`](./packages/claude-code) | Claude Code hook. `oked init` writes `oked-hook` into `.claude/settings.json`. |
-| [`@oked/codex`](./packages/codex) | Codex CLI `PreToolUse` hook. `oked-codex init` writes it into `.codex/hooks.json`. |
-| [`@oked/cursor`](./packages/cursor) | Cursor `preToolUse` hook. `oked-cursor init` writes it into `.cursor/hooks.json`. |
-| [`@oked/copilot`](./packages/copilot) | Copilot CLI and VS Code `preToolUse` hook. `oked-copilot init` writes `.github/hooks/oked.json`. |
+| [`@oked/codex`](./packages/codex) | Codex CLI `PreToolUse` hook. Writes `.codex/hooks.json`. `npx oked-codex init`, then `/hooks` to trust it. |
+| [`@oked/cursor`](./packages/cursor) | Cursor `preToolUse` hook. Writes `.cursor/hooks.json` with timeout 690 and `failClosed`. `oked-cursor init`. |
+| [`@oked/copilot`](./packages/copilot) | Copilot CLI and VS Code `preToolUse` hook. Writes `.github/hooks/oked.json` with `timeoutSec` 690. `oked-copilot init`. |
 | [`@oked/claude-agent-sdk`](./packages/claude-agent-sdk) | `PreToolUse` hook for the Claude Agent SDK. Pass it in `options.hooks`. |
 | [`@oked/openclaw`](./packages/openclaw) | OpenClaw plugin. `before_tool_call` classifies every tool the host reports. |
 | [`@oked/openclaw-cli`](./packages/openclaw-cli) | `oked-openclaw`: installs the plugin and writes `~/.openclaw/openclaw.json`. |
@@ -110,7 +110,7 @@ Every decision produces an Ed25519-signed receipt: who decided, how they were ve
 
 The SDK checks the receipt before an integration acts on an approval. Since 0.6.0, an approval with no valid receipt is denied. Set `OKED_REQUIRE_RECEIPT=0` only for a backend that does not sign receipts.
 
-Check a receipt in the browser at [oked.ai/docs/#verify](https://oked.ai/docs/#verify). Nothing is uploaded. Check an export offline:
+Check a receipt in the browser at [oked.ai/docs/#verify](https://oked.ai/docs?ref=github-oked-sdk#verify). Nothing is uploaded. Check an export offline:
 
 ```bash
 npx @oked/verify oked-receipts.zip
@@ -142,11 +142,14 @@ git push origin main --tags
 
 ## Links
 
-- Product and docs: [oked.ai](https://oked.ai), [oked.ai/docs](https://oked.ai/docs)
-- Sign up: [oked.ai/signup](https://oked.ai/signup)
-- Dashboard: [oked.ai/dashboard](https://oked.ai/dashboard)
-- Security: [oked.ai/security](https://oked.ai/security) and [SECURITY.md](./SECURITY.md)
+- Product and docs: [oked.ai](https://oked.ai?ref=github-oked-sdk), [oked.ai/docs](https://oked.ai/docs?ref=github-oked-sdk)
+- Sign up: [oked.ai/signup](https://oked.ai/signup?ref=github-oked-sdk)
+- Dashboard: [oked.ai/dashboard](https://oked.ai/dashboard?ref=github-oked-sdk)
+- Security: [oked.ai/security](https://oked.ai/security?ref=github-oked-sdk) and [SECURITY.md](./SECURITY.md)
+- Contact: [contact@oked.ai](mailto:contact@oked.ai)
 - Issues: [github.com/oked-ai/oked-sdk/issues](https://github.com/oked-ai/oked-sdk/issues)
+- Changelog: [CHANGELOG.md](./CHANGELOG.md)
+- Hosts: [docs/hosts.md](./docs/hosts.md)
 
 ## License
 

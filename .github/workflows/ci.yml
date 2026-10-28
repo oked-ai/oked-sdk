@@ -21,7 +21,26 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build
+      # `packages/*` is the workspace set, so a new package is tested when it
+      # has a test script. The check below fails the job if one is missing.
       - run: npm test --workspaces --if-present
+      - name: Every package has a test script
+        run: |
+          node --input-type=module -e '
+            import { readdirSync, readFileSync, existsSync } from "node:fs";
+            import { join } from "node:path";
+            const missing = [];
+            for (const name of readdirSync("packages")) {
+              const pkgPath = join("packages", name, "package.json");
+              if (!existsSync(pkgPath)) continue;
+              const pkg = JSON.parse(readFileSync(pkgPath, "utf8"));
+              if (!pkg.scripts || !pkg.scripts.test) missing.push(pkg.name || name);
+            }
+            if (missing.length) {
+              console.error("packages without a test script: " + missing.join(", "));
+              process.exit(1);
+            }
+          '
       # Packaging sanity check: confirms every package's `files` allowlist
       # resolves and produces a tarball before any release.
       - run: npm pack --dry-run --workspaces
