@@ -25,6 +25,17 @@ cd packages/<name> && npm publish --access public
 
 Then add the Trusted Publisher on npmjs (same fields as above) and list the package in the `publish.yml` matrix. From the next tag on, CI publishes it with the others. A tag pushed before the manual publish fails that package's job (`ENEEDAUTH`) while the rest publish.
 
+### Not on npm yet
+
+These packages are already in `publish.yml` and still need that first manual publish, then a Trusted Publisher, before a tag can publish them:
+
+| Package | Directory |
+|---|---|
+| `@oked/hook-core` | `packages/hook-core` |
+| `@oked/codex` | `packages/codex` |
+
+Do not publish them from a pull request. After the Trusted Publisher exists, the next `vX.Y.Z` tag publishes them with the rest.
+
 ### Why the workflow publishes one package per job
 
 `npm publish --workspaces` does not engage npm's OIDC code path (it fails with `ENEEDAUTH`), so `publish.yml` uses a matrix with one package per job and runs a single-package `npm publish` from each package directory. `dist` is built first, so `--ignore-scripts` skips the redundant `prepublishOnly` rebuild (whose `prebuild` needs the repo root). The workflow upgrades npm before publishing. Its comment requires npm >= 11.5.1 (Node 22 ships npm 10.x).
