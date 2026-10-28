@@ -128,10 +128,11 @@ export interface PairOptions {
    */
   scanLine?: string;
   /**
-   * Two lines printed under the link. The default matches Claude Code.
-   * Other hosts should say the iPhone app is coming soon.
+   * Two lines printed under the link. A function receives the verification
+   * URL. The default matches Claude Code. Other hosts should say the iPhone
+   * app is coming soon.
    */
-  footerLines?: [string, string];
+  footerLines?: [string, string] | ((verificationUri: string) => [string, string]);
   /** Command named when pairing expires. Default `oked init`. */
   retryCommand?: string;
 }
@@ -241,10 +242,13 @@ export async function pairDevice(opts: PairOptions): Promise<string | null> {
   }
   console.log(`    ${code.verification_uri_complete}`);
   console.log("");
-  const footer = opts.footerLines ?? [
-    `  (Or visit ${code.verification_uri} and enter the code above,`,
-    "  or enter it in the OKed app on your iPhone.)",
-  ];
+  const footer =
+    typeof opts.footerLines === "function"
+      ? opts.footerLines(code.verification_uri)
+      : (opts.footerLines ?? [
+          `  (Or visit ${code.verification_uri} and enter the code above,`,
+          "  or enter it in the OKed app on your iPhone.)",
+        ]);
   console.log(footer[0]);
   console.log(footer[1]);
   console.log("");
