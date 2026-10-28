@@ -11,6 +11,7 @@ Questions and security reports go to [contact@oked.ai](mailto:contact@oked.ai). 
 | [packages/claude-code](./packages/claude-code) | Claude Code `PreToolUse` hook. `oked init` |
 | [packages/codex](./packages/codex) | Codex CLI hook. `npx oked-codex init` |
 | [packages/cursor](./packages/cursor) | Cursor hook. `oked-cursor init` |
+| [packages/copilot](./packages/copilot) | Copilot CLI and VS Code hook. `oked-copilot init` |
 | [packages/claude-agent-sdk](./packages/claude-agent-sdk) | Programmatic hook for the Claude Agent SDK |
 | [packages/openclaw](./packages/openclaw) | OpenClaw plugin |
 | [packages/receipt-core](./packages/receipt-core) | Receipt format |

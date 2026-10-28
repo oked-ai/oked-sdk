@@ -5,7 +5,7 @@
 
 Shared gate for OKed coding-agent hooks. It is the part of [`@oked/claude-code`](../claude-code) that does not depend on Claude Code: classify the tool call, build the approval request, wait for a person, check the signed receipt, and fail closed.
 
-Host packages read the host's payload, map tool names, call `decide()`, and write the host's own allow or deny output. `@oked/claude-code` does this today, and its behavior is unchanged. Install a host package. This package has no `init` command.
+Host packages read the host's payload, map tool names, call `decide()`, and write the host's own allow or deny output. `@oked/claude-code` does this with unchanged behavior. `@oked/codex`, `@oked/cursor`, and `@oked/copilot` do it for those hosts. Install a host package. This package has no `init` command.
 
 Decisions are made in Telegram or on the [web dashboard](https://oked.ai/dashboard?ref=github-hook-core). The iPhone app is coming soon. Questions: [contact@oked.ai](mailto:contact@oked.ai).
 

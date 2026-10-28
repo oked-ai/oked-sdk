@@ -20,12 +20,13 @@ mkdirSync(process.env.CLAUDE_CONFIG_DIR, { recursive: true });
 try {
   const first = upsertCopilotHooks({});
   assert.equal(first.changed, true);
-  assert.equal(first.doc.version, 1);
-  const hook = first.doc.hooks.preToolUse[0];
-  assert.equal(hook.command, "oked-copilot-hook");
-  assert.equal(hook.timeoutSec, HOOK_TIMEOUT_SECONDS);
-  assert.equal(hook.timeoutSec, 690);
-  assert.equal(hook.timeout, undefined);
+  assert.deepEqual(first.doc, {
+    version: 1,
+    hooks: {
+      preToolUse: [{ type: "command", command: "oked-copilot-hook", timeoutSec: 690 }],
+    },
+  });
+  assert.equal(first.doc.hooks.preToolUse[0].timeoutSec, HOOK_TIMEOUT_SECONDS);
   assert.equal(upsertCopilotHooks(first.doc).changed, false);
   passed++;
 
@@ -75,10 +76,15 @@ try {
   const userOnly = installCopilotHook(project);
   assert.equal(userOnly.action, "installed", "a user-level Claude hook does not gate Copilot");
   assert.equal(userOnly.claudeHooks.length, 0);
-  const raw = JSON.parse(readFileSync(userOnly.path, "utf8"));
-  assert.equal(raw.hooks.preToolUse[0].timeoutSec, 690);
+  const rawText = readFileSync(userOnly.path, "utf8");
+  assert.deepEqual(JSON.parse(rawText), {
+    version: 1,
+    hooks: {
+      preToolUse: [{ type: "command", command: "oked-copilot-hook", timeoutSec: 690 }],
+    },
+  });
   assert.equal(installCopilotHook(project).action, "unchanged");
-  assert.equal(JSON.parse(readFileSync(userOnly.path, "utf8")).hooks.preToolUse.length, 1);
+  assert.equal(readFileSync(userOnly.path, "utf8"), rawText, "a second init does not rewrite an up-to-date file");
   writeFileSync(userOnly.path, "{");
   assert.equal(installCopilotHook(project).action, "unreadable");
   assert.equal(readFileSync(userOnly.path, "utf8"), "{");

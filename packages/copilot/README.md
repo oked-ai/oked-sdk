@@ -3,7 +3,7 @@
 [![npm version](https://img.shields.io/npm/v/@oked/copilot.svg)](https://www.npmjs.com/package/@oked/copilot)
 [![License: Apache-2.0](https://img.shields.io/npm/l/@oked/copilot.svg)](./LICENSE)
 
-GitHub Copilot hook for the CLI and for VS Code. Sensitive actions wait for a person in Telegram or on the [web dashboard](https://oked.ai/dashboard) before Copilot continues. The iPhone app is coming soon.
+GitHub Copilot hook for the CLI and for VS Code. Sensitive actions wait for a person in Telegram or on the [web dashboard](https://oked.ai/dashboard?ref=github-copilot) before Copilot continues. The iPhone app is coming soon. Questions: [contact@oked.ai](mailto:contact@oked.ai).
 
 Safe actions are allowed by the hook, with no notification. Warning actions are allowed and logged. OKed asks only for `review` and `high_stakes`.
 
@@ -16,7 +16,24 @@ npm install -g @oked/copilot
 oked-copilot init
 ```
 
-`oked-copilot init` writes a `preToolUse` hook into the current project's `.github/hooks/oked.json`, opens the device-pairing page in your browser, and stores the API key in `~/.oked/config.json`. The binary is `oked-copilot`, not `oked`, so it can sit next to `@oked/claude-code`.
+`oked-copilot init` writes `.github/hooks/oked.json` in the current project and stores the API key in `~/.oked/config.json`. The file it writes:
+
+```json
+{
+  "version": 1,
+  "hooks": {
+    "preToolUse": [
+      {
+        "type": "command",
+        "command": "oked-copilot-hook",
+        "timeoutSec": 690
+      }
+    ]
+  }
+}
+```
+
+There is no matcher, so every tool is included. Other hooks already in that file are kept. A second init does not add a second copy. It raises a `timeoutSec` below 690 and drops a conflicting `timeout` alias. The binary is `oked-copilot`, not `oked`, so it can sit next to `@oked/claude-code`. The cloud agent loads this same file.
 
 Open a new Copilot CLI session, or a new Copilot chat in VS Code, in that project.
 
@@ -109,7 +126,7 @@ The job's network is limited to GitHub hosts unless an org admin allows the OKed
 
 Every decision comes with a receipt signed by OKed. The hook verifies it before allowing the action and keeps a copy in `~/.oked/receipts.jsonl`. Since 0.6.0 the hook denies an approval that has no valid receipt. Set `OKED_REQUIRE_RECEIPT=0` only for a backend that does not sign receipts.
 
-You can paste one receipt at [oked.ai/docs/#verify](https://oked.ai/docs/#verify), or check an export with `npx @oked/verify`. See [docs/receipts.md](../../docs/receipts.md).
+You can paste one receipt at [oked.ai/docs/#verify](https://oked.ai/docs?ref=github-copilot#verify), or check an export with `npx @oked/verify`. See [docs/receipts.md](../../docs/receipts.md).
 
 ## Degraded-mode behavior
 
@@ -122,6 +139,20 @@ If the hook cannot parse its stdin, it denies. A bad payload must not become a s
 ## Decision log
 
 The hook writes one JSON line to `~/.oked/hook.log` (mode 600) for each deny, and for each degraded allow. The log never holds the tool input or the command.
+
+## Uninstall
+
+`oked-copilot uninstall` removes only the `oked-copilot-hook` entry from `.github/hooks/oked.json`. Other hooks in that file stay. If that was the only hook, the file is deleted. A Claude Code `oked-hook` entry is left in place. The API key in `~/.oked/config.json` stays.
+
+## Troubleshooting
+
+- Hook never runs: open a new Copilot CLI session or a new VS Code chat. `oked-copilot-hook` must be on `PATH`. VS Code hooks are Preview.
+- The tool ran anyway after a long wait: Copilot kills the hook at `timeoutSec` and fails open, including for policy hooks. There is no `failClosed` switch. Confirm the file says 690. A live check is still required, because the docs state no maximum.
+- Two cards for one action: this project's `.claude/settings.json` or `.claude/settings.local.json` also has `oked-hook`. Copilot CLI and VS Code read those files. `oked-copilot init` skips the native file when it finds one. `--native` installs anyway and warns. A user-level `~/.claude/settings.json` hook does not run in Copilot, so it does not block init.
+- `Pair first: run oked-copilot init`: no API key. The hook denies. It does not print `ask`.
+- Backend down: `high_stakes` is denied. Lower tiers are allowed unless `OKED_STRICT_FAIL_CLOSED=1`. Nobody answering within 10 minutes is a deny.
+- Cloud agent: only `.github/hooks/oked.json` from the repo is loaded. An org admin must allow `api.oked.ai`. The wait counts against the job timeout. `ask` is deny there.
+- Still stuck: [contact@oked.ai](mailto:contact@oked.ai).
 
 ## License
 
