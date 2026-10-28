@@ -55,10 +55,11 @@ across all cards for layout problems.
 
 ### Tier
 
-- Does it leave the machine (network write, message, publish, push)? Then at
-  least `review`.
-- Is it hard or impossible to undo (delete, merge, deploy, pay, send)? Then
-  `high_stakes`.
+- Does it leave the machine (network write, message, publish)? Then at
+  least `review`. A plain `git push` is `warning`: it runs and is logged,
+  with no card.
+- Is it hard or impossible to undo (delete, merge, deploy, pay, send, a force
+  push, a remote branch delete)? Then `high_stakes`.
 - Is it a reversible local change in the project? Then `warning` (logged, no
   card).
 - Is it session housekeeping only (plans, chapters, panes, wrap-up)? Then
