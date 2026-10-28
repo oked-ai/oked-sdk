@@ -17,12 +17,18 @@ const root = mkdtempSync(join(tmpdir(), "oked-codex-install-"));
 try {
   const first = upsertCodexHooks({});
   assert.equal(first.changed, true);
+  assert.deepEqual(first.doc, {
+    hooks: {
+      PreToolUse: [
+        {
+          matcher: "*",
+          hooks: [{ type: "command", command: "oked-codex-hook", timeout: 690 }],
+        },
+      ],
+    },
+  });
   const hook = first.doc.hooks.PreToolUse[0].hooks[0];
-  assert.equal(hook.command, "oked-codex-hook");
   assert.equal(hook.timeout, HOOK_TIMEOUT_SECONDS);
-  assert.equal(hook.timeout, 690);
-  assert.equal(hook.async, undefined);
-  assert.equal(first.doc.hooks.PreToolUse[0].matcher, "*");
   const again = upsertCodexHooks(first.doc);
   assert.equal(again.changed, false);
   passed++;
@@ -56,10 +62,10 @@ try {
   const installed = installCodexHook(project);
   assert.equal(installed.action, "installed");
   assert.equal(codexHookInstalled(project), true);
-  const raw = JSON.parse(readFileSync(installed.path, "utf8"));
-  assert.equal(raw.hooks.PreToolUse.length, 1);
+  const rawText = readFileSync(installed.path, "utf8");
+  assert.deepEqual(JSON.parse(rawText), first.doc);
   assert.equal(installCodexHook(project).action, "unchanged");
-  assert.equal(JSON.parse(readFileSync(installed.path, "utf8")).hooks.PreToolUse.length, 1);
+  assert.equal(readFileSync(installed.path, "utf8"), rawText, "a second init does not rewrite an up-to-date file");
   writeFileSync(installed.path, "{");
   assert.equal(installCodexHook(project).action, "unreadable");
   assert.equal(readFileSync(installed.path, "utf8"), "{");
@@ -79,7 +85,7 @@ try {
   const updated = JSON.parse(readFileSync(installed.path, "utf8"));
   assert.equal(updated.description, "keep");
   assert.equal(updated.hooks.PreToolUse[0].hooks[0].timeout, 690);
-  assert.equal(updated.hooks.PreToolUse[1].hooks[0].command, "audit");
+  assert.deepEqual(updated.hooks.PreToolUse[1], { hooks: [{ type: "command", command: "audit" }] });
   assert.equal(uninstallCodexHook(project).action, "removed");
   const after = JSON.parse(readFileSync(installed.path, "utf8"));
   assert.equal(after.hooks.PreToolUse.length, 1);

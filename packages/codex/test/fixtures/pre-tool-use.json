@@ -1,0 +1,84 @@
+[
+  {
+    "name": "safe bash prints nothing",
+    "input": {
+      "session_id": "sess_fixture",
+      "cwd": "/tmp/oked-fixture",
+      "hook_event_name": "PreToolUse",
+      "tool_name": "Bash",
+      "tool_use_id": "call_ls",
+      "tool_input": { "command": "ls" }
+    },
+    "mock": "none",
+    "expect": { "stdout": "" }
+  },
+  {
+    "name": "unknown tool asks to pair",
+    "input": {
+      "session_id": "sess_fixture",
+      "cwd": "/tmp/oked-fixture",
+      "hook_event_name": "PreToolUse",
+      "tool_name": "custom_function",
+      "tool_use_id": "call_custom",
+      "tool_input": { "value": 1 }
+    },
+    "mock": "none",
+    "expect": { "permissionDecision": "deny", "reasonIncludes": "Pair first: run oked-codex init" }
+  },
+  {
+    "name": "mcp create is denied when the person denies",
+    "input": {
+      "session_id": "sess_fixture",
+      "cwd": "/tmp/oked-fixture",
+      "hook_event_name": "PreToolUse",
+      "tool_name": "mcp__github__create_issue",
+      "tool_use_id": "call_mcp",
+      "tool_input": { "title": "Ship the hook" }
+    },
+    "apiKey": "test-key",
+    "mock": "denied",
+    "expect": { "permissionDecision": "deny", "reasonIncludes": "Denied via OKed" }
+  },
+  {
+    "name": "approval prints nothing",
+    "input": {
+      "session_id": "sess_fixture",
+      "cwd": "/tmp/oked-fixture",
+      "hook_event_name": "PreToolUse",
+      "tool_name": "mcp__github__create_issue",
+      "tool_use_id": "call_ok",
+      "tool_input": { "title": "Ship the hook" }
+    },
+    "apiKey": "test-key",
+    "mock": "approved",
+    "expect": { "stdout": "" }
+  },
+  {
+    "name": "backend timeout denies",
+    "input": {
+      "session_id": "sess_fixture",
+      "cwd": "/tmp/oked-fixture",
+      "hook_event_name": "PreToolUse",
+      "tool_name": "Bash",
+      "tool_use_id": "call_rm",
+      "tool_input": { "command": "rm -rf /var/data" }
+    },
+    "apiKey": "test-key",
+    "mock": "timeout",
+    "expect": { "permissionDecision": "deny", "reasonIncludes": "no decision within the approval window" }
+  },
+  {
+    "name": "unreachable backend denies high stakes",
+    "input": {
+      "session_id": "sess_fixture",
+      "cwd": "/tmp/oked-fixture",
+      "hook_event_name": "PreToolUse",
+      "tool_name": "Bash",
+      "tool_use_id": "call_down",
+      "tool_input": { "command": "rm -rf /var/data" }
+    },
+    "apiKey": "test-key",
+    "mock": "unreachable",
+    "expect": { "permissionDecision": "deny", "reasonIncludes": "high-stakes denied (fail-safe)" }
+  }
+]

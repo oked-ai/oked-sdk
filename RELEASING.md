@@ -32,6 +32,7 @@ These packages are already in `publish.yml` and still need that first manual pub
 | Package | Directory |
 |---|---|
 | `@oked/hook-core` | `packages/hook-core` |
+| `@oked/codex` | `packages/codex` |
 
 Do not publish them from a pull request. After the Trusted Publisher exists, the next `vX.Y.Z` tag publishes them with the rest.
 

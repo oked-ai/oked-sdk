@@ -3,7 +3,7 @@
 [![npm version](https://img.shields.io/npm/v/@oked/codex.svg)](https://www.npmjs.com/package/@oked/codex)
 [![License: Apache-2.0](https://img.shields.io/npm/l/@oked/codex.svg)](./LICENSE)
 
-Codex CLI hook. Sensitive actions wait for a person in Telegram or on the [web dashboard](https://oked.ai/dashboard) before Codex continues. The iPhone app is coming soon.
+Codex CLI hook. Sensitive actions wait for a person in Telegram or on the [web dashboard](https://oked.ai/dashboard?ref=github-codex) before Codex continues. The iPhone app is coming soon. Questions: [contact@oked.ai](mailto:contact@oked.ai).
 
 Safe actions are allowed by the hook, with no notification. Warning actions are allowed and logged. OKed asks only for `review` and `high_stakes`.
 
@@ -11,10 +11,27 @@ Safe actions are allowed by the hook, with no notification. Warning actions are 
 
 ```bash
 npm install -g @oked/codex
-oked-codex init
+npx oked-codex init
 ```
 
-`oked-codex init` writes a `PreToolUse` hook into the current project's `.codex/hooks.json`, opens the device-pairing page in your browser, and stores the API key in `~/.oked/config.json`. The binary is `oked-codex`, not `oked`, so it can sit next to `@oked/claude-code`.
+`npx oked-codex init` (the same command as `oked-codex init` after a global install) writes `.codex/hooks.json` in the current project and stores the API key in `~/.oked/config.json`. The file it writes:
+
+```json
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          { "type": "command", "command": "oked-codex-hook", "timeout": 690 }
+        ]
+      }
+    ]
+  }
+}
+```
+
+The matcher is `*`, so every local tool is included. Other hooks already in that file are kept. A second init does not add a second copy. It raises a timeout below 690 and removes `async: true`. The binary is `oked-codex`, not `oked`, so it can sit next to `@oked/claude-code`.
 
 Then, in Codex, run `/hooks` and trust the hook. Codex remembers that trust against the hook hash. Run `/hooks` again after `oked-codex init` changes the timeout or the command.
 
@@ -72,8 +89,6 @@ Codex describes hooks as a useful guardrail, not a complete enforcement boundary
 
 Command hooks do not run in Codex cloud. `write_stdin` on a shell that already passed `PreToolUse` does not run the hook again.
 
-Codex does not load `~/.claude/settings.json` or `.claude/settings.json`. Installing this package next to `@oked/claude-code` does not ask twice inside Codex. Claude Code keeps its own hook.
-
 ## Environment
 
 | Var | Required | Description |
@@ -88,7 +103,7 @@ Codex does not load `~/.claude/settings.json` or `.claude/settings.json`. Instal
 
 Every decision comes with a receipt signed by OKed. The hook verifies it before allowing the action and keeps a copy in `~/.oked/receipts.jsonl`. Since 0.6.0 the hook denies an approval that has no valid receipt. Set `OKED_REQUIRE_RECEIPT=0` only for a backend that does not sign receipts.
 
-You can paste one receipt at [oked.ai/docs/#verify](https://oked.ai/docs/#verify), or check an export with `npx @oked/verify`. `oked receipts verify` from `@oked/claude-code` checks the same file. See [docs/receipts.md](../../docs/receipts.md).
+You can paste one receipt at [oked.ai/docs/#verify](https://oked.ai/docs?ref=github-codex#verify), or check an export with `npx @oked/verify`. `oked receipts verify` from `@oked/claude-code` checks the same file. See [docs/receipts.md](../../docs/receipts.md).
 
 ## Degraded-mode behavior
 
@@ -101,6 +116,23 @@ If the hook cannot parse its stdin, it denies. A bad payload must not become a s
 ## Decision log
 
 The hook writes one JSON line to `~/.oked/hook.log` (mode 600) for each deny, and for each degraded allow. The log never holds the tool input or the command.
+
+## Double prompts
+
+Codex does not load `~/.claude/settings.json` or a project `.claude/settings.json`. There is no `--native` flag, because a Claude Code hook does not also run inside Codex. Installing both packages asks once in each tool, not twice in Codex.
+
+## Uninstall
+
+`oked-codex uninstall` removes only the `oked-codex-hook` entry. Other hooks in `.codex/hooks.json` stay. If that was the only content, the file is deleted. The API key in `~/.oked/config.json` stays, so Claude Code and the other hooks keep working. Run `/hooks` in Codex if it still lists a hook you removed. Trust is stored by Codex, not by this file alone.
+
+## Troubleshooting
+
+- Nothing happens: the hook is not trusted yet. Run `/hooks` in Codex and trust it. A changed timeout changes the hash, so trust it again.
+- Risky command ran with no card: the hook timed out, crashed, or printed bad JSON. Codex fails open in those cases. Confirm `timeout` is 690. Do not set `async`.
+- `Pair first: run oked-codex init`: this machine has no API key. Run that command. It does not silently allow the call.
+- Backend down: `high_stakes` is denied. Lower tiers are allowed unless `OKED_STRICT_FAIL_CLOSED=1`. A decision of `timeout` (nobody answered in 10 minutes) is a deny.
+- Codex cloud: command hooks do not run there. Hosted tools such as web search are not sent to `PreToolUse`.
+- Still stuck: [contact@oked.ai](mailto:contact@oked.ai).
 
 ## License
 
