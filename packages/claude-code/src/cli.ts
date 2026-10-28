@@ -227,6 +227,8 @@ async function pair(clientType: "claude-code" | "openclaw" | "sdk"): Promise<str
   console.log("");
   if (opened) {
     console.log("  Opened your browser to:");
+  } else if (NO_BROWSER) {
+    console.log("  Open this link:");
   } else {
     console.log("  Couldn't open your browser automatically. Open this link:");
   }
