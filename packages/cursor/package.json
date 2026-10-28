@@ -35,7 +35,7 @@
   "bugs": {
     "url": "https://github.com/oked-ai/oked-sdk/issues"
   },
-  "homepage": "https://oked.ai?ref=github-cursor",
+  "homepage": "https://oked.ai",
   "license": "Apache-2.0",
   "engines": {
     "node": ">=18"
