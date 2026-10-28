@@ -26,6 +26,7 @@ jobs:
           - hook-core
           - claude-code
           - codex
+          - cursor
           - claude-agent-sdk
           - openclaw
           - openclaw-cli

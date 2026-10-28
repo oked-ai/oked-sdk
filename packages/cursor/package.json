@@ -1,0 +1,53 @@
+{
+  "name": "@oked/cursor",
+  "version": "0.6.21",
+  "description": "OKed for Cursor. A preToolUse hook that holds risky agent tool calls for a human decision.",
+  "type": "module",
+  "bin": {
+    "oked-cursor": "./bin/oked-cursor.js",
+    "oked-cursor-hook": "./bin/oked-cursor-hook.js"
+  },
+  "scripts": {
+    "prebuild": "npm run build --workspace=@oked/hook-core",
+    "build": "tsc",
+    "test": "npm run build && node src/map.test.mjs && node src/install.test.mjs && node src/hook.test.mjs",
+    "prepublishOnly": "npm run build"
+  },
+  "files": [
+    "dist",
+    "bin",
+    "README.md",
+    "LICENSE"
+  ],
+  "keywords": [
+    "cursor",
+    "approval",
+    "hook",
+    "agents",
+    "oked"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/oked-ai/oked-sdk.git",
+    "directory": "packages/cursor"
+  },
+  "bugs": {
+    "url": "https://github.com/oked-ai/oked-sdk/issues"
+  },
+  "homepage": "https://github.com/oked-ai/oked-sdk/tree/main/packages/cursor#readme",
+  "license": "Apache-2.0",
+  "engines": {
+    "node": ">=18"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "@oked/hook-core": "0.6.21",
+    "@oked/sdk": "0.6.21"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.10",
+    "typescript": "^5.6.0"
+  }
+}
