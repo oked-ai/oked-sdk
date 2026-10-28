@@ -56,8 +56,8 @@ across all cards for layout problems.
 ### Tier
 
 - Does it leave the machine (network write, message, publish)? Then at
-  least `review`. A plain `git push` is `warning`: it runs and is logged,
-  with no card.
+  least `review`. Exception: a plain `git push` is `warning` (logged, no
+  card).
 - Is it hard or impossible to undo (delete, merge, deploy, pay, send, a force
   push, a remote branch delete)? Then `high_stakes`.
 - Is it a reversible local change in the project? Then `warning` (logged, no

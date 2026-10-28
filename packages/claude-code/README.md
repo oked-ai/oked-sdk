@@ -34,12 +34,12 @@ The approval window is 10 minutes. The hook process is allowed 690 seconds, and 
 
 ## What gets intercepted
 
-The hook uses a four-tier classifier. Classification is effect-based: it detects the kind of effect, not a list of command names, and it defaults to no prompt. Only destructive, irreversible, or outward-facing operations ask a person. A plain `git push` runs and is logged, with no approval.
+The hook uses a four-tier classifier. Classification is effect-based: it detects the kind of effect, not a list of command names, and it defaults to no prompt. Only destructive, irreversible, or outward-facing operations ask a person.
 
 | Tier | Behavior | Examples |
 |---|---|---|
 | `safe` | Allow, no notification | Reads and queries, a DB `SELECT`, and any Bash command with no detected side effect: `ls`, `grep`, `jq`, `node`, `npx`, plain `curl` GET |
-| `warning` | Terminal log only, no approval | A reversible local change: file create, `cp`, `mv`, a `/tmp` delete, local git (`add`, `commit`), a plain `git push` (it runs and is logged, no approval), `npm install`, SQL `INSERT` or `CREATE` |
+| `warning` | Terminal log only, no approval | A reversible local change (file create, `cp`, `mv`, a `/tmp` delete, local git `add`/`commit`, `npm install`, SQL `INSERT` or `CREATE`), plus a plain `git push` |
 | `review` | Wait for approval | Sensitive-path writes (`~/.ssh`, shell rc, system dirs, OKed config), `sudo`, outward message or email sends, `curl` POST/PUT/PATCH with an inline body, other cloud CLI writes (`aws s3 cp` to a bucket, `kubectl apply`, `helm upgrade`, a preview deploy), MCP tools named `create_*`, `send_*`, or `update_*` |
 | `high_stakes` | Wait for approval, with confirmation | Destructive or hard to undo: `rm` of non-temp data, `DROP TABLE` or `DELETE FROM`, a force push (`git push --force`, `-f`, or `--force-with-lease`), a remote branch delete (`git push --delete`, `-d`, or `git push origin :branch`), `reset --hard`, `branch -D`, `mkfs`, `dd` to a device, `shutdown`, `curl` DELETE, file upload, pay or send APIs, `ssh` / `scp`, `npm publish`, `kill`, cloud and cluster deletes (`aws s3 rm`, `kubectl delete`), `terraform apply` / `destroy`, production deploys (`vercel --prod`, `fly deploy`), Stripe CLI writes |
 
