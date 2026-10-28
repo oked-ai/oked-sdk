@@ -7,7 +7,7 @@ Programmatic approval API for AI agents. Send a sensitive action to the OKed bac
 
 Use this package from any Node.js agent. For drop-in integrations, see [`@oked/claude-code`](../claude-code), [`@oked/claude-agent-sdk`](../claude-agent-sdk), and [`@oked/openclaw`](../openclaw).
 
-Decisions are made in Telegram and on the [web dashboard](https://oked.ai/dashboard). The iPhone app is coming soon and is not on the App Store. [Sign up](https://oked.ai/signup) to get an API key.
+Decisions are made in Telegram and on the [web dashboard](https://oked.ai/dashboard). The iPhone app is coming soon. [Sign up](https://oked.ai/signup) to get an API key.
 
 ## Install
 

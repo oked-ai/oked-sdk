@@ -3,7 +3,7 @@
 [![npm version](https://img.shields.io/npm/v/@oked/claude-code.svg)](https://www.npmjs.com/package/@oked/claude-code)
 [![License: Apache-2.0](https://img.shields.io/npm/l/@oked/claude-code.svg)](./LICENSE)
 
-Claude Code hook. Sensitive actions wait for a person in Telegram or on the [web dashboard](https://oked.ai/dashboard) before Claude Code continues. The iPhone app is coming soon and is not on the App Store.
+Claude Code hook. Sensitive actions wait for a person in Telegram or on the [web dashboard](https://oked.ai/dashboard) before Claude Code continues. The iPhone app is coming soon.
 
 Safe actions are allowed by the hook, with no notification. Warning actions are allowed and logged. OKed asks only for `review` and `high_stakes`.
 
@@ -16,7 +16,7 @@ oked init
 
 `oked init` writes a `PreToolUse` hook into the current project's `.claude/settings.json`, opens the device-pairing page in your browser, and stores the API key in `~/.oked/config.json`. Open a new Claude Code session in that project.
 
-On a TTY, unless `NO_COLOR` is set, init also prints a QR code of the pairing link. A phone camera opens that link in the browser. That QR is not the OKed iPhone app. The app is not on the App Store yet.
+On a TTY, unless `NO_COLOR` is set, init also prints a QR code of the pairing link. The QR opens that link in the phone's browser.
 
 The approval window is 10 minutes. The hook process is allowed 690 seconds, and the SDK client waits 630 seconds, so a timeout becomes a deny instead of Claude killing the hook first.
 

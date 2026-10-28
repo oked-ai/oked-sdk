@@ -12,9 +12,8 @@ Write all text (PR bodies, commit messages, record reasons) in ASD-STE100
 Simplified Technical English. Do not use em dashes.
 
 People decide today in Telegram and on the web dashboard. The iPhone app is
-coming soon and is not on the App Store. `LOG.md` is rebuilt by
-`record.mjs`. Its high_stakes rows say "Face ID" because that script's tier
-label says so. That label is not a claim that an App Store app is available.
+coming soon. `LOG.md` is rebuilt by `record.mjs`. Its high_stakes rows say
+"Face ID" because that script's tier label says so.
 
 ## 0. Set up
 
@@ -104,8 +103,7 @@ Where things live:
   (`renderApprovalText`, `decidedLine`, `TIER_LABEL`, `KIND_EMOJI`, the
   buttons). Use a fresh `oked-app` worktree off `origin/main` in the
   scratchpad. Its renderer test is `backend/test/telegram-render.test.ts`.
-- iOS card: `oked-ios`. The iPhone app is coming soon and is not on the App
-  Store. Open a PR only. Never merge it.
+- iOS card: `oked-ios` (iPhone app coming soon). Open a PR only. Never merge it.
 
 ## 3. Fix
 

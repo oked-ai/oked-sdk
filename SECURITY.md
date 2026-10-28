@@ -2,7 +2,7 @@
 
 OKed is a human-in-the-loop approval layer for AI agents. The product security page, including what OKed stores and how to delete an account, is [oked.ai/security](https://oked.ai/security). This file is how to report a vulnerability in these packages, and how receipt verification is anchored.
 
-Decisions are made in Telegram and on the web dashboard. The iPhone app is coming soon and is not on the App Store.
+Decisions are made in Telegram and on the web dashboard. The iPhone app is coming soon.
 
 The `@oked/*` packages are published from this public repository with npm's OIDC trusted publishing. npm signed a SLSA provenance statement for every package in the 0.6.20 release. Check the provenance panel on each package's npm page before trusting a build.
 

@@ -28,12 +28,10 @@ oversight). It does not by itself make anyone compliant.
 - **Who decided, and how honestly that is known.** `decider.kind` is `human`,
   `rule` or `system`, and `decider.assurance` says how the human was
   verified. `channel` is a linked Telegram account or a signed-in dashboard
-  session. The receipt format also has `mobile` (the OKed iPhone app) and
-  `device_verified` (that app checked Face ID or the device passcode right
-  before the decision). The iPhone app is coming soon and is not on the App
-  Store, so those values are not a way to approve today. `passkey` is in the
-  format and is not shipping yet. Rules and timeouts are labeled as such and
-  never look like human approvals.
+  session. `mobile` is reserved for the upcoming iPhone app.
+  `device_verified` means that app checked Face ID or the device passcode.
+  `passkey` is planned. Rules and timeouts are labeled as such and never
+  look like human approvals.
 - **Nothing was deleted or edited in between.** Receipts form a hash chain
   per operator: each one carries the digest of the one before it, and `seq`
   counts up from 1 with no gaps. A deleted receipt shows as a gap; an edited
@@ -43,9 +41,8 @@ oversight). It does not by itself make anyone compliant.
 
 - **That a specific person was present.** `channel` assurance proves the
   Telegram account or the dashboard session, not the person at the keyboard.
-  `device_verified` is the value the iPhone app will set after it checks Face
-  ID or the device passcode. That app is coming soon and is not on the App
-  Store, and the phone itself would report the check. Passkey step-up
+  `device_verified` means the upcoming iPhone app checked Face ID or the
+  device passcode. The phone itself reports that check. Passkey step-up
   (assurance `passkey`) is planned.
 - **That the action then ran, or what it returned.** A receipt covers the
   decision. The integration enforces it: by default (since 0.6.0) an approved
@@ -107,8 +104,8 @@ A receipt is a JSON envelope:
 | `decision` | `approved`, `denied` or `timed_out` (nobody answered in time, so OKed denied it). |
 | `decider.kind` | `human`, `rule` (a rule the operator wrote; `rule_id` set) or `system` (`reason`: `timeout`, or `classified_safe` when OKed's classifier found the action low risk and allowed it without asking). |
 | `display_digest` | SHA-256 of the rendered card, or `null` when nothing was rendered. |
-| `decider.assurance` | `none`, `channel`, `device_verified`, or `passkey`. `device_verified` and `passkey` are format values. The iPhone app that would set `device_verified` is coming soon and is not on the App Store. `passkey` is not shipping yet. |
-| `decider.channel` | Where a human decided: `telegram` or `dashboard` today. `mobile` is reserved for the OKed iPhone app (coming soon, not on the App Store). `null` for rules and the system. |
+| `decider.assurance` | `none`, `channel`, `device_verified`, or `passkey`. `device_verified` means the upcoming iPhone app checked Face ID or the device passcode. `passkey` is planned. |
+| `decider.channel` | `telegram`, `dashboard`, or `mobile`. `mobile` is reserved for the upcoming iPhone app. `null` for rules and the system. |
 | `same_person` | True when a human approved an action from an agent they run themselves. Shown, not blocked. |
 | `summary` | The rendered title, or `null` when the operator turned summaries off (titles can contain file names or email addresses). |
 | `chain_id` | `op_<operator id>`, or `key_<API key id>` for a key with no operator. |

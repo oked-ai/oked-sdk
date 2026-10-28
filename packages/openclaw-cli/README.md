@@ -5,7 +5,7 @@
 
 Installer for the [`@oked/openclaw`](../openclaw) plugin. It runs `openclaw plugins install`, writes the OKed entry into `~/.openclaw/openclaw.json`, and can restart the gateway.
 
-Approvals are decided in Telegram and on the [web dashboard](https://oked.ai/dashboard). The iPhone app is coming soon and is not on the App Store.
+Approvals are decided in Telegram and on the [web dashboard](https://oked.ai/dashboard). The iPhone app is coming soon.
 
 ## Install
 

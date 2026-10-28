@@ -3,7 +3,7 @@
 [![npm version](https://img.shields.io/npm/v/@oked/claude-agent-sdk.svg)](https://www.npmjs.com/package/@oked/claude-agent-sdk)
 [![License: Apache-2.0](https://img.shields.io/npm/l/@oked/claude-agent-sdk.svg)](./LICENSE)
 
-OKed for the [Claude Agent SDK](https://code.claude.com/docs/en/agent-sdk). A `PreToolUse` hook: sensitive tool calls wait for a person, in Telegram or on the [web dashboard](https://oked.ai/dashboard), before they run. The iPhone app is coming soon and is not on the App Store.
+OKed for the [Claude Agent SDK](https://code.claude.com/docs/en/agent-sdk). A `PreToolUse` hook: sensitive tool calls wait for a person, in Telegram or on the [web dashboard](https://oked.ai/dashboard), before they run. The iPhone app is coming soon.
 
 Building with the Claude Code CLI instead? Use [`@oked/claude-code`](../claude-code) (`oked init`, no code).
 

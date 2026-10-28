@@ -3,7 +3,7 @@
 [![npm version](https://img.shields.io/npm/v/@oked/openclaw.svg)](https://www.npmjs.com/package/@oked/openclaw)
 [![License: Apache-2.0](https://img.shields.io/npm/l/@oked/openclaw.svg)](./LICENSE)
 
-OpenClaw plugin. A `before_tool_call` hook runs for every tool the host reports (built-in or registered by a skill), classifies it, and holds `review` and `high_stakes` calls until you approve in Telegram or on the [web dashboard](https://oked.ai/dashboard). The iPhone app is coming soon and is not on the App Store.
+OpenClaw plugin. A `before_tool_call` hook runs for every tool the host reports (built-in or registered by a skill), classifies it, and holds `review` and `high_stakes` calls until you approve in Telegram or on the [web dashboard](https://oked.ai/dashboard). The iPhone app is coming soon.
 
 Optional peer dependency: `openclaw` >= 2026.4.20. A denial returns `{ block: true, blockReason }` instead of throwing. The plugin source says OpenClaw 2026.5.4 and later treat that return value as a veto and show the reason to the agent. An earlier host ignored the return and ran the tool.
 

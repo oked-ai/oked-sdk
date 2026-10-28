@@ -28,7 +28,7 @@
 
 OKed is an approval layer for AI coding agents ([oked.ai](https://oked.ai)). Before a risky tool call runs, OKed shows it to a person. Approve, and the action continues. Deny, or let the 10 minute window expire, and the action does not run.
 
-Decisions are made in **Telegram** and on the **[web dashboard](https://oked.ai/dashboard)**. You can use either or both. Web push is an optional notification for the dashboard. The iPhone app is coming soon and is not on the App Store.
+Decisions are made in **Telegram** and on the **[web dashboard](https://oked.ai/dashboard)**. You can use either or both. Web push is an optional notification for the dashboard. The iPhone app is coming soon.
 
 Classification looks at the kind of effect, not the command name, and it runs on your machine. Reads and other actions with no detected side effect are `safe` and run with no notification. Reversible local changes are `warning`: they run, and the terminal logs them. Destructive, irreversible, or outward-facing actions are `review` or `high_stakes` and wait for a person.
 
