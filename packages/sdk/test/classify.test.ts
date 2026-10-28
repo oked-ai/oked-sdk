@@ -1539,3 +1539,182 @@ describe("approval review 2026-10-19T0606: tiers", () => {
     assert.equal(bash(`node scripts/x.mjs --x "a" && npm publish`), "high_stakes");
   });
 });
+
+describe("cloud, cluster, infrastructure, deploy and payment CLIs", () => {
+  // An unknown Bash command is safe by design (#44). These CLIs change live
+  // systems, so their writes need their own detectors. Their reads stay safe.
+  it("a cloud or cluster delete is high stakes", () => {
+    assert.equal(bash("aws s3 rm s3://acme-backups --recursive"), "high_stakes");
+    assert.equal(bash("aws s3 rb s3://acme-backups --force"), "high_stakes");
+    assert.equal(bash("aws s3 sync ./site s3://acme-site --delete"), "high_stakes");
+    assert.equal(bash("aws --profile prod ec2 terminate-instances --instance-ids i-1"), "high_stakes");
+    assert.equal(bash("aws rds delete-db-instance --db-instance-identifier prod"), "high_stakes");
+    assert.equal(bash("AWS_PROFILE=prod aws dynamodb delete-table --table-name users"), "high_stakes");
+    assert.equal(bash("kubectl delete namespace staging"), "high_stakes");
+    assert.equal(bash("kubectl -n prod delete pod web-1"), "high_stakes");
+    assert.equal(bash("kubectl drain node-1 --ignore-daemonsets"), "high_stakes");
+    assert.equal(bash("helm uninstall web -n prod"), "high_stakes");
+    assert.equal(bash("gcloud compute instances delete vm1 --zone us-central1-a"), "high_stakes");
+    assert.equal(bash("gcloud storage rm -r gs://acme-backups"), "high_stakes");
+    assert.equal(bash("gsutil -m rm -r gs://acme-backups"), "high_stakes");
+    assert.equal(bash("az group delete --name prod-rg --yes"), "high_stakes");
+    assert.equal(bash("doctl compute droplet delete web-1"), "high_stakes");
+    assert.equal(bash("eksctl delete cluster --name prod"), "high_stakes");
+    assert.equal(bash("fly apps destroy acme-web"), "high_stakes");
+    assert.equal(bash("heroku apps:destroy --app acme --confirm acme"), "high_stakes");
+    assert.equal(bash("heroku pg:reset DATABASE_URL -a acme"), "high_stakes");
+    assert.equal(bash("vercel rm acme-web --yes"), "high_stakes");
+    assert.equal(bash("wrangler r2 bucket delete acme-assets"), "high_stakes");
+    assert.equal(bash("firebase firestore:delete --all-collections"), "high_stakes");
+  });
+
+  it("an infrastructure apply or destroy is high stakes", () => {
+    assert.equal(bash("terraform apply -auto-approve"), "high_stakes");
+    assert.equal(bash("terraform apply tfplan"), "high_stakes");
+    assert.equal(bash("terraform -chdir=infra destroy"), "high_stakes");
+    assert.equal(bash("tofu apply"), "high_stakes");
+    assert.equal(bash("terragrunt run-all apply"), "high_stakes");
+    assert.equal(bash("pulumi up --yes"), "high_stakes");
+    assert.equal(bash("pulumi destroy -s prod"), "high_stakes");
+    assert.equal(bash("cdk deploy --all"), "high_stakes");
+    assert.equal(bash("aws cloudformation deploy --template-file t.yml --stack-name s"), "high_stakes");
+  });
+
+  it("a production deploy is high stakes", () => {
+    assert.equal(bash("vercel deploy --prod"), "high_stakes");
+    assert.equal(bash("vercel --prod"), "high_stakes");
+    assert.equal(bash("vercel deploy --target production"), "high_stakes");
+    assert.equal(bash("npx vercel@latest --prod --yes"), "high_stakes");
+    assert.equal(bash("vercel promote https://acme-abc.vercel.app"), "high_stakes");
+    assert.equal(bash("netlify deploy --prod --dir dist"), "high_stakes");
+    assert.equal(bash("fly deploy"), "high_stakes");
+    assert.equal(bash("wrangler deploy"), "high_stakes");
+    assert.equal(bash("firebase deploy --only hosting"), "high_stakes");
+    assert.equal(bash("gcloud run deploy web --image gcr.io/acme/web"), "high_stakes");
+    assert.equal(bash("helm rollback web 3"), "high_stakes");
+  });
+
+  it("a payment action is high stakes, like a curl to the Stripe API", () => {
+    assert.equal(bash("stripe refunds create --charge ch_3PxQ"), "high_stakes");
+    assert.equal(bash("stripe payouts create --amount 1000 --currency usd"), "high_stakes");
+    assert.equal(bash("stripe subscriptions cancel sub_123"), "high_stakes");
+    assert.equal(bash("stripe --api-key sk_live_x charges capture ch_1"), "high_stakes");
+    assert.equal(bash("stripe post /v1/refunds -d charge=ch_1"), "high_stakes");
+  });
+
+  it("other cloud writes and preview deploys ask without confirmation", () => {
+    assert.equal(bash("aws s3 cp ./build s3://acme-site --recursive"), "review");
+    assert.equal(bash("aws s3 mv s3://acme/a s3://acme/b"), "review");
+    assert.equal(bash("aws ec2 run-instances --image-id ami-1"), "review");
+    assert.equal(bash("aws lambda update-function-code --function-name f --zip-file fileb://f.zip"), "review");
+    assert.equal(bash("kubectl apply -f deploy.yaml"), "review");
+    assert.equal(bash("kubectl scale deployment web --replicas=0"), "review");
+    assert.equal(bash("kubectl rollout restart deployment/web"), "review");
+    assert.equal(bash("kubectl exec -it web-1 -- sh"), "review");
+    assert.equal(bash("helm upgrade --install web ./chart"), "review");
+    assert.equal(bash("terraform import aws_s3_bucket.b acme"), "review");
+    assert.equal(bash("terraform state rm aws_s3_bucket.b"), "review");
+    assert.equal(bash("gcloud compute instances create vm1"), "review");
+    assert.equal(bash("gsutil cp ./a.txt gs://acme/a.txt"), "review");
+    assert.equal(bash("az vm restart -g rg -n vm1"), "review");
+    assert.equal(bash("vercel"), "review");
+    assert.equal(bash("vercel deploy"), "review");
+    assert.equal(bash("vercel env add API_KEY production"), "review");
+    assert.equal(bash("netlify deploy --dir dist"), "review");
+    assert.equal(bash("fly secrets set API_KEY=x"), "review");
+    assert.equal(bash("heroku config:set API_KEY=x -a acme"), "review");
+    assert.equal(bash("wrangler secret put API_KEY"), "review");
+    assert.equal(bash("firebase hosting:channel:deploy preview"), "review");
+  });
+
+  it("read-only cloud commands stay safe", () => {
+    for (const cmd of [
+      "aws s3 ls",
+      "aws s3 ls s3://acme-backups --recursive",
+      "aws s3 cp s3://acme/report.csv ./report.csv",
+      "aws sts get-caller-identity",
+      "aws --region us-east-1 ec2 describe-instances",
+      "aws logs tail /aws/lambda/f --follow",
+      "aws configure list",
+      "kubectl get pods -A",
+      "kubectl -n prod describe pod web-1",
+      "kubectl logs -f deploy/web",
+      "kubectl rollout status deployment/web",
+      "kubectl config get-contexts",
+      "helm list -A",
+      "helm template web ./chart",
+      "terraform plan",
+      "terraform plan -destroy",
+      "terraform init",
+      "terraform validate",
+      "terraform state list",
+      "terraform output -json",
+      "pulumi preview",
+      "cdk diff",
+      "gcloud compute instances list",
+      "gcloud config set project acme",
+      "gcloud deploy releases list",
+      "gsutil ls gs://acme",
+      "az vm list -o table",
+      "az account set --subscription acme",
+      "doctl compute droplet list",
+      "vercel ls",
+      "vercel logs acme-web.vercel.app",
+      "vercel env pull .env.local",
+      "vercel dev",
+      "netlify status",
+      "fly status",
+      "fly logs -a acme",
+      "heroku logs --tail -a acme",
+      "wrangler dev",
+      "wrangler deployments list",
+      "firebase projects:list",
+      "stripe refunds list --limit 3",
+      "stripe charges retrieve ch_1",
+      "stripe listen --forward-to localhost:3000/webhooks",
+      "stripe logs tail",
+    ]) assert.equal(bash(cmd), "safe", cmd);
+  });
+
+  it("help and dry runs are safe", () => {
+    assert.equal(bash("aws s3 rm s3://acme-backups --recursive --dryrun"), "safe");
+    assert.equal(bash("kubectl delete namespace staging --dry-run=client"), "safe");
+    assert.equal(bash("kubectl apply -f deploy.yaml --dry-run=server"), "safe");
+    assert.equal(bash("helm upgrade --install web ./chart --dry-run"), "safe");
+    assert.equal(bash("terraform apply -help"), "safe");
+    assert.equal(bash("vercel deploy --help"), "safe");
+    assert.equal(bash("aws help"), "safe");
+    // A real run is not a dry run.
+    assert.equal(bash("kubectl delete namespace staging --dry-run=none"), "high_stakes");
+  });
+
+  it("a cloud write inside a compound command keeps its tier", () => {
+    assert.equal(bash("cd infra && terraform init && terraform apply -auto-approve"), "high_stakes");
+    assert.equal(bash("npm run build && vercel --prod"), "high_stakes");
+    assert.equal(bash("kubectl get pods | grep web"), "safe");
+    // The CLI name in an argument is not the command.
+    assert.equal(bash(`git commit -m "fix terraform apply docs"`), "warning");
+    assert.equal(bash(`echo "kubectl delete namespace staging"`), "safe");
+    assert.equal(bash("grep -rn 'aws s3 rm' docs"), "safe");
+  });
+
+  it("a cloud tier never lowers what the other detectors find", () => {
+    assert.equal(bash("kubectl exec pod -- curl -X DELETE https://api.x/1"), "high_stakes");
+    assert.equal(bash("gcloud compute ssh vm1 -- curl -X DELETE https://api.x/1"), "high_stakes");
+    assert.equal(bash("kubectl get pods -o yaml > pods.yaml"), "warning");
+  });
+
+  it("a wrapper in front of the CLI does not hide it", () => {
+    assert.equal(bash("kubectl get pods -o name | xargs kubectl delete"), "high_stakes");
+    assert.equal(bash("xargs -n1 kubectl delete pod < pods.txt"), "high_stakes");
+    assert.equal(bash("for b in a c; do aws s3 rb s3://$b --force; done"), "high_stakes");
+    assert.equal(bash("time terraform apply -auto-approve"), "high_stakes");
+    assert.equal(bash("sudo kubectl delete ns prod"), "high_stakes");
+  });
+
+  it("a --help after a -- separator belongs to the other command", () => {
+    assert.equal(bash("kubectl delete ns prod -- --help"), "high_stakes");
+    assert.equal(bash("kubectl exec -it web-1 -- sh --dry-run"), "review");
+    assert.equal(bash("kubectl delete ns prod --help"), "safe");
+  });
+});
