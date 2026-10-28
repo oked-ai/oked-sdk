@@ -3,7 +3,7 @@
 [![npm version](https://img.shields.io/npm/v/@oked/claude-code.svg)](https://www.npmjs.com/package/@oked/claude-code)
 [![License: Apache-2.0](https://img.shields.io/npm/l/@oked/claude-code.svg)](./LICENSE)
 
-Claude Code hook. Sensitive actions wait for a person in Telegram or on the [web dashboard](https://oked.ai/dashboard?ref=github-claude-code) before Claude Code continues. The iPhone app is coming soon.
+Claude Code hook. Sensitive actions wait for a person in Telegram or on the [web dashboard](https://oked.ai/dashboard) before Claude Code continues. The iPhone app is coming soon.
 
 The gate itself is [`@oked/hook-core`](../hook-core) (`decide()`): classify, wait, check the signed receipt, fail closed. This package still reads Claude's stdin and writes Claude's `hookSpecificOutput`. Behavior is unchanged. An unpaired device returns `ask`. An allow is an explicit `permissionDecision`. `oked init` still writes the same hook entry, including the 690 second timeout.
 
@@ -71,7 +71,7 @@ If this device is not paired, the hook returns `ask`, so Claude Code's own permi
 
 Every decision comes with a receipt signed by OKed (who decided, how they were verified, the exact command, when). The hook verifies it before allowing the action, shows its short id (`Approved via OKed (receipt rcpt_7Q2FABCD)`), and keeps a copy in `~/.oked/receipts.jsonl`. Check that file with `oked receipts verify`. Since 0.6.0 the hook denies an approval that has no valid receipt. Set `OKED_REQUIRE_RECEIPT=0` only for a backend that does not sign receipts.
 
-You can also paste one receipt at [oked.ai/docs/#verify](https://oked.ai/docs?ref=github-claude-code#verify), or check an export with `npx @oked/verify`. See [docs/receipts.md](../../docs/receipts.md). Questions: [contact@oked.ai](mailto:contact@oked.ai).
+You can also paste one receipt at [oked.ai/docs/#verify](https://oked.ai/docs#verify), or check an export with `npx @oked/verify`. See [docs/receipts.md](../../docs/receipts.md). Questions: [contact@oked.ai](mailto:contact@oked.ai).
 
 ## Degraded-mode behavior
 
