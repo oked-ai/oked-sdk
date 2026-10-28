@@ -16,9 +16,6 @@
 <p align="center">
   <a href="https://www.npmjs.com/package/@oked/sdk"><img src="https://img.shields.io/npm/v/@oked/sdk?label=%40oked%2Fsdk" alt="@oked/sdk on npm"></a>
   <a href="https://www.npmjs.com/package/@oked/claude-code"><img src="https://img.shields.io/npm/v/@oked/claude-code?label=%40oked%2Fclaude-code" alt="@oked/claude-code on npm"></a>
-  <a href="https://www.npmjs.com/package/@oked/codex"><img src="https://img.shields.io/npm/v/@oked/codex?label=%40oked%2Fcodex" alt="@oked/codex on npm"></a>
-  <a href="https://www.npmjs.com/package/@oked/cursor"><img src="https://img.shields.io/npm/v/@oked/cursor?label=%40oked%2Fcursor" alt="@oked/cursor on npm"></a>
-  <a href="https://www.npmjs.com/package/@oked/copilot"><img src="https://img.shields.io/npm/v/@oked/copilot?label=%40oked%2Fcopilot" alt="@oked/copilot on npm"></a>
   <a href="https://www.npmjs.com/package/@oked/claude-agent-sdk"><img src="https://img.shields.io/npm/v/@oked/claude-agent-sdk?label=%40oked%2Fclaude-agent-sdk" alt="@oked/claude-agent-sdk on npm"></a>
   <a href="https://www.npmjs.com/package/@oked/openclaw"><img src="https://img.shields.io/npm/v/@oked/openclaw?label=%40oked%2Fopenclaw" alt="@oked/openclaw on npm"></a>
   <a href="https://github.com/oked-ai/oked-sdk/actions/workflows/ci.yml"><img src="https://github.com/oked-ai/oked-sdk/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
@@ -44,13 +41,30 @@ The Claude Code integration is a `PreToolUse` hook (`oked-hook`) in its own proc
 | Agent | Install |
 |---|---|
 | **Claude Code** | `npm install -g @oked/claude-code`, then `oked init` |
-| **Codex CLI** | `npm install -g @oked/codex`, then `npx oked-codex init`. In Codex, run `/hooks` and trust the hook. See the [package README](./packages/codex). |
-| **Cursor** | `npm install -g @oked/cursor`, then `oked-cursor init`. See the [package README](./packages/cursor). |
-| **GitHub Copilot** | `npm install -g @oked/copilot`, then `oked-copilot init`. CLI and VS Code. See the [package README](./packages/copilot). |
+| **Codex CLI** | Not on npm yet. Ships with the next tagged release. From a clone, use the steps below. After the release: `npm install -g @oked/codex`, then `npx oked-codex init`. In Codex, run `/hooks` and trust the hook. See the [package README](./packages/codex). |
+| **Cursor** | Not on npm yet. Ships with the next tagged release. From a clone, use the steps below. After the release: `npm install -g @oked/cursor`, then `oked-cursor init`. See the [package README](./packages/cursor). |
+| **GitHub Copilot** | Not on npm yet. Ships with the next tagged release. From a clone, use the steps below. After the release: `npm install -g @oked/copilot`, then `oked-copilot init`. CLI and VS Code. See the [package README](./packages/copilot). |
 | **Claude Agent SDK** | `npm install @oked/claude-agent-sdk`, then pass `okedHooks()` in `options.hooks`. See the [package README](./packages/claude-agent-sdk). |
 | **OpenClaw** | `npm install -g @oked/openclaw @oked/openclaw-cli`, then `oked-openclaw init`. See the [package README](./packages/openclaw). |
 | **NVIDIA OpenShell** | Separate repo: [oked-openshell](https://github.com/oked-ai/oked-openshell). `oked init --key-only` creates a key without installing the Claude Code hook. |
 | **Any Node.js agent** | `npm install @oked/sdk` |
+
+### Codex, Cursor, and Copilot before the npm release
+
+`@oked/codex`, `@oked/cursor`, `@oked/copilot`, and `@oked/hook-core` are not on npm yet. They ship with the next tagged release. To try a hook from a clone:
+
+```bash
+git clone https://github.com/oked-ai/oked-sdk.git
+cd oked-sdk
+npm install
+npm run build
+npm install -g ./packages/codex
+oked-codex init
+```
+
+For Cursor, use `./packages/cursor` and `oked-cursor init`. For Copilot, use `./packages/copilot` and `oked-copilot init`. The root `npm install` links `@oked/hook-core` from this repo. `npm install -g` links the command to the clone, so leave the clone and its `node_modules` in place.
+
+In Codex, run `/hooks` and trust the hook. Copilot covers the CLI and VS Code.
 
 `oked init` writes a `PreToolUse` hook into the current project's `.claude/settings.json`, pairs this machine in the browser, and stores the API key in `~/.oked/config.json`. Open a new Claude Code session in that project. On a TTY, unless `NO_COLOR` is set, init also prints a QR code of the pairing link. A phone camera opens that link in the browser.
 
@@ -88,16 +102,16 @@ A rule can always allow, always deny, or change the tier. Rules match kind, titl
 
 ## Packages
 
-All `@oked/*` packages share one version and are published together. Node.js 18 or newer.
+Published `@oked/*` packages share one version. `@oked/codex`, `@oked/cursor`, `@oked/copilot`, and `@oked/hook-core` are in this repo and are not on npm yet. They ship with the next tagged release. Node.js 18 or newer.
 
 | Package | Purpose |
 |---|---|
 | [`@oked/sdk`](./packages/sdk) | `OKedClient.approve()`, the tier classifier, and action descriptions. Call it from any Node.js agent. |
-| [`@oked/hook-core`](./packages/hook-core) | Shared approval gate: classify, wait, check the receipt, fail closed. No init command. Host packages call `decide()`. |
+| [`@oked/hook-core`](./packages/hook-core) | Not on npm yet. Shared approval gate: classify, wait, check the receipt, fail closed. No init command. Host packages call `decide()`. |
 | [`@oked/claude-code`](./packages/claude-code) | Claude Code hook. `oked init` writes `oked-hook` into `.claude/settings.json`. |
-| [`@oked/codex`](./packages/codex) | Codex CLI `PreToolUse` hook. Writes `.codex/hooks.json`. `npx oked-codex init`, then `/hooks` to trust it. |
-| [`@oked/cursor`](./packages/cursor) | Cursor `preToolUse` hook. Writes `.cursor/hooks.json` with timeout 690 and `failClosed`. `oked-cursor init`. |
-| [`@oked/copilot`](./packages/copilot) | Copilot CLI and VS Code `preToolUse` hook. Writes `.github/hooks/oked.json` with `timeoutSec` 690. `oked-copilot init`. |
+| [`@oked/codex`](./packages/codex) | Not on npm yet. Codex CLI `PreToolUse` hook. Writes `.codex/hooks.json`. `npx oked-codex init`, then `/hooks` to trust it. |
+| [`@oked/cursor`](./packages/cursor) | Not on npm yet. Cursor `preToolUse` hook. Writes `.cursor/hooks.json` with timeout 690 and `failClosed`. `oked-cursor init`. |
+| [`@oked/copilot`](./packages/copilot) | Not on npm yet. Copilot CLI and VS Code `preToolUse` hook. Writes `.github/hooks/oked.json` with `timeoutSec` 690. `oked-copilot init`. |
 | [`@oked/claude-agent-sdk`](./packages/claude-agent-sdk) | `PreToolUse` hook for the Claude Agent SDK. Pass it in `options.hooks`. |
 | [`@oked/openclaw`](./packages/openclaw) | OpenClaw plugin. `before_tool_call` classifies every tool the host reports. |
 | [`@oked/openclaw-cli`](./packages/openclaw-cli) | `oked-openclaw`: installs the plugin and writes `~/.openclaw/openclaw.json`. |
@@ -130,7 +144,7 @@ npm test
 
 CI runs that build and test on Node.js 18 and 22 (`.github/workflows/ci.yml`).
 
-Releases are cut by pushing a `vX.Y.Z` tag. The publish workflow checks the tag against `package.json`, then publishes every package to npm with OIDC trusted publishing. Stable versions use the `latest` dist-tag. Prerelease versions (`vX.Y.Z-beta.1`) use `next`. The checklist is [RELEASING.md](./RELEASING.md).
+Releases are cut by pushing a `vX.Y.Z` tag. The publish workflow checks the tag against `package.json`, then publishes packages that are already on npm, with OIDC trusted publishing. `@oked/codex`, `@oked/cursor`, `@oked/copilot`, and `@oked/hook-core` are not on npm yet. They need a first manual publish before a tag can include them. Stable versions use the `latest` dist-tag. Prerelease versions (`vX.Y.Z-beta.1`) use `next`. The checklist is [RELEASING.md](./RELEASING.md).
 
 ```bash
 npm run bump -- patch

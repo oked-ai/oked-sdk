@@ -1,7 +1,6 @@
 # @oked/codex
 
-[![npm version](https://img.shields.io/npm/v/@oked/codex.svg)](https://www.npmjs.com/package/@oked/codex)
-[![License: Apache-2.0](https://img.shields.io/npm/l/@oked/codex.svg)](./LICENSE)
+[![License: Apache-2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](./LICENSE)
 
 Codex CLI hook. Sensitive actions wait for a person in Telegram or on the [web dashboard](https://oked.ai/dashboard?ref=github-codex) before Codex continues. The iPhone app is coming soon. Questions: [contact@oked.ai](mailto:contact@oked.ai).
 
@@ -9,12 +8,29 @@ Safe actions are allowed by the hook, with no notification. Warning actions are 
 
 ## Install
 
+`@oked/codex` is not on npm yet. It ships with the next tagged release. `@oked/hook-core`, which it depends on, is not on npm yet either.
+
+After the release:
+
 ```bash
 npm install -g @oked/codex
 npx oked-codex init
 ```
 
-`npx oked-codex init` (the same command as `oked-codex init` after a global install) writes `.codex/hooks.json` in the current project and stores the API key in `~/.oked/config.json`. The file it writes:
+From a clone, until that release:
+
+```bash
+git clone https://github.com/oked-ai/oked-sdk.git
+cd oked-sdk
+npm install
+npm run build
+npm install -g ./packages/codex
+oked-codex init
+```
+
+The root `npm install` links `@oked/hook-core` from this repo. `npm install -g ./packages/codex` links the command to the clone, so leave the clone and its `node_modules` in place.
+
+`oked-codex init` (the same command as `npx oked-codex init` after the npm release) writes `.codex/hooks.json` in the current project and stores the API key in `~/.oked/config.json`. The file it writes:
 
 ```json
 {

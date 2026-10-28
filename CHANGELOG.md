@@ -28,6 +28,10 @@ Decisions are made in Telegram and on the [web dashboard](https://oked.ai/dashbo
 - Timeouts fail open. Crashes and non-zero exits deny. VS Code hooks are Preview. A cloud job needs `api.oked.ai` allowlisted, and the wait counts against the job timeout.
 - A project Claude Code `oked-hook` makes init skip the native file. `--native` installs anyway. `~/.claude/settings.json` is not read by Copilot.
 
+### Docs
+
+- `@oked/codex`, `@oked/cursor`, `@oked/copilot`, and `@oked/hook-core` are not on npm yet. The public docs say so, and they show how to try the three hooks from a clone. Those packages ship with the next tagged release.
+
 ## 0.6.21
 
 Tagged release of the packages that were already on npm. See the git history for the classifier and receipt fixes in that tag.

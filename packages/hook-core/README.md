@@ -1,11 +1,12 @@
 # @oked/hook-core
 
-[![npm version](https://img.shields.io/npm/v/@oked/hook-core.svg)](https://www.npmjs.com/package/@oked/hook-core)
-[![License: Apache-2.0](https://img.shields.io/npm/l/@oked/hook-core.svg)](./LICENSE)
+[![License: Apache-2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](./LICENSE)
 
 Shared gate for OKed coding-agent hooks. It is the part of [`@oked/claude-code`](../claude-code) that does not depend on Claude Code: classify the tool call, build the approval request, wait for a person, check the signed receipt, and fail closed.
 
 Host packages read the host's payload, map tool names, call `decide()`, and write the host's own allow or deny output. `@oked/claude-code` does this with unchanged behavior. `@oked/codex`, `@oked/cursor`, and `@oked/copilot` do it for those hosts. Install a host package. This package has no `init` command.
+
+`@oked/hook-core` is not on npm yet. It ships with the next tagged release. A clone's root `npm install` links this package for the host packages in this repo.
 
 Decisions are made in Telegram or on the [web dashboard](https://oked.ai/dashboard?ref=github-hook-core). The iPhone app is coming soon. Questions: [contact@oked.ai](mailto:contact@oked.ai).
 

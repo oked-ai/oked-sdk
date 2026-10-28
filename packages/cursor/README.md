@@ -1,7 +1,6 @@
 # @oked/cursor
 
-[![npm version](https://img.shields.io/npm/v/@oked/cursor.svg)](https://www.npmjs.com/package/@oked/cursor)
-[![License: Apache-2.0](https://img.shields.io/npm/l/@oked/cursor.svg)](./LICENSE)
+[![License: Apache-2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](./LICENSE)
 
 Cursor agent hook. Sensitive actions wait for a person in Telegram or on the [web dashboard](https://oked.ai/dashboard?ref=github-cursor) before Cursor continues. The iPhone app is coming soon. Questions: [contact@oked.ai](mailto:contact@oked.ai).
 
@@ -9,10 +8,27 @@ Safe actions are allowed by the hook, with no notification. Warning actions are 
 
 ## Install
 
+`@oked/cursor` is not on npm yet. It ships with the next tagged release. `@oked/hook-core`, which it depends on, is not on npm yet either.
+
+After the release:
+
 ```bash
 npm install -g @oked/cursor
 oked-cursor init
 ```
+
+From a clone, until that release:
+
+```bash
+git clone https://github.com/oked-ai/oked-sdk.git
+cd oked-sdk
+npm install
+npm run build
+npm install -g ./packages/cursor
+oked-cursor init
+```
+
+The root `npm install` links `@oked/hook-core` from this repo. `npm install -g ./packages/cursor` links the command to the clone, so leave the clone and its `node_modules` in place.
 
 `oked-cursor init` writes `.cursor/hooks.json` in the current project and stores the API key in `~/.oked/config.json`. The file it writes:
 

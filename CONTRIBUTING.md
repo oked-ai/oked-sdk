@@ -22,6 +22,8 @@ Questions and security reports go to [contact@oked.ai](mailto:contact@oked.ai). 
 
 Supported agents are listed in [docs/hosts.md](./docs/hosts.md) and in the root README quick start.
 
+`@oked/codex`, `@oked/cursor`, `@oked/copilot`, and `@oked/hook-core` are not on npm yet. They ship with the next tagged release. The hook READMEs explain how to try them from this clone.
+
 ## Checks
 
 Node.js 18 or newer.
