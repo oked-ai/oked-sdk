@@ -9,6 +9,7 @@ Questions and security reports go to [contact@oked.ai](mailto:contact@oked.ai). 
 | [packages/sdk](./packages/sdk) | `OKedClient.approve()` and the classifier |
 | [packages/hook-core](./packages/hook-core) | Shared hook gate. Host packages call `decide()` |
 | [packages/claude-code](./packages/claude-code) | Claude Code `PreToolUse` hook. `oked init` |
+| [packages/codex](./packages/codex) | Codex CLI hook. `npx oked-codex init` |
 | [packages/claude-agent-sdk](./packages/claude-agent-sdk) | Programmatic hook for the Claude Agent SDK |
 | [packages/openclaw](./packages/openclaw) | OpenClaw plugin |
 | [packages/receipt-core](./packages/receipt-core) | Receipt format |

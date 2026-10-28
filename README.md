@@ -16,6 +16,7 @@
 <p align="center">
   <a href="https://www.npmjs.com/package/@oked/sdk"><img src="https://img.shields.io/npm/v/@oked/sdk?label=%40oked%2Fsdk" alt="@oked/sdk on npm"></a>
   <a href="https://www.npmjs.com/package/@oked/claude-code"><img src="https://img.shields.io/npm/v/@oked/claude-code?label=%40oked%2Fclaude-code" alt="@oked/claude-code on npm"></a>
+  <a href="https://www.npmjs.com/package/@oked/codex"><img src="https://img.shields.io/npm/v/@oked/codex?label=%40oked%2Fcodex" alt="@oked/codex on npm"></a>
   <a href="https://www.npmjs.com/package/@oked/claude-agent-sdk"><img src="https://img.shields.io/npm/v/@oked/claude-agent-sdk?label=%40oked%2Fclaude-agent-sdk" alt="@oked/claude-agent-sdk on npm"></a>
   <a href="https://www.npmjs.com/package/@oked/openclaw"><img src="https://img.shields.io/npm/v/@oked/openclaw?label=%40oked%2Fopenclaw" alt="@oked/openclaw on npm"></a>
   <a href="https://github.com/oked-ai/oked-sdk/actions/workflows/ci.yml"><img src="https://github.com/oked-ai/oked-sdk/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
@@ -41,6 +42,7 @@ The Claude Code integration is a `PreToolUse` hook (`oked-hook`) in its own proc
 | Agent | Install |
 |---|---|
 | **Claude Code** | `npm install -g @oked/claude-code`, then `oked init` |
+| **Codex CLI** | `npm install -g @oked/codex`, then `npx oked-codex init`. In Codex, run `/hooks` and trust the hook. See the [package README](./packages/codex). |
 | **Claude Agent SDK** | `npm install @oked/claude-agent-sdk`, then pass `okedHooks()` in `options.hooks`. See the [package README](./packages/claude-agent-sdk). |
 | **OpenClaw** | `npm install -g @oked/openclaw @oked/openclaw-cli`, then `oked-openclaw init`. See the [package README](./packages/openclaw). |
 | **NVIDIA OpenShell** | Separate repo: [oked-openshell](https://github.com/oked-ai/oked-openshell). `oked init --key-only` creates a key without installing the Claude Code hook. |
@@ -74,7 +76,7 @@ An explicit denial is final. An invalid API key, a receipt that does not verify,
 
 If the backend is unreachable, OKed denies `high_stakes` and, by default, allows lower tiers. Set `OKED_STRICT_FAIL_CLOSED=1` (or `strictFailClosed: true`) to deny every sensitive action during an outage. HTTP 429 (too many approvals already waiting) is not an outage: the action is denied until those are decided in Telegram or on the dashboard.
 
-On Claude Code, a device that is not paired returns `ask`, so Claude's own permission prompt can decide. The OpenClaw plugin denies sensitive calls when no API key is set.
+On Claude Code, a device that is not paired returns `ask`, so Claude's own permission prompt can decide. Codex denies that case with `Pair first: run oked-codex init`, because Codex treats `ask` as a failed hook and still runs the tool. The OpenClaw plugin denies sensitive calls when no API key is set.
 
 ### Rules
 
@@ -89,6 +91,7 @@ All `@oked/*` packages share one version and are published together. Node.js 18 
 | [`@oked/sdk`](./packages/sdk) | `OKedClient.approve()`, the tier classifier, and action descriptions. Call it from any Node.js agent. |
 | [`@oked/hook-core`](./packages/hook-core) | Shared approval gate: classify, wait, check the receipt, fail closed. No init command. Host packages call `decide()`. |
 | [`@oked/claude-code`](./packages/claude-code) | Claude Code hook. `oked init` writes `oked-hook` into `.claude/settings.json`. |
+| [`@oked/codex`](./packages/codex) | Codex CLI `PreToolUse` hook. Writes `.codex/hooks.json`. `npx oked-codex init`, then `/hooks` to trust it. |
 | [`@oked/claude-agent-sdk`](./packages/claude-agent-sdk) | `PreToolUse` hook for the Claude Agent SDK. Pass it in `options.hooks`. |
 | [`@oked/openclaw`](./packages/openclaw) | OpenClaw plugin. `before_tool_call` classifies every tool the host reports. |
 | [`@oked/openclaw-cli`](./packages/openclaw-cli) | `oked-openclaw`: installs the plugin and writes `~/.openclaw/openclaw.json`. |

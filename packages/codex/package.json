@@ -1,0 +1,55 @@
+{
+  "name": "@oked/codex",
+  "version": "0.6.21",
+  "description": "OKed for Codex CLI. A PreToolUse hook that holds risky tool calls for a human decision.",
+  "type": "module",
+  "bin": {
+    "oked-codex": "./bin/oked-codex.js",
+    "oked-codex-hook": "./bin/oked-codex-hook.js"
+  },
+  "scripts": {
+    "prebuild": "npm run build --workspace=@oked/hook-core",
+    "build": "tsc",
+    "test": "npm run build && node src/map.test.mjs && node src/install.test.mjs && node src/hook.test.mjs && node src/fixture.test.mjs",
+    "prepublishOnly": "npm run build"
+  },
+  "files": [
+    "dist",
+    "bin",
+    "README.md",
+    "LICENSE"
+  ],
+  "keywords": [
+    "oked",
+    "codex",
+    "ai-agent",
+    "approval",
+    "human-in-the-loop",
+    "hooks",
+    "openai"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/oked-ai/oked-sdk.git",
+    "directory": "packages/codex"
+  },
+  "bugs": {
+    "url": "https://github.com/oked-ai/oked-sdk/issues"
+  },
+  "homepage": "https://oked.ai?ref=github-codex",
+  "license": "Apache-2.0",
+  "engines": {
+    "node": ">=18"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "@oked/hook-core": "0.6.21",
+    "@oked/sdk": "0.6.21"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.10",
+    "typescript": "^5.6.0"
+  }
+}
