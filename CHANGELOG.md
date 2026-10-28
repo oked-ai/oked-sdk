@@ -16,6 +16,12 @@ Decisions are made in Telegram and on the [web dashboard](https://oked.ai/dashbo
 - New package. `npx oked-codex init` writes a `PreToolUse` hook to `.codex/hooks.json` with timeout 690 and matcher `*`.
 - An allow prints nothing, because Codex treats an explicit allow as unsupported. An unpaired device is denied with `Pair first: run oked-codex init`. A hook timeout or a crash still fails open inside Codex. Trust the hook with `/hooks`.
 
+### @oked/cursor
+
+- New package. `oked-cursor init` writes `.cursor/hooks.json` with `timeout` 690 and `failClosed: true`. Cursor does not document the timeout maximum.
+- If Claude settings already contain `oked-hook`, init does not add a second hook. `--native` installs anyway.
+- Unpaired devices are denied. `ask` is not used, because Cursor does not enforce it on `preToolUse`.
+
 ## 0.6.21
 
 Tagged release of the packages that were already on npm. See the git history for the classifier and receipt fixes in that tag.
