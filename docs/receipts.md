@@ -49,8 +49,9 @@ oversight). It does not by itself make anyone compliant.
   action only runs once a valid receipt for it exists.
 - **Independence from OKed itself.** OKed holds the signing key, so OKed
   alone could in principle rewrite a chain and sign it again. Two things make
-  that detectable today: your own copy of the receipts (the Claude Code hook
-  keeps one in `~/.oked/receipts.jsonl`) and signed chain heads you save
+  that detectable today: your own copy of the receipts (host hooks built on
+  `@oked/hook-core`, including Claude Code, keep one in `~/.oked/receipts.jsonl`)
+  and signed chain heads you save
   (`GET /api/v1/receipts/head`). Publishing chain heads to an external log
   (anchoring) will close it fully, and is planned.
 
