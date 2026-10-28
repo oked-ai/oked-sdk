@@ -27,6 +27,7 @@ jobs:
           - claude-code
           - codex
           - cursor
+          - copilot
           - claude-agent-sdk
           - openclaw
           - openclaw-cli
