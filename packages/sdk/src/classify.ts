@@ -19,12 +19,14 @@ import { TIER_ORDER } from "./degraded.js";
 // Tier 3 - review: push notification, tap to approve. Prompt-worthy but not
 //                catastrophic: sensitive-path writes (~/.ssh, shell rc, system
 //                dirs, OKed's own config), sudo, outward message/email sends,
-//                curl POST/PUT/PATCH with an inline body.
+//                curl POST/PUT/PATCH with an inline body, other cloud CLI writes
+//                (create, update, upload, preview deploy, kubectl apply/exec).
 // Tier 4 - high_stakes: push + number matching. Destructive / irreversible /
 //                external: rm of non-temp data, DROP/TRUNCATE/DELETE FROM,
 //                git push --force / reset --hard / branch -D, mkfs / dd-to-device /
 //                shutdown, curl DELETE / file upload / pay-or-send API, ssh/scp,
-//                npm publish, kill.
+//                npm publish, kill, cloud and cluster deletes, terraform apply /
+//                pulumi up, production deploys, Stripe CLI writes.
 
 // Tools that are always safe (read-only, no side effects)
 const SAFE_TOOLS = new Set([
@@ -341,6 +343,237 @@ const REVIEW_COMMANDS = [
   /^gh\s+run\s+(?:cancel|rerun)\b/,
   /^gh\s+(?:gist|label)\s+(?:create|edit)\b/,
 ];
+
+// Cloud, cluster, infrastructure, deploy and payment CLIs change live systems
+// that other people use, so the `safe` default for an unknown command is wrong
+// for their writes. The CLI's own subcommand words pick the tier: a delete, an
+// infrastructure apply, a production deploy or a payment → high_stakes; any
+// other write (create, update, upload, a preview deploy, exec into a pod) →
+// review; reads (`aws s3 ls`, `kubectl get`, `terraform plan`) stay safe, and so
+// do `--help` and dry runs. Matched on the stage's command word, so the CLI name
+// in an argument or a commit message is not the command.
+
+// A package runner in front of the CLI (`npx vercel@latest --prod`).
+const CLI_RUNNER_RE = /^(?:npx|bunx|pnpx|(?:pnpm|yarn|bun)\s+(?:dlx|exec|x))\s+(?:-\S+\s+)*/;
+// `--dry-run=none` (kubectl) and `--dry-run=false` are real runs.
+const CLI_PREVIEW_ARG_RE = /^(?:--help|-help|--dry-?run(?:=(?:true|client|server))?)$/;
+
+// Subcommand words that delete, tear down or redeploy a live resource, and
+// words that create or change one. A hyphenated word (`delete-stack`,
+// `add-iam-policy-binding`) is read by its first part.
+const CLOUD_DELETE_WORDS = new Set(["delete", "destroy", "terminate", "purge", "remove", "rm", "rb", "uninstall", "drain"]);
+const CLOUD_DEPLOY_WORDS = new Set(["deploy", "rollback", "promote"]);
+const CLOUD_WRITE_WORDS = new Set([
+  "create", "update", "patch", "apply", "set", "unset", "add", "put", "push", "upload", "import",
+  "start", "stop", "restart", "reboot", "reset", "resize", "scale", "enable", "disable", "attach",
+  "detach", "move", "rename", "restore", "cancel", "upgrade", "install", "invoke", "call", "execute",
+  "exec", "ssh", "scp", "submit", "connect", "failover", "issue", "transfer", "clone", "extend",
+  "launch", "console",
+]);
+
+function cloudWordTier(word: string): RiskTier {
+  const [head, ...rest] = word.split("-");
+  if (rest.length === 0) {
+    if (CLOUD_DELETE_WORDS.has(word) || CLOUD_DEPLOY_WORDS.has(word)) return "high_stakes";
+    return CLOUD_WRITE_WORDS.has(word) ? "review" : "safe";
+  }
+  if (/^(?:delete|destroy|terminate|purge|deregister)$/.test(head)) return "high_stakes";
+  return CLOUD_WRITE_WORDS.has(head) || head === "remove" ? "review" : "safe";
+}
+
+function maxCloudWordTier(words: string[]): RiskTier {
+  return words.reduce<RiskTier>((t, w) => maxTier(t, cloudWordTier(w)), "safe");
+}
+
+/** The non-flag arguments, without the values of `valueFlags` and redirects. */
+function cliPositionals(args: string[], valueFlags: ReadonlySet<string> = new Set()): string[] {
+  const out: string[] = [];
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
+    if (/^(?:\d|&)?>{1,2}$|^<$/.test(a)) { i++; continue; } // `> log`
+    if (/^(?:\d|&)?>|^</.test(a)) continue;                  // `2>&1`, `>log`
+    if (a.startsWith("-")) { if (valueFlags.has(a)) i++; continue; }
+    out.push(a);
+  }
+  return out;
+}
+
+/** `aws s3`, `gsutil`, `gcloud storage`: delete, upload, or download. */
+function objectStoreTier(op: string | undefined, pos: string[], args: string[], scheme: string): RiskTier | null {
+  if (op === "rm" || op === "rb") return "high_stakes";
+  if (op === "mv" || op === "mb") return "review";
+  if (op === "cp" || op === "sync" || op === "rsync") {
+    if (op !== "cp" && args.some((a) => /^(?:--delete|-d|--delete-unmatched-destination-objects)$/.test(a))) return "high_stakes";
+    return (pos[pos.length - 1] ?? "").startsWith(scheme) ? "review" : "safe"; // to a bucket, or a download
+  }
+  return null;
+}
+
+const AWS_VALUE_FLAGS = new Set(["--profile", "--region", "--output", "--endpoint-url", "--query", "--color",
+  "--ca-bundle", "--cli-read-timeout", "--cli-connect-timeout", "--cli-binary-format"]);
+// Operations that only read. An aws operation that is not a read is a write.
+const AWS_READ_OP_RE = /^(?:describe|list|get|head|batch-get|search|scan|query|lookup|filter|select|estimate|validate|simulate|test|preview|wait|tail|ls|help|check|presign)(?:-|$)/;
+const AWS_LOCAL_SERVICES = new Set(["configure", "sso", "sso-oidc", "sts", "help", "history"]);
+
+function awsTier(args: string[]): RiskTier {
+  const pos = cliPositionals(args, AWS_VALUE_FLAGS);
+  const [service, op] = pos;
+  if (!service || !op || AWS_LOCAL_SERVICES.has(service)) return "safe";
+  if (service === "s3") return objectStoreTier(op, pos, args, "s3://") ?? (op === "ls" ? "safe" : "review");
+  if (/^(?:delete|terminate|purge|deregister|destroy)-/.test(op) || op === "deploy") return "high_stakes";
+  return AWS_READ_OP_RE.test(op) ? "safe" : "review";
+}
+
+const KUBECTL_VALUE_FLAGS = new Set(["-n", "--namespace", "--context", "--kubeconfig", "--cluster", "--user",
+  "-s", "--server", "--as", "--as-group", "--token", "--request-timeout", "-l", "--selector", "-f",
+  "--filename", "-c", "--container", "-o", "--output"]);
+const KUBECTL_WRITE_VERBS = new Set(["apply", "create", "patch", "replace", "edit", "scale", "autoscale", "set",
+  "label", "annotate", "taint", "cordon", "uncordon", "expose", "run", "exec", "cp", "attach", "debug", "certificate"]);
+
+function kubectlTier(args: string[]): RiskTier {
+  const [verb, sub] = cliPositionals(args, KUBECTL_VALUE_FLAGS);
+  if (verb === "delete" || verb === "drain") return "high_stakes";
+  if (verb === "rollout") return ["restart", "undo", "pause", "resume"].includes(sub) ? "review" : "safe";
+  return KUBECTL_WRITE_VERBS.has(verb) ? "review" : "safe";
+}
+
+function terraformTier(args: string[]): RiskTier {
+  let [verb, sub] = cliPositionals(args);
+  // terragrunt `run-all apply`
+  if (verb === "run-all" || verb === "run") [verb, sub] = cliPositionals(args).slice(1);
+  if (verb === "apply" || verb === "destroy") return "high_stakes";
+  if (["import", "taint", "untaint", "force-unlock", "refresh"].includes(verb)) return "review";
+  if (verb === "state" && ["rm", "mv", "push", "replace-provider"].includes(sub)) return "review";
+  if (verb === "workspace" && sub === "delete") return "review";
+  return "safe";
+}
+
+const VERCEL_VALUE_FLAGS = new Set(["--scope", "-S", "--token", "-t", "--cwd", "-A", "--local-config", "-Q",
+  "--global-config", "--target", "-e", "--env", "-b", "--build-env", "-m", "--meta", "--regions", "--archive"]);
+// Subcommands other than a deploy. A first word that is none of these is a
+// path to deploy, as vercel reads it.
+const VERCEL_SUBCOMMANDS = new Set(["alias", "bisect", "blob", "build", "cache", "certs", "curl", "dev", "dns",
+  "domains", "env", "git", "help", "init", "inspect", "install", "integration", "link", "list", "login",
+  "logout", "logs", "ls", "mcp", "microfrontends", "open", "project", "projects", "promote", "pull",
+  "redeploy", "remove", "rm", "rollback", "switch", "target", "teams", "telemetry", "whoami"]);
+
+function vercelTier(args: string[]): RiskTier {
+  const [sub, op] = cliPositionals(args, VERCEL_VALUE_FLAGS);
+  const prod = args.some((a, i) => a === "--prod" || a === "--target=production" ||
+    (a === "--target" && args[i + 1] === "production"));
+  if (sub === undefined || sub === "deploy" || !VERCEL_SUBCOMMANDS.has(sub)) return prod ? "high_stakes" : "review";
+  if (sub === "redeploy") return prod ? "high_stakes" : "review";
+  if (["rm", "remove", "promote", "rollback"].includes(sub)) return "high_stakes";
+  if (sub === "alias") return op === "set" || op === "rm" || op === "remove" ? "high_stakes" : "safe";
+  if (["env", "domains", "dns", "certs", "project", "projects", "teams", "blob", "integration"].includes(sub)) {
+    return op === undefined ? "safe" : cloudWordTier(op);
+  }
+  return "safe";
+}
+
+/** Tier of a single stage that runs a cloud CLI, or null for any other stage. */
+function classifyCloudCliStage(stage: string): RiskTier | null {
+  const args = splitArgs(stage.replace(CLI_RUNNER_RE, ""));
+  const tool = (args.shift() ?? "").replace(/^.*\//, "").replace(/(?<=.)@.*$/, "");
+  const known = ["aws", "kubectl", "helm", "terraform", "tofu", "terragrunt", "pulumi", "cdk", "serverless",
+    "sls", "gcloud", "gsutil", "az", "doctl", "eksctl", "vercel", "netlify", "fly", "flyctl", "heroku",
+    "wrangler", "firebase", "stripe"];
+  if (!known.includes(tool)) return null;
+  if (args.some((a) => CLI_PREVIEW_ARG_RE.test(a))) return "safe";
+  const pos = cliPositionals(args);
+  if (pos[0] === "help") return "safe";
+  const has = (re: RegExp) => args.some((a) => re.test(a));
+  switch (tool) {
+    case "aws": return awsTier(args);
+    case "kubectl": return kubectlTier(args);
+    case "helm": {
+      const [verb] = cliPositionals(args, new Set(["-n", "--namespace", "--kube-context", "--kubeconfig"]));
+      if (["uninstall", "delete", "del", "un", "rollback"].includes(verb)) return "high_stakes";
+      return ["install", "upgrade", "push"].includes(verb) ? "review" : "safe";
+    }
+    case "terraform": case "tofu": case "terragrunt": return terraformTier(args);
+    case "pulumi": {
+      const [verb, sub] = cliPositionals(args, new Set(["-s", "--stack", "-C", "--cwd"]));
+      if (["up", "update", "destroy"].includes(verb) || (verb === "stack" && sub === "rm")) return "high_stakes";
+      if (["refresh", "import", "cancel"].includes(verb)) return "review";
+      return verb === "state" && ["delete", "move", "unprotect"].includes(sub) ? "review" : "safe";
+    }
+    case "cdk": return ["deploy", "destroy"].includes(pos[0]) ? "high_stakes" : pos[0] === "bootstrap" ? "review" : "safe";
+    case "serverless": case "sls":
+      if (["deploy", "remove"].includes(pos[0])) return "high_stakes";
+      return pos[0] === "invoke" && pos[1] !== "local" ? "review" : "safe";
+    case "gcloud": case "az": case "doctl": case "eksctl": {
+      const flags = {
+        gcloud: ["--project", "--account", "--configuration", "--format", "--verbosity", "--impersonate-service-account"],
+        az: ["--subscription", "-o", "--output", "--query"],
+        doctl: ["--context", "-t", "--access-token", "-o", "--output", "--config"],
+        eksctl: [],
+      }[tool];
+      const words = cliPositionals(args, new Set(flags));
+      // Local CLI config and sign-in (`gcloud config set project x`).
+      const local = { gcloud: ["config", "auth", "components", "info", "init", "version", "topic"],
+        az: ["account", "config", "configure", "login", "logout", "extension", "version", "upgrade", "cloud", "find"],
+        doctl: ["auth", "version", "completion"], eksctl: ["version", "info"] }[tool];
+      if (local.includes(words[0])) return "safe";
+      if (tool === "gcloud" && words[0] === "storage") {
+        const t = objectStoreTier(words[1], words, args, "gs://");
+        if (t !== null) return t;
+      }
+      // The first word of gcloud, az and doctl is a product group (`gcloud
+      // deploy`, `gcloud run`), not a verb. eksctl is verb first.
+      return maxCloudWordTier(tool === "eksctl" ? words : words.slice(1));
+    }
+    case "gsutil": {
+      const words = cliPositionals(args, new Set(["-o", "-h", "-u"]));
+      const t = objectStoreTier(words[0], words, args, "gs://");
+      if (t !== null) return t;
+      return words[1] === "set" || words[1] === "ch" || words[0] === "setmeta" ? "review" : "safe";
+    }
+    case "vercel": return vercelTier(args);
+    case "netlify": {
+      const words = cliPositionals(args, new Set(["--site", "--dir", "-d", "--auth", "--filter", "-a", "-s", "-m", "--message", "--alias"]));
+      if (words[0] === "deploy") return has(/^(?:--prod|-p|--prodIfUnlocked|--prod-if-unlocked)$/) ? "high_stakes" : "review";
+      return cloudWordTier((words[0] ?? "").split(":").pop() ?? "");
+    }
+    case "fly": case "flyctl": {
+      const words = cliPositionals(args, new Set(["-a", "--app", "-c", "--config", "-r", "--region", "--image", "-t", "--access-token"]));
+      return words.includes("run") ? maxTier("review", maxCloudWordTier(words)) : maxCloudWordTier(words);
+    }
+    case "heroku": {
+      const parts = (cliPositionals(args, new Set(["-a", "--app", "-r", "--remote"]))[0] ?? "").split(":");
+      const last = parts[parts.length - 1];
+      if (parts[0] === "pg" && ["reset", "copy", "push"].includes(last)) return "high_stakes";
+      return last === "run" ? "review" : cloudWordTier(last);
+    }
+    case "wrangler": {
+      const words = cliPositionals(args, new Set(["-c", "--config", "-e", "--env", "--name"]))
+        // `d1 execute` runs on a local database unless `--remote`.
+        .filter((w) => w !== "execute" || args.includes("--remote"));
+      return words.includes("publish") ? "high_stakes" : maxCloudWordTier(words);
+    }
+    case "firebase": {
+      const words = cliPositionals(args, new Set(["-P", "--project", "--only", "--except", "--token"]));
+      const parts = (words[0] ?? "").split(":");
+      const last = parts[parts.length - 1];
+      if (parts[0] === "emulators") return "safe";
+      if (words[0] === "deploy" || words[0] === "hosting:disable") return "high_stakes";
+      // A preview channel deploy (`hosting:channel:deploy`) does not reach the live site.
+      return last === "deploy" ? "review" : cloudWordTier(last);
+    }
+    case "stripe": {
+      const [resource, op] = cliPositionals(args, new Set(["--api-key", "--project-name", "-p", "--device-name",
+        "--color", "--log-level", "--config"]));
+      // A raw API write, or any resource operation that is not a read. Matches
+      // the curl rule for the Stripe API: it can move money.
+      if (resource === "post" || resource === "delete") return "high_stakes";
+      const local = ["get", "listen", "logs", "login", "logout", "config", "samples", "trigger", "open",
+        "status", "version", "completion", "serve", "resources", "feedback", "community", "daemon", "plugin", "fixtures"];
+      if (!resource || !op || local.includes(resource)) return "safe";
+      return ["list", "retrieve", "search"].includes(op) ? "safe" : "high_stakes";
+    }
+  }
+  return null;
+}
 
 /**
  * `gh api` is curl for GitHub: a mutating method, or fields without a method
@@ -1137,6 +1370,9 @@ function classifyStageShellEffects(stage: string, ephemeralVars: Set<string> = n
   for (const pattern of HIGH_STAKES_STAGE) {
     if (pattern.test(bareStage)) return "high_stakes";
   }
+  // A cloud CLI read falls through, so a `> file` redirect is still logged.
+  const cloudTier = classifyCloudCliStage(bareStage);
+  if (cloudTier !== null && cloudTier !== "safe") return cloudTier;
 
   // curl with a mutating method or request body → review, or high_stakes for a
   // DELETE, a file upload or a pay/send API. Scanned per-stage (not on the full
