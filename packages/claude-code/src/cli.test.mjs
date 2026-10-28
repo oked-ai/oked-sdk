@@ -77,7 +77,8 @@ try {
     assert.equal(code, 0);
     assert.match(out, /Paired ✓  API key oked_tes\.\.\. saved to /);
     assert.match(out, /No Claude Code hook was added/);
-    assert.match(out, /Couldn't open your browser automatically/, "--no-browser opens no browser");
+    assert.match(out, /^  Open this link:$/m, "--no-browser opens no browser");
+    assert.doesNotMatch(out, /Couldn't open your browser/, "--no-browser tried no browser");
     assert.ok(!out.includes(NEW_KEY), "the full key is never printed");
     const saved = JSON.parse(readFileSync(config, "utf8"));
     assert.equal(saved.apiKey, NEW_KEY);
