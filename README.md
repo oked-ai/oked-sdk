@@ -18,6 +18,7 @@
   <a href="https://www.npmjs.com/package/@oked/claude-code"><img src="https://img.shields.io/npm/v/@oked/claude-code?label=%40oked%2Fclaude-code" alt="@oked/claude-code on npm"></a>
   <a href="https://www.npmjs.com/package/@oked/codex"><img src="https://img.shields.io/npm/v/@oked/codex?label=%40oked%2Fcodex" alt="@oked/codex on npm"></a>
   <a href="https://www.npmjs.com/package/@oked/cursor"><img src="https://img.shields.io/npm/v/@oked/cursor?label=%40oked%2Fcursor" alt="@oked/cursor on npm"></a>
+  <a href="https://www.npmjs.com/package/@oked/copilot"><img src="https://img.shields.io/npm/v/@oked/copilot?label=%40oked%2Fcopilot" alt="@oked/copilot on npm"></a>
   <a href="https://www.npmjs.com/package/@oked/claude-agent-sdk"><img src="https://img.shields.io/npm/v/@oked/claude-agent-sdk?label=%40oked%2Fclaude-agent-sdk" alt="@oked/claude-agent-sdk on npm"></a>
   <a href="https://www.npmjs.com/package/@oked/openclaw"><img src="https://img.shields.io/npm/v/@oked/openclaw?label=%40oked%2Fopenclaw" alt="@oked/openclaw on npm"></a>
   <a href="https://github.com/oked-ai/oked-sdk/actions/workflows/ci.yml"><img src="https://github.com/oked-ai/oked-sdk/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
@@ -45,6 +46,7 @@ The Claude Code integration is a `PreToolUse` hook (`oked-hook`) in its own proc
 | **Claude Code** | `npm install -g @oked/claude-code`, then `oked init` |
 | **Codex CLI** | `npm install -g @oked/codex`, then `oked-codex init`. In Codex, run `/hooks` and trust the hook. See the [package README](./packages/codex). |
 | **Cursor** | `npm install -g @oked/cursor`, then `oked-cursor init`. See the [package README](./packages/cursor). |
+| **GitHub Copilot** | `npm install -g @oked/copilot`, then `oked-copilot init`. CLI and VS Code. See the [package README](./packages/copilot). |
 | **Claude Agent SDK** | `npm install @oked/claude-agent-sdk`, then pass `okedHooks()` in `options.hooks`. See the [package README](./packages/claude-agent-sdk). |
 | **OpenClaw** | `npm install -g @oked/openclaw @oked/openclaw-cli`, then `oked-openclaw init`. See the [package README](./packages/openclaw). |
 | **NVIDIA OpenShell** | Separate repo: [oked-openshell](https://github.com/oked-ai/oked-openshell). `oked init --key-only` creates a key without installing the Claude Code hook. |
@@ -95,6 +97,7 @@ All `@oked/*` packages share one version and are published together. Node.js 18 
 | [`@oked/claude-code`](./packages/claude-code) | Claude Code hook. `oked init` writes `oked-hook` into `.claude/settings.json`. |
 | [`@oked/codex`](./packages/codex) | Codex CLI `PreToolUse` hook. `oked-codex init` writes it into `.codex/hooks.json`. |
 | [`@oked/cursor`](./packages/cursor) | Cursor `preToolUse` hook. `oked-cursor init` writes it into `.cursor/hooks.json`. |
+| [`@oked/copilot`](./packages/copilot) | Copilot CLI and VS Code `preToolUse` hook. `oked-copilot init` writes `.github/hooks/oked.json`. |
 | [`@oked/claude-agent-sdk`](./packages/claude-agent-sdk) | `PreToolUse` hook for the Claude Agent SDK. Pass it in `options.hooks`. |
 | [`@oked/openclaw`](./packages/openclaw) | OpenClaw plugin. `before_tool_call` classifies every tool the host reports. |
 | [`@oked/openclaw-cli`](./packages/openclaw-cli) | `oked-openclaw`: installs the plugin and writes `~/.openclaw/openclaw.json`. |
