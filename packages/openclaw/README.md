@@ -1,14 +1,11 @@
 # @oked/openclaw
 
 [![npm version](https://img.shields.io/npm/v/@oked/openclaw.svg)](https://www.npmjs.com/package/@oked/openclaw)
-[![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](./LICENSE)
-[![Types: included](https://img.shields.io/npm/types/@oked/openclaw.svg)](./dist/index.d.ts)
+[![License: Apache-2.0](https://img.shields.io/npm/l/@oked/openclaw.svg)](./LICENSE)
 
-Zero-code integration for OpenClaw. Registers a `before_tool_call` hook that fires for **every** tool the OpenClaw agent calls (built-in or skill-registered), classifies it, and freezes the agent on dangerous actions until you approve from the OKed mobile app.
+OpenClaw plugin. A `before_tool_call` hook runs for every tool the host reports (built-in or registered by a skill), classifies it, and holds `review` and `high_stakes` calls until you approve in Telegram or on the [web dashboard](https://oked.ai/dashboard). The iPhone app is coming soon and is not on the App Store.
 
-## Why
-
-OpenClaw's built-in iOS approvals cover **shell commands** (`exec.approval.*`). They do **not** automatically cover the skill / plugin tools agents actually use to touch the real world (sending iMessages, making phone calls, deploying sites, charging cards). Skill authors have to opt in to `plugin.approval.request`, and most don't. This plugin closes that gap.
+Optional peer dependency: `openclaw` >= 2026.4.20. A denial returns `{ block: true, blockReason }` instead of throwing. The plugin source says OpenClaw 2026.5.4 and later treat that return value as a veto and show the reason to the agent. An earlier host ignored the return and ran the tool.
 
 ## Install
 
@@ -17,9 +14,9 @@ npm install -g @oked/openclaw @oked/openclaw-cli
 oked-openclaw init
 ```
 
-The CLI ([`@oked/openclaw-cli`](../openclaw-cli)) runs `openclaw plugins install --link` against this package, prompts for your API key + `minTier`, writes the entry into `~/.openclaw/openclaw.json`, and restarts the OpenClaw daemon.
+The CLI ([`@oked/openclaw-cli`](../openclaw-cli)) needs the `openclaw` command on your PATH. It runs `openclaw plugins install --link` against this package, pairs this device (or reuses an existing API key), sets `minTier` (a terminal prompt when none is set), writes the entry into `~/.openclaw/openclaw.json`, and offers to restart the gateway.
 
-If you'd rather do it by hand:
+To wire it by hand:
 
 ```bash
 openclaw plugins install --link <path-to-this-package>
@@ -43,49 +40,39 @@ Then in `~/.openclaw/openclaw.json`:
 }
 ```
 
-Restart the OpenClaw gateway and you're done.
+Restart the OpenClaw gateway after a manual edit. [Sign up](https://oked.ai/signup) if you do not have a key yet. The same dashboard is also served at [app.oked.ai/dashboard](https://app.oked.ai/dashboard/).
 
 ## Configuration
 
-All keys go under `plugins.entries.oked`:
+Keys live under `plugins.entries.oked`. The plugin manifest sets `additionalProperties: false`, so only the keys in the table are accepted in `openclaw.json`. `OKED_STRICT_FAIL_CLOSED` is read from the environment, not from this object.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `apiKey` | `string` | `OKED_API_KEY` env | Your OKed API key. Required. |
-| `backendUrl` | `string` | `https://api.oked.ai` | Override the OKed backend URL. |
-| `minTier` | `"review" \| "high_stakes"` | `"review"` | Minimum risk tier that triggers approval. Set to `"high_stakes"` to only gate the most dangerous calls. `warning` is informational only and does not block. |
-| `alwaysApprove` | `string[]` | `[]` | Tool names to always require approval for, regardless of classifier. |
-| `alwaysAllow` | `string[]` | `[]` | Tool names to never gate. Use sparingly. |
-| `timeoutMs` | `number` | `630000` | Per-approval timeout in ms (10.5 minutes, just above the backend's 10 minute expiry). Max `1800000`. |
+| `apiKey` | `string` | `OKED_API_KEY` env | OKed API key. Required. With no key, sensitive calls are denied. |
+| `backendUrl` | `string` | `https://api.oked.ai` | Backend URL. |
+| `minTier` | `"safe" \| "warning" \| "review" \| "high_stakes"` | `"review"` | Lowest tier that can ask for approval. `warning` never blocks: only `review` and `high_stakes` do. Env `OKED_MIN_TIER` is the fallback when the config value is absent. |
+| `alwaysApprove` | `string[]` | `[]` | Tool names that are always `high_stakes`, whatever the classifier says. |
+| `alwaysAllow` | `string[]` | `[]` | Tool names that are always `safe`. Use sparingly. |
+| `timeoutMs` | `number` | `630000` | Per-approval wait, in milliseconds (10.5 minutes, so the backend's 10 minute expiry answers first). Minimum `1000`, maximum `1800000`. |
 
 ## What gets gated
 
-The classifier matches OpenClaw skill naming conventions:
+Names are matched against OpenClaw skill conventions, then unknown names default to `review`.
 
-- **High stakes** (always approval): `*_send`, `*_post`, `*_publish`, `*_call`, `*_dial`, `*_charge`, `*_pay`, `*_delete`, `*_drop`, `*_deploy`, `*_release`, ...
-- **Review** (approval at default `minTier`): `*_create`, `*_update`, `*_write`, `*_edit`, `*_rename`, `*_modify`, and unknown tool names.
-- **Warning** (log / allow): lower-risk state changes from shared SDK classifiers.
-- **Safe** (never gated): `get_*`, `list_*`, `search_*`, `read_*`, `find_*`.
-- **Bash / shell / exec**: defers to the `@oked/sdk` shell classifier (`rm -rf`, `git push --force`, ...).
+- **High stakes** (always an approval at the default `minTier`): names that send, post, publish, call, dial, charge, pay, delete, drop, deploy, or release, among the patterns in `src/classify-openclaw.ts`.
+- **Review** (an approval at the default `minTier`): `create`, `update`, `write`, `edit`, `rename`, `modify`, and any tool name the classifier does not recognize.
+- **Safe** (never gated): `get_*`, `list_*`, `search_*`, `read_*`, `find_*`, and the other read-style prefixes and suffixes in that file.
+- **Bash / shell / exec**: deferred to the `@oked/sdk` shell classifier (`rm -rf`, `git push --force`, and the rest).
 
-For tool names the classifier doesn't recognize, the default tier is `review`, so they are gated by the default configuration.
+`warning` is logged by the SDK classifier and does not block, even if you set `minTier` below `review`.
 
 ## Degraded-mode behavior
 
-Explicit denials, invalid API keys, missing API keys, and unexpected plugin errors deny sensitive tool calls. If the backend is unreachable, OKed denies `high_stakes` actions and, by default, allows lower tiers so a temporary outage does not stop every OpenClaw workflow. Set `OKED_STRICT_FAIL_CLOSED=1` to deny every sensitive action during backend outages.
-
-## Comparison to OpenClaw built-in approvals
-
-|  | OpenClaw `exec.approval.*` | `@oked/openclaw` |
-|---|---|---|
-| Shell commands | OK | OK (via classifier) |
-| Skill / plugin tools | Only if skill author opts in | OK all tools |
-| Mobile push | iOS app paired via `device-pairing` | OKed mobile app, unified across Claude Code + OpenClaw + future tools |
-| Audit log | Gateway-local | Centralized OKed dashboard |
-
-Use both. OpenClaw's exec approvals stay in place; this plugin layers on top to cover the skill surface.
+Explicit denials, invalid API keys, a missing API key, receipts that do not verify, and unexpected plugin errors deny the tool call. If the backend is unreachable, OKed denies `high_stakes` and, by default, allows lower tiers. Set `OKED_STRICT_FAIL_CLOSED=1` to deny every sensitive action during an outage.
 
 ## Development
+
+From the repo root:
 
 ```bash
 npm install
