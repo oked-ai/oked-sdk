@@ -16,6 +16,7 @@ import {
 
 import { CLIENT_VERSION } from "./version.js";
 import { OKED_RECEIPTS_LOG, verifyReceiptsFile } from "./receipts.js";
+import { renderQR } from "./qr.js";
 
 const DEFAULT_BACKEND_URL =
   process.env.OKED_BACKEND_URL || "https://api.oked.ai";
@@ -138,14 +139,27 @@ function copyToClipboard(text: string): Promise<boolean> {
 }
 
 /** Wait for the user to press Enter. Resolves immediately if stdin is closed. */
-function waitForEnter(message: string): Promise<void> {
-  return new Promise((resolve) => {
-    const rl = createInterface({ input: process.stdin, output: process.stdout });
+/** Ask for Enter. cancel() takes the prompt away, for when pairing ends first. */
+function waitForEnter(message: string): { pressed: Promise<void>; cancel: () => void } {
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  // The pairing poll keeps the process alive, so Ctrl+C must exit on purpose.
+  rl.on("SIGINT", () => {
+    process.stdout.write("\n");
+    process.exit(130);
+  });
+  const pressed = new Promise<void>((resolve) => {
     rl.question(message, () => {
       rl.close();
       resolve();
     });
   });
+  return {
+    pressed,
+    cancel: () => {
+      process.stdout.write("\n");
+      rl.close();
+    },
+  };
 }
 
 async function pair(clientType: "claude-code" | "openclaw" | "sdk"): Promise<string | null> {
@@ -181,6 +195,18 @@ async function pair(clientType: "claude-code" | "openclaw" | "sdk"): Promise<str
   }
   console.log("");
 
+  // The QR code holds the pairing link: the OKed app pairs from it, and the
+  // Camera app opens it in the browser. Only in a terminal that shows colors.
+  if (process.stdout.isTTY && !process.env.NO_COLOR) {
+    console.log("  Or scan this with your iPhone:");
+    console.log("");
+    console.log(renderQR(code.verification_uri_complete));
+    console.log("");
+  }
+
+  // Poll from now on, so a scan from the phone pairs before anyone presses Enter.
+  const paired = pollForKey(code);
+
   // Let the user read the code and initiate the browser launch themselves, so
   // the popup isn't a surprise. Skip the prompt when non-interactive (no TTY,
   // or `--yes`/`-y`) so CI and scripted installs still work.
@@ -189,7 +215,12 @@ async function pair(clientType: "claude-code" | "openclaw" | "sdk"): Promise<str
     !process.argv.includes("--yes") &&
     !process.argv.includes("-y");
   if (interactive && !NO_BROWSER) {
-    await waitForEnter("  Press Enter to open your browser (Ctrl+C to cancel)... ");
+    const enter = waitForEnter("  Press Enter to open your browser (Ctrl+C to cancel)... ");
+    const first = await Promise.race([enter.pressed.then(() => "enter"), paired.then(() => "paired")]);
+    if (first === "paired") {
+      enter.cancel();
+      return paired;
+    }
   }
 
   const opened = NO_BROWSER ? false : openBrowser(code.verification_uri_complete);
@@ -205,7 +236,15 @@ async function pair(clientType: "claude-code" | "openclaw" | "sdk"): Promise<str
   console.log("  or enter it in the OKed app on your iPhone.)");
   console.log("");
   console.log("  Waiting for confirmation...");
+  return paired;
+}
 
+/** Poll until the code is confirmed (the API key), or it expires (null). */
+async function pollForKey(code: {
+  device_code: string;
+  interval: number;
+  expires_in: number;
+}): Promise<string | null> {
   const deadline = Date.now() + code.expires_in * 1000;
   const intervalMs = Math.max(1, code.interval) * 1000;
 
