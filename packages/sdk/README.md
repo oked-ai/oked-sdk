@@ -1,18 +1,21 @@
 # @oked/sdk
 
 [![npm version](https://img.shields.io/npm/v/@oked/sdk.svg)](https://www.npmjs.com/package/@oked/sdk)
-[![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](./LICENSE)
-[![Types: included](https://img.shields.io/npm/types/@oked/sdk.svg)](./dist/index.d.ts)
+[![License: Apache-2.0](https://img.shields.io/npm/l/@oked/sdk.svg)](./LICENSE)
 
-Core library - programmatic approval API for AI agents. Sends sensitive actions to the OKed backend, waits for a human decision, and resolves only when the user approves or denies.
+Programmatic approval API for AI agents. Send a sensitive action to the OKed backend, wait for a person, and continue only when they approve.
 
-Use this package directly from any Node.js agent (OpenAI SDK, LangChain, custom). For drop-in integrations, see [`@oked/claude-code`](../claude-code) or [`@oked/openclaw`](../openclaw).
+Use this package from any Node.js agent. For drop-in integrations, see [`@oked/claude-code`](../claude-code), [`@oked/claude-agent-sdk`](../claude-agent-sdk), and [`@oked/openclaw`](../openclaw).
+
+Decisions are made in Telegram and on the [web dashboard](https://oked.ai/dashboard). The iPhone app is coming soon. [Sign up](https://oked.ai/signup) to get an API key.
 
 ## Install
 
 ```bash
 npm install @oked/sdk
 ```
+
+Node.js 18 or newer.
 
 ## Quick start
 
@@ -36,78 +39,91 @@ if (!result.approved) {
 }
 ```
 
+The approval window is 10 minutes. The client waits 630 seconds (`630000` ms, `DEFAULT_APPROVAL_TIMEOUT_MS`), 30 seconds past that window, so the backend's `timeout` answer arrives before the client aborts. A timeout is a denial. If you raise `timeout`, raise the harness hook limit above it. Otherwise the process can be killed before the deny is written.
+
 ## Configuration
 
-Pass to `new OKedClient(config)`:
+Pass any of these to `new OKedClient(config)`. Constructor values win over environment variables, which win over `~/.oked/config.json`.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `apiKey` | `string` | `OKED_API_KEY` env | Your OKed API key. Required. |
-| `backendUrl` | `string` | `https://api.oked.ai` | Override the OKed backend URL. |
-| `timeout` | `number` | `630000` | Per-approval timeout in ms (10.5 minutes, just above the backend's 10 minute expiry, so the backend's `timeout` answer arrives first). If you raise it, raise the harness hook timeout to match: it must stay above this value so the fail-safe deny is written before the hook process is killed. |
-| `strictFailClosed` | `boolean` | `false` | When true, backend outages deny every tier. When false, outages deny only `high_stakes` and allow lower tiers. |
+| `apiKey` | `string` | `OKED_API_KEY`, then the config file | OKed API key. Required for `approve`. |
+| `backendUrl` | `string` | `https://api.oked.ai` | Backend URL. |
+| `timeout` | `number` | `630000` | How long to wait for a decision, in milliseconds. See above. |
+| `strictFailClosed` | `boolean` | `false` | When true, an unreachable backend denies every tier. When false, it denies only `high_stakes`. |
 | `requireReceipt` | `boolean` | `true` | Deny an approval that arrives without a signed receipt. A receipt that is present but invalid always denies. Set `false` (env `OKED_REQUIRE_RECEIPT=0`) only for a backend that does not sign receipts. |
-| `receiptKeysUrl` | `string` | `https://api.oked.ai/.well-known/oked-receipt-keys.json` | Where to fetch a receipt key the SDK has not seen. Independent of `backendUrl`; https only, except loopback. |
-| `receiptKeys` | `ReceiptKey[]` | | Verify with exactly these keys and never fetch (self-hosted backends, tests). |
-| `client` | `string` | | Your integration's name and version, e.g. `my-agent@1.2.0`. Recorded in receipts. |
-| `source` | `string` | `"sdk"` | Where requests come from. Part of each receipt's subject. |
+| `receiptKeysUrl` | `string` | `https://api.oked.ai/.well-known/oked-receipt-keys.json` | Where to fetch a receipt key the SDK has not seen. Independent of `backendUrl`. https only, except loopback. |
+| `receiptKeys` | `ReceiptKey[]` | | Verify with exactly these keys and never fetch. For self-hosted backends and tests. |
+| `rulesCacheTtlMs` | `number` | `300000` | How long the on-disk rules cache stays fresh. Env `OKED_RULES_CACHE_TTL` is in seconds. |
+| `heartbeatIntervalMs` | `number` | `86400000` | Minimum gap between presence pings. Env `OKED_HEARTBEAT_INTERVAL` is in seconds. |
+| `client` | `string` | | Your integration's name and version, for example `my-agent@1.2.0`. Recorded on the receipt. |
+| `source` | `string` | `"sdk"` | Where the request came from. Part of the receipt subject. |
 
 ## API
 
 ### `approve(request)`
 
-Request an approval for a sensitive action. Resolves when the user responds, the request times out, or the backend denies.
-
-Request fields:
+Ask for a decision. Resolves when the person responds, the request times out, or the backend returns an error as a thrown exception (see below).
 
 | Field | Type | Required | Description |
 |---|---|---|---|
-| `action` | `string` | yes | Short action identifier (e.g. `"deploy"`, `"send_email"`). |
-| `description` | `string` | yes | Human-readable summary shown in the approval UI. |
-| `tier` | `"safe" \| "warning" \| "review" \| "high_stakes"` | yes | Risk tier. Use `classify()` if unsure. |
-| `tool_input` | `unknown` | no | Raw tool arguments, included in the audit log. |
-| `session_id` | `string` | no | Groups related approvals under one session. |
-| `cwd` | `string` | no | Working directory, shown in the UI for context. |
-
-Response fields:
+| `action` | `string` | yes | Short action id, for example `"deploy"`. |
+| `description` | `string` | yes | Text shown on the approval card. |
+| `tier` | `"safe" \| "warning" \| "review" \| "high_stakes"` | yes | Risk tier. Use `classify()` if you are not sure. |
+| `fields` | `Record<string, string>` | no | Card fields (title, target, body, and so on). |
+| `tool_input` | `unknown` | no | Raw tool arguments. Included in the receipt subject. |
+| `session_id` | `string` | no | Groups related approvals. |
+| `cwd` | `string` | no | Working directory, shown for context. |
 
 | Field | Type | Description |
 |---|---|---|
-| `approved` | `boolean` | `true` only when the user approved. |
-| `approval_id` | `string \| null` | Opaque id for logs / audit. |
-| `decision` | `"approved" \| "denied" \| "timeout"` | Exact outcome. |
-| `receipt` | `SignedReceipt` | The signed receipt for this decision, already verified: OKed's signature, this request, this decision, and the exact action you sent. See [docs/receipts.md](../../docs/receipts.md). |
+| `approved` | `boolean` | `true` only when the person approved. |
+| `approval_id` | `string \| null` | Id for logs. `null` when the backend created no request row. |
+| `decision` | `"approved" \| "denied" \| "timeout"` | Outcome. |
+| `receipt` | `SignedReceipt \| undefined` | Signed receipt, already verified against this request, this decision, and the exact action you sent. Absent for some denials and timeouts that carry no receipt. See [docs/receipts.md](../../docs/receipts.md). |
 
 ### `ping()`
 
-Returns `true` when the backend is reachable. Use for startup health checks.
+Returns `true` when `GET {backendUrl}/health` succeeds within 3 seconds.
+
+### `getRules()` and `heartbeat()`
+
+`getRules()` returns the operator's rules, cached on disk. `heartbeat()` sends a throttled presence ping and never throws. Integrations call both. You do not need them to use `approve`.
 
 ### Helpers
 
-- `classify(input)` - classifies a shell command or tool call into a risk tier.
-- `describe(input)` - generates a human-readable description for the approval UI.
+- `classify(toolName, toolInput)` returns a risk tier for a tool call.
+- `describe(toolName, toolInput, ctx?)` returns a one-line description.
+- `describeFields(toolName, toolInput, ctx?)` returns the card fields.
 
-Full type definitions ship with the package (`dist/index.d.ts`).
+Full type definitions ship in the package (`dist/index.d.ts`).
 
 ## Environment
 
 | Var | Required | Description |
 |---|---|---|
-| `OKED_API_KEY` | yes, unless passed in code | Your OKed API key. |
+| `OKED_API_KEY` | yes, unless passed in code or saved by `oked init` | OKed API key. |
 | `OKED_BACKEND_URL` | no | Override the hosted backend URL. |
-| `OKED_STRICT_FAIL_CLOSED` | no | Set to `1` or `true` to deny every sensitive action when the backend is unreachable. |
-| `OKED_REQUIRE_RECEIPT` | no | Set to `0` to allow an approval that has no receipt (a backend that does not sign receipts). On by default. |
-| `OKED_RECEIPT_KEYS_URL` | no | Where to fetch receipt keys (default OKed's published set). |
+| `OKED_STRICT_FAIL_CLOSED` | no | `1` or `true` denies every sensitive action when the backend is unreachable. |
+| `OKED_REQUIRE_RECEIPT` | no | `0` allows an approval that has no receipt. On by default. |
+| `OKED_RECEIPT_KEYS_URL` | no | Where to fetch receipt keys. Default is OKed's published set. |
+| `OKED_RULES_CACHE_TTL` | no | Rules cache TTL, in seconds. Default 300. |
+| `OKED_HEARTBEAT_INTERVAL` | no | Minimum seconds between heartbeats. Default 86400. |
 
 ## Degraded-mode behavior
 
-Explicit user denials return `{ approved: false }` and should always be treated as final. Invalid API keys throw `OKedAuthError` and should deny. A receipt that does not verify, or an approval with no receipt, throws `OKedReceiptError` and should deny. A request the backend accepted but nobody answered in time returns `decision: "timeout"`, never an outage. If the backend is unreachable, `OKedBackendUnreachableError` lets integrations apply degraded mode: `high_stakes` denies, while lower tiers may proceed unless `strictFailClosed` is enabled. Unexpected errors should be treated as deny.
+Explicit denials return `{ approved: false }` and are final. Invalid API keys throw `OKedAuthError`. A receipt that does not verify, or an approval with no receipt while `requireReceipt` is on, throws `OKedReceiptError`. A request the backend accepted and nobody answered returns `decision: "timeout"`, not an outage error. HTTP 429 throws `OKedTooManyPendingError` (too many approvals are already waiting). Other HTTP errors throw `OKedHttpError`.
+
+If the backend is unreachable, `OKedBackendUnreachableError` is the outage signal. `high_stakes` denies. Lower tiers may proceed unless `strictFailClosed` is set. Treat anything else as a deny.
 
 ## Development
+
+From the repo root:
 
 ```bash
 npm install
 npm run build
+npm test
 ```
 
 ## License

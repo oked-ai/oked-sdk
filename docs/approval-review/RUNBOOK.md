@@ -11,6 +11,10 @@ fatigue. A card that hides the risky step is worse than no card.
 Write all text (PR bodies, commit messages, record reasons) in ASD-STE100
 Simplified Technical English. Do not use em dashes.
 
+People decide today in Telegram and on the web dashboard. The iPhone app is
+coming soon. `LOG.md` is rebuilt by `record.mjs`. Its high_stakes rows say
+"Face ID" because that script's tier label says so.
+
 ## 0. Set up
 
 1. Work in a fresh worktree of `oked-sdk` off `origin/main`, on the branch
@@ -88,7 +92,7 @@ across all cards for layout problems.
 - Does each emoji add meaning? Remove emojis that only decorate or repeat.
 - Are there empty lines, repeated words, or a quote block that holds code?
 - Is the decided state short and easy to scan?
-- Does the same card read well in Telegram and in the iOS app?
+- Does the same card read well in Telegram and on the web dashboard?
 
 Where things live:
 
@@ -99,7 +103,7 @@ Where things live:
   (`renderApprovalText`, `decidedLine`, `TIER_LABEL`, `KIND_EMOJI`, the
   buttons). Use a fresh `oked-app` worktree off `origin/main` in the
   scratchpad. Its renderer test is `backend/test/telegram-render.test.ts`.
-- iOS card: `oked-ios`. Open a PR only. Never merge it.
+- iOS card: `oked-ios` (iPhone app coming soon). Open a PR only. Never merge it.
 
 ## 3. Fix
 
@@ -154,12 +158,13 @@ node scripts/approval-review/gate.mjs --backend <oked-app worktree>   # only wit
 - **PASS:** merge with `gh pr merge <n> --squash --delete-branch`. Merge the
   backend PR the same way (a merge to `oked-app` `main` deploys). Then run the
   `oked-release` skill with a `patch` bump. It publishes the SDK and bumps the
-  backend pin, so the new tiers reach the phone.
+  backend pin, so the new tiers reach Telegram and the web dashboard.
 - **BLOCKED:** leave the PRs open. Send one push notification: "Approval
   review: N changes wait for you." plus the gate reasons.
 
-The merge, the publish and the deploy each ask for approval on Oren's phone
-through OKed. That card is the last human check. Do not try to avoid it.
+The merge, the publish and the deploy each ask for approval through OKed,
+in Telegram or on the web dashboard. That card is the last human check.
+Do not try to avoid it.
 
 ## 7. Finish
 

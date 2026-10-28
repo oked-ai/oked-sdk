@@ -3,7 +3,9 @@
 Every decision OKed records on an agent action comes with a signed receipt:
 who decided, how they were verified, what exact action they decided on, and
 when. Anyone can check a receipt offline with OKed's public key, without
-trusting OKed's database.
+trusting OKed's database. Paste one receipt at
+[oked.ai/docs/#verify](https://oked.ai/docs/#verify) (the check stays in the
+browser), or run `npx @oked/verify`.
 
 A receipt is evidence that supports change-authorization controls (for
 example SOC 2 CC8.1, segregation of duties, EU AI Act Article 14 human
@@ -25,11 +27,11 @@ oversight). It does not by itself make anyone compliant.
   that was rendered (title, target, body and so on).
 - **Who decided, and how honestly that is known.** `decider.kind` is `human`,
   `rule` or `system`, and `decider.assurance` says how the human was
-  verified: `channel` (a linked Telegram account, a signed-in dashboard
-  session, or the signed-in OKed iPhone app), `device_verified` (the iPhone
-  app checked Face ID or the device passcode right before the decision), or
-  `passkey` once that ships. Rules and timeouts are
-  labeled as such and never look like human approvals.
+  verified. `channel` is a linked Telegram account or a signed-in dashboard
+  session. `mobile` is reserved for the upcoming iPhone app.
+  `device_verified` means that app checked Face ID or the device passcode.
+  `passkey` is planned. Rules and timeouts are labeled as such and never
+  look like human approvals.
 - **Nothing was deleted or edited in between.** Receipts form a hash chain
   per operator: each one carries the digest of the one before it, and `seq`
   counts up from 1 with no gaps. A deleted receipt shows as a gap; an edited
@@ -38,9 +40,9 @@ oversight). It does not by itself make anyone compliant.
 ## What a receipt does not prove
 
 - **That a specific person was present.** `channel` assurance proves the
-  Telegram account, the dashboard session or the signed-in phone, not the
-  person holding it. `device_verified` comes closer: the phone checked Face ID
-  or its passcode, but the phone itself reports that check. Passkey step-up
+  Telegram account or the dashboard session, not the person at the keyboard.
+  `device_verified` means the upcoming iPhone app checked Face ID or the
+  device passcode. The phone itself reports that check. Passkey step-up
   (assurance `passkey`) is planned.
 - **That the action then ran, or what it returned.** A receipt covers the
   decision. The integration enforces it: by default (since 0.6.0) an approved
@@ -86,7 +88,7 @@ A receipt is a JSON envelope:
     "requester": {
       "operator_id": "11111111-1111-4111-8111-111111111111",
       "api_key_id": "44444444-4444-4444-8444-444444444444",
-      "client": "@oked/claude-code@0.5.0"
+      "client": "@oked/claude-code@0.6.20"
     },
     "same_person": true,
     "prev_receipt_digest": "sha256:…"
@@ -101,8 +103,9 @@ A receipt is a JSON envelope:
 |---|---|
 | `decision` | `approved`, `denied` or `timed_out` (nobody answered in time, so OKed denied it). |
 | `decider.kind` | `human`, `rule` (a rule the operator wrote; `rule_id` set) or `system` (`reason`: `timeout`, or `classified_safe` when OKed's classifier found the action low risk and allowed it without asking). |
-| `decider.assurance` | `none`, `channel`, `device_verified` or `passkey`. |
-| `decider.channel` | Where a human decided: `telegram`, `dashboard` or `mobile` (the OKed iPhone app). `null` for rules and the system. |
+| `display_digest` | SHA-256 of the rendered card, or `null` when nothing was rendered. |
+| `decider.assurance` | `none`, `channel`, `device_verified`, or `passkey`. `device_verified` means the upcoming iPhone app checked Face ID or the device passcode. `passkey` is planned. |
+| `decider.channel` | `telegram`, `dashboard`, or `mobile`. `mobile` is reserved for the upcoming iPhone app. `null` for rules and the system. |
 | `same_person` | True when a human approved an action from an agent they run themselves. Shown, not blocked. |
 | `summary` | The rendered title, or `null` when the operator turned summaries off (titles can contain file names or email addresses). |
 | `chain_id` | `op_<operator id>`, or `key_<API key id>` for a key with no operator. |
@@ -157,8 +160,8 @@ OKed publishes every key that ever signed receipts at
 
 ## Verifying
 
-From an export (dashboard, Recent, "Export receipts"), a `.jsonl` file or a
-single receipt:
+From a dashboard export, a `.jsonl` file, or a single receipt. One receipt
+can also be pasted at [oked.ai/docs/#verify](https://oked.ai/docs/#verify).
 
 ```bash
 npx @oked/verify oked-receipts-2026-09-01-to-2026-10-01.zip
