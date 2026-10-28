@@ -3,7 +3,7 @@
 [![npm version](https://img.shields.io/npm/v/@oked/cursor.svg)](https://www.npmjs.com/package/@oked/cursor)
 [![License: Apache-2.0](https://img.shields.io/npm/l/@oked/cursor.svg)](./LICENSE)
 
-Cursor agent hook. Sensitive actions wait for a person in Telegram or on the [web dashboard](https://oked.ai/dashboard) before Cursor continues. The iPhone app is coming soon.
+Cursor agent hook. Sensitive actions wait for a person in Telegram or on the [web dashboard](https://oked.ai/dashboard?ref=github-cursor) before Cursor continues. The iPhone app is coming soon. Questions: [contact@oked.ai](mailto:contact@oked.ai).
 
 Safe actions are allowed by the hook, with no notification. Warning actions are allowed and logged. OKed asks only for `review` and `high_stakes`.
 
@@ -14,7 +14,24 @@ npm install -g @oked/cursor
 oked-cursor init
 ```
 
-`oked-cursor init` writes a `preToolUse` hook into the current project's `.cursor/hooks.json`, opens the device-pairing page in your browser, and stores the API key in `~/.oked/config.json`. The binary is `oked-cursor`, not `oked`, so it can sit next to `@oked/claude-code`.
+`oked-cursor init` writes `.cursor/hooks.json` in the current project and stores the API key in `~/.oked/config.json`. The file it writes:
+
+```json
+{
+  "version": 1,
+  "hooks": {
+    "preToolUse": [
+      {
+        "command": "oked-cursor-hook",
+        "timeout": 690,
+        "failClosed": true
+      }
+    ]
+  }
+}
+```
+
+There is no matcher, so every tool is included. Other hooks already in that file are kept. A second init does not add a second copy. It raises a timeout below 690 and sets `failClosed` to true. The binary is `oked-cursor`, not `oked`, so it can sit next to `@oked/claude-code`.
 
 Open a new Cursor agent session in that project. Cursor reloads `hooks.json` when it changes.
 
@@ -101,7 +118,7 @@ Init never deletes the Claude hook. `oked uninstall` from `@oked/claude-code` re
 
 Every decision comes with a receipt signed by OKed. The hook verifies it before allowing the action and keeps a copy in `~/.oked/receipts.jsonl`. Since 0.6.0 the hook denies an approval that has no valid receipt. Set `OKED_REQUIRE_RECEIPT=0` only for a backend that does not sign receipts.
 
-You can paste one receipt at [oked.ai/docs/#verify](https://oked.ai/docs/#verify), or check an export with `npx @oked/verify`. See [docs/receipts.md](../../docs/receipts.md).
+You can paste one receipt at [oked.ai/docs/#verify](https://oked.ai/docs?ref=github-cursor#verify), or check an export with `npx @oked/verify`. See [docs/receipts.md](../../docs/receipts.md).
 
 ## Degraded-mode behavior
 
@@ -114,6 +131,20 @@ If the hook cannot parse its stdin, it denies. A bad payload must not become a s
 ## Decision log
 
 The hook writes one JSON line to `~/.oked/hook.log` (mode 600) for each deny, and for each degraded allow. The log never holds the tool input or the command.
+
+## Uninstall
+
+`oked-cursor uninstall` removes only the `oked-cursor-hook` entry from `.cursor/hooks.json`. Other hooks stay. If that was the only hook, the file is deleted. A Claude Code `oked-hook` entry is left in place. The API key in `~/.oked/config.json` stays.
+
+## Troubleshooting
+
+- Hook never runs: open a new agent session. The command `oked-cursor-hook` must be on `PATH` (a global install does that). Project hooks run only in a trusted workspace.
+- The tool ran anyway: Cursor's timeout is undocumented. If it kills the process early, `failClosed: true` should deny. A live check is still required. See the timeout section. On the reported Windows CLI bug, the verdict is dropped at the deadline and `failClosed` denies an approval too.
+- Two cards for one action: a Claude Code `oked-hook` is also loaded. Turn off third-party imports, or remove that entry. `oked-cursor init` skips the native file when it finds one. `oked-cursor init --native` installs anyway and warns.
+- `Pair first: run oked-cursor init`: no API key. The hook denies. It does not print `ask`.
+- Backend down: `high_stakes` is denied. Lower tiers are allowed unless `OKED_STRICT_FAIL_CLOSED=1`. Nobody answering within 10 minutes is a deny.
+- Cloud agents load `.cursor/hooks.json` only. HTTP MCP calls can be denied. Cursor ignores `updated_input` for those.
+- Still stuck: [contact@oked.ai](mailto:contact@oked.ai).
 
 ## License
 

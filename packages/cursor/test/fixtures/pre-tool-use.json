@@ -1,0 +1,103 @@
+[
+  {
+    "name": "read is allow",
+    "input": {
+      "conversation_id": "conv_fixture",
+      "generation_id": "gen_1",
+      "hook_event_name": "preToolUse",
+      "cwd": "/tmp/oked-fixture",
+      "tool_name": "Read",
+      "tool_input": { "path": "README.md" }
+    },
+    "mock": "none",
+    "expect": { "permission": "allow" }
+  },
+  {
+    "name": "safe shell is allow",
+    "input": {
+      "conversation_id": "conv_fixture",
+      "hook_event_name": "preToolUse",
+      "cwd": "/tmp/oked-fixture",
+      "tool_name": "Shell",
+      "tool_input": { "command": "ls" }
+    },
+    "mock": "none",
+    "expect": { "permission": "allow" }
+  },
+  {
+    "name": "unknown tool asks to pair",
+    "input": {
+      "conversation_id": "conv_fixture",
+      "hook_event_name": "preToolUse",
+      "cwd": "/tmp/oked-fixture",
+      "tool_name": "CustomTool",
+      "tool_input": { "value": 1 }
+    },
+    "mock": "none",
+    "expect": { "permission": "deny", "reasonIncludes": "Pair first: run oked-cursor init" }
+  },
+  {
+    "name": "mcp delete is denied when unpaired",
+    "input": {
+      "conversation_id": "conv_fixture",
+      "hook_event_name": "preToolUse",
+      "cwd": "/tmp/oked-fixture",
+      "tool_name": "MCP:github:delete_repo",
+      "tool_input": {}
+    },
+    "mock": "none",
+    "expect": { "permission": "deny", "reasonIncludes": "Pair first: run oked-cursor init" }
+  },
+  {
+    "name": "approval is allow",
+    "input": {
+      "conversation_id": "conv_fixture",
+      "hook_event_name": "preToolUse",
+      "cwd": "/tmp/oked-fixture",
+      "tool_name": "MCP:github:create_issue",
+      "tool_input": { "title": "Ship the hook" }
+    },
+    "apiKey": "test-key",
+    "mock": "approved",
+    "expect": { "permission": "allow", "reasonIncludes": "Approved via OKed" }
+  },
+  {
+    "name": "person denied",
+    "input": {
+      "conversation_id": "conv_fixture",
+      "hook_event_name": "preToolUse",
+      "cwd": "/tmp/oked-fixture",
+      "tool_name": "MCP:github:create_issue",
+      "tool_input": { "title": "Ship the hook" }
+    },
+    "apiKey": "test-key",
+    "mock": "denied",
+    "expect": { "permission": "deny", "reasonIncludes": "Denied via OKed" }
+  },
+  {
+    "name": "backend timeout denies",
+    "input": {
+      "conversation_id": "conv_fixture",
+      "hook_event_name": "preToolUse",
+      "cwd": "/tmp/oked-fixture",
+      "tool_name": "Shell",
+      "tool_input": { "command": "rm -rf /var/data" }
+    },
+    "apiKey": "test-key",
+    "mock": "timeout",
+    "expect": { "permission": "deny", "reasonIncludes": "no decision within the approval window" }
+  },
+  {
+    "name": "unreachable backend denies high stakes",
+    "input": {
+      "conversation_id": "conv_fixture",
+      "hook_event_name": "preToolUse",
+      "cwd": "/tmp/oked-fixture",
+      "tool_name": "Delete",
+      "tool_input": { "path": "src/app.ts" }
+    },
+    "apiKey": "test-key",
+    "mock": "unreachable",
+    "expect": { "permission": "deny", "reasonIncludes": "high-stakes denied (fail-safe)" }
+  }
+]
