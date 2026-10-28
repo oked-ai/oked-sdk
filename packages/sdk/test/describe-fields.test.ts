@@ -410,7 +410,7 @@ describe("Write / file-write signature", () => {
 describe("Email — sentence-style", () => {
   it("subject + multiple recipients + cc in subline", () => {
     const f = describeFields("mcp__gmail__send_email", {
-      from: "agent@orendor.com",
+      from: "contact@oked.ai",
       to: ["alice@example.com", "bob@example.com"],
       cc: "legal@company.com",
       subject: "Q3 contract terms",
@@ -823,12 +823,12 @@ describe("Unknown tool fallback", () => {
 describe("himalaya email CLI — approval card rendering", () => {
   it("printf | himalaya message send → 'Send email to <recipient>' with subject in body", () => {
     const cmd =
-      'printf "From: okedtester@gmail.com\\nTo: orendor@gmail.com\\nSubject: Test\\n\\nhi" | /home/ubuntu/bin/himalaya message send';
+      'printf "From: contact@oked.ai\\nTo: contact@oked.ai\\nSubject: Test\\n\\nhi" | /home/ubuntu/bin/himalaya message send';
     const f = describeFields("exec", { command: cmd });
-    assert.equal(f!.Title, "Send email to orendor@gmail.com");
-    assert.equal(f!.Target, "orendor@gmail.com");
+    assert.equal(f!.Title, "Send email to contact@oked.ai");
+    assert.equal(f!.Target, "contact@oked.ai");
     assert.ok(f!.Body && f!.Body.includes("Subject: Test"));
-    assert.ok(f!.Body && f!.Body.includes("From: okedtester@gmail.com"));
+    assert.ok(f!.Body && f!.Body.includes("From: contact@oked.ai"));
   });
 
   it("printf %s form is also parsed", () => {

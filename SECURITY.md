@@ -15,7 +15,7 @@ We support the latest published minor of each `@oked/*` package. All packages ar
 Please do not open a public GitHub issue for security problems.
 
 - Preferred: open a [private security advisory](https://github.com/oked-ai/oked-sdk/security/advisories/new) on this repository.
-- Email [contact@oked.ai](mailto:contact@oked.ai), the address on [oked.ai/security](https://oked.ai/security). You can also email orendor@gmail.com.
+- Email [contact@oked.ai](mailto:contact@oked.ai), the address on [oked.ai/security](https://oked.ai/security).
 
 We aim to acknowledge reports within 72 hours and to ship a fix or mitigation as quickly as the severity warrants. We credit reporters who want acknowledgement once a fix is released.
 

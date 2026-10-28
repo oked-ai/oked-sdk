@@ -1039,7 +1039,7 @@ function summarizeSql(sql: string, originalCommand: string): Rendered {
  * to X", "Delete email N", "Purge folder Y") instead of a raw shell line.
  *
  * Used for both the approval-card display (so the user sees "Send email to
- * orendor@gmail.com" with the subject + sender, not a printf|himalaya
+ * contact@oked.ai" with the subject + sender, not a printf|himalaya
  * pipeline) and the analytics `operation_kind`.
  *
  * Returns null if the command mentions himalaya but doesn't match a known
