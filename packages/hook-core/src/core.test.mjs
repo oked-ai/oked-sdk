@@ -2,6 +2,7 @@
 // 690s hook budget, patch and delete mapping, and Claude hook detection.
 import assert from "node:assert";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { classify, DEFAULT_APPROVAL_TIMEOUT_MS } from "@oked/sdk";
@@ -147,4 +148,82 @@ let passed = 0;
   }
 }
 
-console.log(`ok - @oked/hook-core: ${passed}/5 passed`);
+{
+  const home = mkdtempSync(join(tmpdir(), "oked-core-net-"));
+  let reply = { status: 200, headers: {}, body: "{}" };
+  const server = createServer((req, res) => {
+    req.resume();
+    req.on("end", () => {
+      if (req.url === "/api/v1/rules" && reply.status < 500) {
+        res.writeHead(200, { "Content-Type": "application/json" }).end("[]");
+        return;
+      }
+      if (req.url === "/api/v1/heartbeat" && reply.status < 500) {
+        res.writeHead(204).end();
+        return;
+      }
+      res.writeHead(reply.status, { "Content-Type": "application/json", ...reply.headers }).end(reply.body);
+    });
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const prev = {
+    HOME: process.env.HOME,
+    OKED_API_KEY: process.env.OKED_API_KEY,
+    OKED_BACKEND_URL: process.env.OKED_BACKEND_URL,
+    OKED_REQUIRE_RECEIPT: process.env.OKED_REQUIRE_RECEIPT,
+  };
+  process.env.HOME = home;
+  process.env.OKED_API_KEY = "test-key";
+  process.env.OKED_BACKEND_URL = `http://127.0.0.1:${server.address().port}`;
+  process.env.OKED_REQUIRE_RECEIPT = "0";
+  const opts = {
+    clientId: "@oked/hook-core@test",
+    source: "test",
+    unpaired: "deny",
+    unpairedReason: "OKed: this device is not paired. Pair first: run oked init",
+    unpairedLog: "not paired",
+    log() {},
+  };
+  try {
+    reply = { status: 404, headers: { "x-railway-fallback": "true" }, body: JSON.stringify({ message: "Application not found" }) };
+    const high = await decide({ toolName: "Bash", toolInput: { command: "rm -rf /var/data" } }, opts);
+    assert.equal(high.decision, "deny");
+    assert.match(high.reason, /backend unreachable/);
+    assert.match(high.reason, /high-stakes denied \(fail-safe\)/);
+
+    const review = await decide({ toolName: "mcp__github__create_issue", toolInput: { title: "x" } }, opts);
+    assert.equal(review.decision, "allow");
+    assert.match(review.reason, /allowed \(degraded/);
+
+    reply = { status: 200, headers: {}, body: JSON.stringify({ approval_id: "appr-t", decision: "timeout", status: "timeout" }) };
+    const timed = await decide({ toolName: "mcp__github__create_issue", toolInput: { title: "x" } }, opts);
+    assert.equal(timed.decision, "deny");
+    assert.match(timed.reason, /no decision within the approval window \(timed out\)/);
+
+    reply = { status: 200, headers: {}, body: JSON.stringify({ approval_id: "appr-a", decision: "approved", status: "approved" }) };
+    const ok = await decide({ toolName: "mcp__github__create_issue", toolInput: { title: "x" } }, opts);
+    assert.equal(ok.decision, "allow");
+    assert.match(ok.reason, /Approved via OKed/);
+
+    reply = { status: 401, headers: {}, body: JSON.stringify({ message: "API key required" }) };
+    const auth = await decide({ toolName: "mcp__github__create_issue", toolInput: { title: "x" } }, opts);
+    assert.equal(auth.decision, "deny");
+    assert.match(auth.reason, /invalid API key \(HTTP 401\)/);
+
+    process.env.OKED_API_KEY = "";
+    const unpairedUnknown = await decide({ toolName: "NotARealTool", toolInput: { value: 1 } }, opts);
+    assert.equal(unpairedUnknown.decision, "deny");
+    assert.match(unpairedUnknown.reason, /Pair first: run oked init/);
+    assert.equal(classify("NotARealTool", { value: 1 }), "review");
+    passed++;
+  } finally {
+    server.close();
+    rmSync(home, { recursive: true, force: true });
+    for (const [key, value] of Object.entries(prev)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+}
+
+console.log(`ok - @oked/hook-core: ${passed}/6 passed`);

@@ -24,8 +24,10 @@
   },
   "keywords": [
     "oked",
+    "ai-agent",
     "approval",
-    "hook",
+    "human-in-the-loop",
+    "hooks",
     "agents"
   ],
   "repository": {
@@ -36,7 +38,7 @@
   "bugs": {
     "url": "https://github.com/oked-ai/oked-sdk/issues"
   },
-  "homepage": "https://github.com/oked-ai/oked-sdk/tree/main/packages/hook-core#readme",
+  "homepage": "https://oked.ai?ref=github-hook-core",
   "license": "Apache-2.0",
   "engines": {
     "node": ">=18"
