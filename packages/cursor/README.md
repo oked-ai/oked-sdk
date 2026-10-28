@@ -109,7 +109,6 @@ Init never deletes the Claude hook. `oked uninstall` from `@oked/claude-code` re
 | Var | Required | Description |
 |---|---|---|
 | `OKED_API_KEY` | no, after pairing | Optional override. `oked-cursor init` stores the paired key in `~/.oked/config.json`. |
-| `OKED_BACKEND_URL` | no | Override the hosted backend URL. |
 | `OKED_STRICT_FAIL_CLOSED` | no | `1` or `true` denies every sensitive action when the backend is unreachable. |
 | `OKED_REQUIRE_RECEIPT` | no | `0` allows an approval with no receipt. On by default since 0.6.0. |
 | `OKED_HOOK_LOG` | no | Decision log path. Default `~/.oked/hook.log`. |

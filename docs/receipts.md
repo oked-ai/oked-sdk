@@ -196,7 +196,7 @@ degraded-mode allow.
 | Setting | Effect |
 |---|---|
 | `requireReceipt` (env `OKED_REQUIRE_RECEIPT`) | An approval with no receipt also denies. On by default since 0.6.0 (it was off in 0.5.0). Set `false` / `OKED_REQUIRE_RECEIPT=0` only for a backend that does not sign receipts. A deny or a timeout without a receipt stays a deny. |
-| `receiptKeysUrl` (env `OKED_RECEIPT_KEYS_URL`) | Where to fetch a key the SDK has not seen. Default is OKed's published set, independent of `backendUrl`; https only, except loopback for local development. |
+| `receiptKeysUrl` (env `OKED_RECEIPT_KEYS_URL`) | Where to fetch a key the SDK has not seen. Default is OKed's published set; https only, except loopback for local development. |
 | `receiptKeys` | Verify with exactly these keys and never fetch (self-hosted backends, tests). |
 
 ## Signed chain heads

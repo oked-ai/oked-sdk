@@ -54,7 +54,7 @@ This package has no pairing command. Provide a key in either place:
 - `OKED_API_KEY` in the environment, or
 - `~/.oked/config.json` (`{ "apiKey": "ok_..." }`)
 
-Create a key from the [dashboard](https://oked.ai/dashboard) after you [sign up](https://oked.ai/signup), or run `oked init --key-only` from [`@oked/claude-code`](../claude-code). That command pairs the key as client type `sdk`. Optionally set `OKED_BACKEND_URL` for a non-default backend.
+Create a key from the [dashboard](https://oked.ai/dashboard) after you [sign up](https://oked.ai/signup), or run `oked init --key-only` from [`@oked/claude-code`](../claude-code). That command pairs the key as client type `sdk`.
 
 Each request sends `source: "claude-agent-sdk"` and `client: "@oked/claude-agent-sdk@<version>"`. Both are part of the receipt subject.
 

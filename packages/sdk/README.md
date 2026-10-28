@@ -48,11 +48,10 @@ Pass any of these to `new OKedClient(config)`. Constructor values win over envir
 | Key | Type | Default | Description |
 |---|---|---|---|
 | `apiKey` | `string` | `OKED_API_KEY`, then the config file | OKed API key. Required for `approve`. |
-| `backendUrl` | `string` | `https://api.oked.ai` | Backend URL. |
 | `timeout` | `number` | `630000` | How long to wait for a decision, in milliseconds. See above. |
 | `strictFailClosed` | `boolean` | `false` | When true, an unreachable backend denies every tier. When false, it denies only `high_stakes`. |
 | `requireReceipt` | `boolean` | `true` | Deny an approval that arrives without a signed receipt. A receipt that is present but invalid always denies. Set `false` (env `OKED_REQUIRE_RECEIPT=0`) only for a backend that does not sign receipts. |
-| `receiptKeysUrl` | `string` | `https://api.oked.ai/.well-known/oked-receipt-keys.json` | Where to fetch a receipt key the SDK has not seen. Independent of `backendUrl`. https only, except loopback. |
+| `receiptKeysUrl` | `string` | `https://api.oked.ai/.well-known/oked-receipt-keys.json` | Where to fetch a receipt key the SDK has not seen. https only, except loopback. |
 | `receiptKeys` | `ReceiptKey[]` | | Verify with exactly these keys and never fetch. For self-hosted backends and tests. |
 | `rulesCacheTtlMs` | `number` | `300000` | How long the on-disk rules cache stays fresh. Env `OKED_RULES_CACHE_TTL` is in seconds. |
 | `heartbeatIntervalMs` | `number` | `86400000` | Minimum gap between presence pings. Env `OKED_HEARTBEAT_INTERVAL` is in seconds. |
@@ -84,7 +83,7 @@ Ask for a decision. Resolves when the person responds, the request times out, or
 
 ### `ping()`
 
-Returns `true` when `GET {backendUrl}/health` succeeds within 3 seconds.
+Returns `true` when `GET https://api.oked.ai/health` succeeds within 3 seconds.
 
 ### `getRules()` and `heartbeat()`
 
@@ -103,7 +102,6 @@ Full type definitions ship in the package (`dist/index.d.ts`).
 | Var | Required | Description |
 |---|---|---|
 | `OKED_API_KEY` | yes, unless passed in code or saved by `oked init` | OKed API key. |
-| `OKED_BACKEND_URL` | no | Override the hosted backend URL. |
 | `OKED_STRICT_FAIL_CLOSED` | no | `1` or `true` denies every sensitive action when the backend is unreachable. |
 | `OKED_REQUIRE_RECEIPT` | no | `0` allows an approval that has no receipt. On by default. |
 | `OKED_RECEIPT_KEYS_URL` | no | Where to fetch receipt keys. Default is OKed's published set. |
