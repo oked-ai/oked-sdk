@@ -8,7 +8,7 @@
     "oked-hook": "./bin/oked-hook.js"
   },
   "scripts": {
-    "prebuild": "npm run build --workspace=@oked/sdk",
+    "prebuild": "npm run build --workspace=@oked/hook-core",
     "build": "tsc",
     "test": "npm run build && node src/smoke.test.mjs && node src/hook.test.mjs && node src/cli.test.mjs",
     "prepublishOnly": "npm run build"
@@ -44,6 +44,7 @@
     "access": "public"
   },
   "dependencies": {
+    "@oked/hook-core": "0.6.21",
     "@oked/sdk": "0.6.21"
   },
   "devDependencies": {
