@@ -1,6 +1,6 @@
 # Releasing
 
-All `@oked/*` packages are versioned in lockstep. They share one version number and are published together. There are thirteen: `sdk`, `hook-core`, `claude-code`, `codex`, `cursor`, `copilot`, `claude-agent-sdk`, `ai-sdk`, `openclaw`, `openclaw-cli`, `receipt-core`, `verify`, and `langgraph`.
+All `@oked/*` packages are versioned in lockstep. They share one version number and are published together. There are fourteen: `sdk`, `hook-core`, `claude-code`, `codex`, `cursor`, `copilot`, `claude-agent-sdk`, `ai-sdk`, `openai-agents`, `openclaw`, `openclaw-cli`, `receipt-core`, `verify`, and `langgraph`.
 
 Releases are cut by hand with a git tag. Pushing a `vX.Y.Z` tag runs `.github/workflows/publish.yml`, which publishes every package with npm's OIDC trusted publishing (the workflow has `id-token: write` and stores no npm token).
 
@@ -27,7 +27,7 @@ Then add the Trusted Publisher on npmjs (same fields as above) and list the pack
 
 ### On npm
 
-Every package that has already been published is on npm and has a Trusted Publisher: organization `oked-ai`, repository `oked-sdk`, workflow `publish.yml`. `@oked/langgraph` and `@oked/ai-sdk` are not on npm yet. Publish each first version by hand, then add its Trusted Publisher, before a tag can publish it. A `vX.Y.Z` tag publishes every package in the matrix that already exists on npm. Do not publish from a pull request.
+Every package that has already been published is on npm and has a Trusted Publisher: organization `oked-ai`, repository `oked-sdk`, workflow `publish.yml`. `@oked/langgraph`, `@oked/ai-sdk`, and `@oked/openai-agents` are not on npm yet. Publish each first version by hand, then add its Trusted Publisher, before a tag can publish it. A `vX.Y.Z` tag publishes every package in the matrix that already exists on npm. Do not publish from a pull request.
 
 ### Why the workflow publishes one package per job
 

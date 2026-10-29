@@ -1,0 +1,66 @@
+{
+  "name": "@oked/openai-agents",
+  "version": "0.6.21",
+  "description": "OKed for the OpenAI Agents SDK. Gates risky tool calls behind a human approval in Telegram or on the web dashboard.",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "prebuild": "npm run build --workspace=@oked/sdk",
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "test": "npm run build && tsx --test test/*.test.ts",
+    "prepublishOnly": "npm run build"
+  },
+  "peerDependencies": {
+    "@openai/agents": ">=0.21.0"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/client": "^2.0.0",
+    "@oked/sdk": "0.6.21"
+  },
+  "devDependencies": {
+    "@openai/agents": "^0.21.0",
+    "@types/node": "^22.13.10",
+    "tsx": "^4.22.0",
+    "typescript": "^5.6.0",
+    "zod": "^4.3.5"
+  },
+  "keywords": [
+    "openai",
+    "openai-agents",
+    "agents",
+    "approval",
+    "human-in-the-loop",
+    "ai-agent",
+    "hooks",
+    "oked"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/oked-ai/oked-sdk.git",
+    "directory": "packages/openai-agents"
+  },
+  "bugs": {
+    "url": "https://github.com/oked-ai/oked-sdk/issues"
+  },
+  "homepage": "https://oked.ai",
+  "license": "Apache-2.0",
+  "engines": {
+    "node": ">=18"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

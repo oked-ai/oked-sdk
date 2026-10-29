@@ -10,6 +10,10 @@ Decisions are made in Telegram and on the [web dashboard](https://oked.ai/dashbo
 
 - New package, not on npm yet. The first publish is by hand (see RELEASING.md). `okedToolApproval()` is the AI SDK 7 `toolApproval` callback for `generateText`, `streamText`, and `ToolLoopAgent`. A denial or a timeout comes back as `{ type: "denied", reason }`, and the tool does not run. `withOked()` wraps one tool's `execute`. `okedTools()` wraps a tools object. Those wrappers also cover AI SDK 5 and 6.
 
+### @oked/openai-agents
+
+- New package. Not on npm yet: the first publish is by hand (see RELEASING.md). `npm install @oked/openai-agents`, then `okedTool()` for one function tool or `withOkedTools()` for a tool list. Local shell, apply_patch, and hosted MCP use the Agents SDK approval callback. A denial, a timeout, or an error is returned to the model and the tool does not run.
+
 ### Docs
 
 - Public docs no longer document the backend URL override, either as an environment variable or as a config option. OKed is hosted only at `api.oked.ai`. Code behavior is unchanged.
