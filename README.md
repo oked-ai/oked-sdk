@@ -56,8 +56,8 @@ The Claude Code integration is a `PreToolUse` hook (`oked-hook`) in its own proc
 | **OpenAI Agents SDK** | `npm install @oked/openai-agents`, then wrap tools with `okedTool()` or `withOkedTools()`. See the [package README](./packages/openai-agents). |
 | **OpenClaw** | `npm install -g @oked/openclaw @oked/openclaw-cli`, then `oked-openclaw init`. See the [package README](./packages/openclaw). |
 | **LangGraph / LangChain (JavaScript)** | `npm install @oked/langgraph`, then pass `withOkedApprovals(tools)` to `ToolNode` or `createReactAgent`. See the [package README](./packages/langgraph). |
-| **LangGraph / LangChain (Python)** | `pip install oked-langgraph`, then pass `with_oked_approvals(tools)` to `ToolNode` or `create_react_agent`. See [python/oked-langgraph](./python/oked-langgraph). |
-| **Any Python agent** | `pip install oked`, then call `OkedClient().approve(...)`. See [python/oked](./python/oked). |
+| **LangGraph / LangChain (Python)** | Not on PyPI yet. Until then, `pip install "oked @ git+https://github.com/oked-ai/oked-sdk#subdirectory=python/oked" "oked-langgraph @ git+https://github.com/oked-ai/oked-sdk#subdirectory=python/oked-langgraph"`. Once it is on PyPI, `pip install oked-langgraph`. Then pass `with_oked_approvals(tools)` to `ToolNode` or `create_react_agent`. See [python/oked-langgraph](./python/oked-langgraph). |
+| **Any Python agent** | Not on PyPI yet. Until then, `pip install "oked @ git+https://github.com/oked-ai/oked-sdk#subdirectory=python/oked"`. Once it is on PyPI, `pip install oked`. Then call `OkedClient().approve(...)`. See [python/oked](./python/oked). |
 | **NVIDIA OpenShell** | Separate repo: [oked-openshell](https://github.com/oked-ai/oked-openshell). `oked init --key-only` creates a key without installing the Claude Code hook. |
 | **Any Node.js agent** | `npm install @oked/sdk` |
 
@@ -113,8 +113,8 @@ All `@oked/*` packages share one version and are published together. Node.js 18 
 | [`@oked/openclaw`](./packages/openclaw) | OpenClaw plugin. `before_tool_call` classifies every tool the host reports. |
 | [`@oked/openclaw-cli`](./packages/openclaw-cli) | `oked-openclaw`: installs the plugin and writes `~/.openclaw/openclaw.json`. |
 | [`@oked/langgraph`](./packages/langgraph) | Wraps LangChain tools so a risky call waits on `approve()` before `ToolNode` or `createReactAgent` runs it. |
-| [`oked`](./python/oked) (PyPI) | Python client. `pip install oked`, then `OkedClient().approve()`. Python 3.9 or newer. |
-| [`oked-langgraph`](./python/oked-langgraph) (PyPI) | Python LangGraph and LangChain. `pip install oked-langgraph`, then `with_oked_approvals(tools)` for `ToolNode` or `create_react_agent`. Python 3.10 or newer. |
+| [`oked`](./python/oked) | Python client. Not on PyPI yet. Until then, `pip install "oked @ git+https://github.com/oked-ai/oked-sdk#subdirectory=python/oked"`. Once it is on PyPI, `pip install oked`. Then `OkedClient().approve()`. Python 3.9 or newer. |
+| [`oked-langgraph`](./python/oked-langgraph) | Python LangGraph and LangChain. Not on PyPI yet. Until then, `pip install "oked @ git+https://github.com/oked-ai/oked-sdk#subdirectory=python/oked" "oked-langgraph @ git+https://github.com/oked-ai/oked-sdk#subdirectory=python/oked-langgraph"`. Once it is on PyPI, `pip install oked-langgraph`. Then `with_oked_approvals(tools)` for `ToolNode` or `create_react_agent`. Python 3.10 or newer. |
 | [`@oked/receipt-core`](./packages/receipt-core) | Receipt format: canonical JSON, digests, Ed25519 signing and verification, chain checks. |
 | [`@oked/verify`](./packages/verify) | `npx @oked/verify <export.zip>`: check an export offline. |
 

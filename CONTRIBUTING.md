@@ -17,8 +17,8 @@ Questions and security reports go to [contact@oked.ai](mailto:contact@oked.ai). 
 | [packages/openai-agents](./packages/openai-agents) | OpenAI Agents SDK tools. `okedTool()`, `withOkedTools()`, or `settleOkedInterruptions()` |
 | [packages/openclaw](./packages/openclaw) | OpenClaw plugin |
 | [packages/langgraph](./packages/langgraph) | LangChain tool wrapper for LangGraph `ToolNode` and `createReactAgent`. `npm install @oked/langgraph` |
-| [python/oked](./python/oked) | Python client. `pip install oked`. Python 3.9 or newer. |
-| [python/oked-langgraph](./python/oked-langgraph) | Python LangGraph and LangChain wrapper. `pip install oked-langgraph`. Python 3.10 or newer. |
+| [python/oked](./python/oked) | Python client. Not on PyPI yet. Until then, `pip install "oked @ git+https://github.com/oked-ai/oked-sdk#subdirectory=python/oked"`. Once it is on PyPI, `pip install oked`. Python 3.9 or newer. |
+| [python/oked-langgraph](./python/oked-langgraph) | Python LangGraph and LangChain wrapper. Not on PyPI yet. Until then, `pip install "oked @ git+https://github.com/oked-ai/oked-sdk#subdirectory=python/oked" "oked-langgraph @ git+https://github.com/oked-ai/oked-sdk#subdirectory=python/oked-langgraph"`. Once it is on PyPI, `pip install oked-langgraph`. Python 3.10 or newer. |
 | [packages/receipt-core](./packages/receipt-core) | Receipt format |
 | [packages/verify](./packages/verify) | Offline export check |
 | [docs/hosts.md](./docs/hosts.md) | Which agents are covered |
