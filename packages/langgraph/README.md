@@ -7,7 +7,7 @@ OKed for [LangGraph.js](https://github.com/langchain-ai/langgraphjs) and LangCha
 
 `withOkedApproval` wraps one tool. `withOkedApprovals` wraps a list. Pass that list to `ToolNode` or `createReactAgent`. Denied, timed out, and failed approvals do not run the tool. The model gets a result that says the action was not run.
 
-Python agents use [`oked-langgraph`](../../python/oked-langgraph) (`pip install oked-langgraph`). `with_oked_approvals` is the same gate for `ToolNode` and `create_react_agent`. The receipt `source` is `langgraph` in both packages.
+Python agents use [`oked-langgraph`](../../python/oked-langgraph). Not on PyPI yet. Until then, `pip install "oked @ git+https://github.com/oked-ai/oked-sdk#subdirectory=python/oked" "oked-langgraph @ git+https://github.com/oked-ai/oked-sdk#subdirectory=python/oked-langgraph"`. Once it is on PyPI, `pip install oked-langgraph`. `with_oked_approvals` is the same gate for `ToolNode` and `create_react_agent`. The receipt `source` is `langgraph` in both packages.
 
 ## Install
 

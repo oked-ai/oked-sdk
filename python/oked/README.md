@@ -8,9 +8,13 @@ For LangGraph and LangChain tools, install [`oked-langgraph`](../oked-langgraph)
 
 ## Install
 
+Not on PyPI yet. Until then, install from this repo:
+
 ```bash
-pip install oked
+pip install "oked @ git+https://github.com/oked-ai/oked-sdk#subdirectory=python/oked"
 ```
+
+Once it is on PyPI, the command is `pip install oked`.
 
 Python 3.9 or newer. Set a key before the process starts:
 

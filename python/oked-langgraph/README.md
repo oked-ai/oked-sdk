@@ -10,11 +10,15 @@ Questions: [contact@oked.ai](mailto:contact@oked.ai).
 
 ## Install
 
+Not on PyPI yet. Until then, install both packages from this repo. `oked-langgraph` pins `oked==0.6.21`, and that package is not on PyPI either:
+
 ```bash
-pip install oked-langgraph
+pip install "oked @ git+https://github.com/oked-ai/oked-sdk#subdirectory=python/oked" "oked-langgraph @ git+https://github.com/oked-ai/oked-sdk#subdirectory=python/oked-langgraph"
 ```
 
-This installs `oked` as well. Python 3.10 or newer, because current LangChain and LangGraph require 3.10. The core `oked` package still runs on Python 3.9.
+Once it is on PyPI, the command is `pip install oked-langgraph`. That also installs `oked`.
+
+Python 3.10 or newer, because current LangChain and LangGraph require 3.10. The core `oked` package still runs on Python 3.9.
 
 `langgraph` is not installed for you. Install it if you use `ToolNode` or `create_react_agent`. You already have it if you are building a LangGraph agent.
 
