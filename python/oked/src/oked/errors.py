@@ -27,9 +27,7 @@ class OkedAuthError(OkedError):
 
 
 class OkedBackendUnreachableError(OkedError):
-    def __init__(
-        self, message: str, cause: BaseException | None = None, status: int | None = None
-    ) -> None:
+    def __init__(self, message: str, cause: BaseException | None = None, status: int | None = None) -> None:
         super().__init__(message)
         self.cause = cause
         self.status = status

@@ -1,6 +1,6 @@
 # oked-langgraph
 
-OKed for [LangGraph](https://github.com/langchain-ai/langgraph) and LangChain tools on Python. Wrap a tool, and a risky call waits for a person in Telegram or on the [web dashboard](https://oked.ai/dashboard) before it runs. The iPhone app is coming soon.
+Python package for [LangGraph](https://github.com/langchain-ai/langgraph) and LangChain tools. This is the Python integration, not the Node.js `@oked/langgraph` package. Wrap a tool, and a risky call waits for a person in Telegram or on the [web dashboard](https://oked.ai/dashboard) before it runs. The iPhone app is coming soon.
 
 `with_oked_approval` wraps one tool. `with_oked_approvals` wraps a list. Pass that list to `ToolNode` or `create_react_agent`. A denial, a timeout, or a failed approval does not run the tool. The model gets a result that says the action was not run and not to retry it.
 

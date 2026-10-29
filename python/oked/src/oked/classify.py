@@ -61,9 +61,7 @@ _SAFE_SESSION = frozenset(
         "PushNotification",
     }
 )
-_WARNING_SESSION = frozenset(
-    {"EnterWorktree", "CronCreate", "CronDelete", "SendMessage", "WebFetch"}
-)
+_WARNING_SESSION = frozenset({"EnterWorktree", "CronCreate", "CronDelete", "SendMessage", "WebFetch"})
 
 _HIGH_STAKES_COMMANDS = [
     re.compile(r"\bgit\s+push\b[^\n]*\s(?:--force(?:-with-lease)?|-f)\b"),
@@ -104,9 +102,7 @@ _HIGH_STAKES_STAGE = [
     re.compile(r"^killall\b"),
     re.compile(r"^chmod\s+(?:-\S+\s+)*777\b"),
     re.compile(r"^gh\s+pr\s+merge\b"),
-    re.compile(
-        r"^gh\s+(?:repo|release|issue|label|gist|secret|variable|cache|run|ruleset)\s+delete\b"
-    ),
+    re.compile(r"^gh\s+(?:repo|release|issue|label|gist|secret|variable|cache|run|ruleset)\s+delete\b"),
     re.compile(r"^gh\s+repo\s+archive\b"),
     re.compile(r"^railway\s+(?:up|deploy|redeploy|down|delete)\b"),
 ]
@@ -129,9 +125,7 @@ _CURL_HIGH = [
 _REVIEW_COMMANDS = [
     re.compile(r"^himalaya\s+message\s+(send|reply|forward)\b"),
     re.compile(r"^gh\s+pr\s+(?:close|reopen|comment|review|edit|ready|lock|unlock)\b"),
-    re.compile(
-        r"^gh\s+issue\s+(?:create|close|reopen|comment|edit|transfer|lock|unlock|pin|unpin)\b"
-    ),
+    re.compile(r"^gh\s+issue\s+(?:create|close|reopen|comment|edit|transfer|lock|unlock|pin|unpin)\b"),
     re.compile(r"^gh\s+release\s+(?:create|edit|upload)\b"),
     re.compile(r"^gh\s+repo\s+(?:create|edit|rename|fork)\b"),
     re.compile(r"^gh\s+(?:secret|variable)\s+set\b"),
@@ -148,9 +142,7 @@ _WARNING_COMMANDS = [
     re.compile(r"^npm\s+(install|ci|i|update|upgrade|rebuild|prune|dedupe)\b"),
     re.compile(r"^(pnpm|yarn)\s+(install|add|ci|up|upgrade)\b"),
 ]
-_DELETE_LEAD = re.compile(
-    r"^(?:(?:sudo|command|exec|builtin|time|nice|xargs|then|do|else)\b\s*(?:-\S+\s+)*)+"
-)
+_DELETE_LEAD = re.compile(r"^(?:(?:sudo|command|exec|builtin|time|nice|xargs|then|do|else)\b\s*(?:-\S+\s+)*)+")
 _DELETE_COMMAND = re.compile(r"(?:^|[\n`({]|\$\()\s*(?:rm|rmdir|trash|trash-put)\b")
 _EPHEMERAL = re.compile(
     r"^(?:/tmp/|/var/tmp/|/var/folders/|/private/tmp/|/private/var/folders/|"
@@ -341,11 +333,7 @@ def _build_output_only_deletion(stage: str) -> bool:
     if not targets:
         return False
     for target in targets:
-        parts = (
-            _unquote(target).replace("./", "", 1)
-            if _unquote(target).startswith("./")
-            else _unquote(target)
-        )
+        parts = _unquote(target).replace("./", "", 1) if _unquote(target).startswith("./") else _unquote(target)
         segments = parts.split("/")
         if segments[0] not in _BUILD_OUTPUT or ".." in segments:
             return False
@@ -511,11 +499,7 @@ def classify(tool_name: str, tool_input: Mapping[str, object] | None = None) -> 
     if tool_name in _WARNING_SESSION:
         return "warning"
     if tool_name in {"Write", "Edit", "NotebookEdit"}:
-        return (
-            "review"
-            if is_sensitive_write_path(_string_field(payload, "file_path") or "")
-            else "warning"
-        )
+        return "review" if is_sensitive_write_path(_string_field(payload, "file_path") or "") else "warning"
     if tool_name == "Agent":
         return "safe"
     if tool_name == "Bash" or _string_field(payload, "command", "cmd") is not None:

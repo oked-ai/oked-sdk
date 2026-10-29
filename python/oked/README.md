@@ -1,6 +1,6 @@
 # oked
 
-Human approval for Python agents. Send a sensitive action to OKed, wait for a person, and continue only when they approve.
+Python package for human approval of agent actions. This is the Python client, not the Node.js `@oked/sdk` package. Send a sensitive action to OKed, wait for a person, and continue only when they approve.
 
 Decisions are made in Telegram and on the [web dashboard](https://oked.ai/dashboard). The iPhone app is coming soon. [Sign up](https://oked.ai/signup) to get an API key. Questions: [contact@oked.ai](mailto:contact@oked.ai).
 
@@ -27,11 +27,13 @@ from oked import OkedClient
 
 oked = OkedClient()  # OKED_API_KEY, or ~/.oked/config.json
 
-result = oked.approve({
-    "action": "create_payment",
-    "description": "Transfer 2,400 EUR to vendor@example.com",
-    "tier": "high_stakes",
-})
+result = oked.approve(
+    {
+        "action": "create_payment",
+        "description": "Transfer 2,400 EUR to vendor@example.com",
+        "tier": "high_stakes",
+    }
+)
 
 if not result.approved:
     raise SystemExit(f"Blocked by OKed: {result.decision}")

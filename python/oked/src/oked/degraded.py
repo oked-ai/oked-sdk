@@ -15,9 +15,7 @@ TIER_ORDER: dict[RiskTier, int] = {
 }
 
 
-def degraded_decision(
-    tier: RiskTier, *, strict_fail_closed: bool = False
-) -> Literal["allow", "deny"]:
+def degraded_decision(tier: RiskTier, *, strict_fail_closed: bool = False) -> Literal["allow", "deny"]:
     """Outage policy. An explicit denial is never passed here.
 
     strict_fail_closed denies every tier. Otherwise only high_stakes is

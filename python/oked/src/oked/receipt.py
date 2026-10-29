@@ -214,11 +214,7 @@ def _is_receipt_shape(value: object) -> bool:
     body = value.get("body")
     if not isinstance(body, dict) or isinstance(body, list):
         return False
-    if (
-        value.get("alg") != "Ed25519"
-        or not isinstance(value.get("kid"), str)
-        or not isinstance(value.get("sig"), str)
-    ):
+    if value.get("alg") != "Ed25519" or not isinstance(value.get("kid"), str) or not isinstance(value.get("sig"), str):
         return False
     decider = body.get("decider")
     prev = body.get("prev_receipt_digest")
@@ -268,11 +264,7 @@ def verify_receipt(
     assert isinstance(receipt, dict)
     key_list = _as_key_list(keys)
     match = next(
-        (
-            item
-            for item in key_list
-            if item.get("kid") == receipt.get("kid") and item.get("alg") == "Ed25519"
-        ),
+        (item for item in key_list if item.get("kid") == receipt.get("kid") and item.get("alg") == "Ed25519"),
         None,
     )
     if match is None:
@@ -346,9 +338,7 @@ def check_receipt(
         "tool_input": json_value(tool_input),
         "client_nonce": nonce,
     }
-    check = verify_receipt(
-        receipt, keys=keys_for(kid, keys=keys, keys_url=keys_url), subject=subject
-    )
+    check = verify_receipt(receipt, keys=keys_for(kid, keys=keys, keys_url=keys_url), subject=subject)
     problems = list(check["problems"])
     if body.get("request_id") != result.get("approval_id"):
         problems.append("request_mismatch")

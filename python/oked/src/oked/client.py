@@ -110,9 +110,7 @@ def _error_field(body: str) -> str:
     return _short_detail(value)
 
 
-def _pick_bool(
-    explicit: bool | None, env: bool | None, persisted: bool | None, default: bool
-) -> bool:
+def _pick_bool(explicit: bool | None, env: bool | None, persisted: bool | None, default: bool) -> bool:
     if explicit is not None:
         return explicit
     if env is not None:
@@ -143,9 +141,7 @@ def _request_mapping(request: ApprovalRequest | Mapping[str, Any]) -> dict[str, 
         # asdict turns missing optionals into None. Drop them so they are
         # omitted on the wire the way an unset TypeScript field is omitted.
         return {
-            key: value
-            for key, value in data.items()
-            if value is not None or key in {"action", "description", "tier"}
+            key: value for key, value in data.items() if value is not None or key in {"action", "description", "tier"}
         }
     if isinstance(request, Mapping):
         return dict(request)
@@ -192,10 +188,7 @@ class OkedClient:
         persisted: PersistedConfig = load_oked_config()
         self._settings = _Settings(
             api_key=api_key or os.environ.get("OKED_API_KEY") or persisted.api_key or "",
-            backend_url=backend_url
-            or os.environ.get("OKED_BACKEND_URL")
-            or persisted.backend_url
-            or _DEFAULT_BACKEND,
+            backend_url=backend_url or os.environ.get("OKED_BACKEND_URL") or persisted.backend_url or _DEFAULT_BACKEND,
             timeout_ms=timeout or DEFAULT_APPROVAL_TIMEOUT_MS,
             strict_fail_closed=_pick_bool(
                 strict_fail_closed,
@@ -281,9 +274,7 @@ class OkedClient:
         url = f"{self._settings.backend_url}/api/v1/approve"
         timeout_s = self._settings.timeout_ms / 1000
         try:
-            status, response_headers, response_body = request_with_retry(
-                "POST", url, raw, headers, timeout_s
-            )
+            status, response_headers, response_body = request_with_retry("POST", url, raw, headers, timeout_s)
         except HeldTimeout:
             return ApprovalResponse(approved=False, approval_id=None, decision="timeout")
         except (ConnectFailed, OSError) as exc:
@@ -315,9 +306,7 @@ class OkedClient:
             detail = _short_detail(text)
             if status == 429:
                 raise OkedTooManyPendingError(_error_field(text) or detail)
-            if headers.get("x-railway-fallback") or re.search(
-                r"application not found", text, re.IGNORECASE
-            ):
+            if headers.get("x-railway-fallback") or re.search(r"application not found", text, re.IGNORECASE):
                 raise OkedBackendUnreachableError(
                     f"OKed backend unreachable: HTTP {status}, the hosting platform answered "
                     f'"application not found" ({self._settings.backend_url})',
@@ -340,16 +329,14 @@ class OkedClient:
         except json.JSONDecodeError as exc:
             content_type = headers.get("content-type") or "none"
             raise OkedBackendUnreachableError(
-                f"OKed backend unreachable: HTTP {status} with a reply that is not JSON "
-                f"(content-type {content_type})",
+                f"OKed backend unreachable: HTTP {status} with a reply that is not JSON (content-type {content_type})",
                 cause=exc,
                 status=status,
             ) from exc
         if not isinstance(parsed, dict) or not isinstance(parsed.get("decision"), str):
             content_type = headers.get("content-type") or "none"
             raise OkedBackendUnreachableError(
-                f"OKed backend unreachable: HTTP {status} with a reply that is not JSON "
-                f"(content-type {content_type})",
+                f"OKed backend unreachable: HTTP {status} with a reply that is not JSON (content-type {content_type})",
                 status=status,
             )
         receipt = check_receipt(
@@ -381,15 +368,9 @@ class OkedClient:
         entry = cache.get(key)
         now = _now_ms()
         if isinstance(entry, dict) and isinstance(entry.get("at"), (int, float)):
-            if now - float(entry["at"]) < self._settings.rules_cache_ttl_ms and isinstance(
-                entry.get("rules"), list
-            ):
+            if now - float(entry["at"]) < self._settings.rules_cache_ttl_ms and isinstance(entry.get("rules"), list):
                 return list(entry["rules"])
-        cached_rules = (
-            entry.get("rules")
-            if isinstance(entry, dict) and isinstance(entry.get("rules"), list)
-            else None
-        )
+        cached_rules = entry.get("rules") if isinstance(entry, dict) and isinstance(entry.get("rules"), list) else None
         try:
             status, _headers, body = request_bytes(
                 "GET",
@@ -414,9 +395,7 @@ class OkedClient:
 
     def ping(self) -> bool:
         try:
-            status, _headers, _body = request_bytes(
-                "GET", f"{self._settings.backend_url}/health", None, {}, 3.0
-            )
+            status, _headers, _body = request_bytes("GET", f"{self._settings.backend_url}/health", None, {}, 3.0)
             return 200 <= status < 300
         except Exception:
             return False

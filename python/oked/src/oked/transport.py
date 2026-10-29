@@ -58,9 +58,7 @@ def request_bytes(
     path = parsed.path or "/"
     if parsed.query:
         path = path + "?" + parsed.query
-    connection_cls = (
-        http.client.HTTPSConnection if parsed.scheme == "https" else http.client.HTTPConnection
-    )
+    connection_cls = http.client.HTTPSConnection if parsed.scheme == "https" else http.client.HTTPConnection
     try:
         connection = connection_cls(parsed.hostname, port, timeout=_remaining(deadline))
     except (socket.timeout, TimeoutError) as exc:

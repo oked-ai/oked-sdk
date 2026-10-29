@@ -51,9 +51,7 @@ def _shell(command: str) -> Rendered:
         recursive = re.search(r"\s-(?:rf|fr|r)\b", text) is not None
         target = delete.group(2).strip().split()[0] if delete.group(2).strip() else None
         title = "Delete file recursively" if recursive else "Delete file"
-        return Rendered(
-            title=title, kind="file_delete", target=target, body=text if len(text) > 50 else None
-        )
+        return Rendered(title=title, kind="file_delete", target=target, body=text if len(text) > 50 else None)
     return Rendered(title="Run command", kind="unknown_bash", body=text or None)
 
 
@@ -64,17 +62,9 @@ def _write(path: str, content: str) -> Rendered:
 
 def _summarize(tool_name: str, tool_input: Mapping[str, object]) -> Rendered:
     if tool_name == "Bash" or isinstance(tool_input.get("command") or tool_input.get("cmd"), str):
-        command = (
-            tool_input.get("command")
-            if isinstance(tool_input.get("command"), str)
-            else tool_input.get("cmd")
-        )
+        command = tool_input.get("command") if isinstance(tool_input.get("command"), str) else tool_input.get("cmd")
         return _shell(command if isinstance(command, str) else "")
-    path = (
-        tool_input.get("file_path")
-        if isinstance(tool_input.get("file_path"), str)
-        else tool_input.get("path")
-    )
+    path = tool_input.get("file_path") if isinstance(tool_input.get("file_path"), str) else tool_input.get("path")
     content = None
     for key in ("content", "data", "body"):
         if isinstance(tool_input.get(key), str):
@@ -85,9 +75,7 @@ def _summarize(tool_name: str, tool_input: Mapping[str, object]) -> Rendered:
     return _fallback(tool_name, tool_input)
 
 
-def describe(
-    tool_name: str, tool_input: Mapping[str, object] | None = None, *, cwd: str | None = None
-) -> str:
+def describe(tool_name: str, tool_input: Mapping[str, object] | None = None, *, cwd: str | None = None) -> str:
     """One line for logs. cwd is accepted so callers can pass the same context."""
     del cwd
     rendered = _summarize(tool_name, tool_input or {})

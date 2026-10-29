@@ -29,9 +29,7 @@ from oked.receipt import b64url_encode, public_key_from_seed, sign_body, subject
 
 
 def _fresh_key() -> tuple[str, dict[str, Any]]:
-    raw = Ed25519PrivateKey.generate().private_bytes(
-        Encoding.Raw, PrivateFormat.Raw, NoEncryption()
-    )
+    raw = Ed25519PrivateKey.generate().private_bytes(Encoding.Raw, PrivateFormat.Raw, NoEncryption())
     seed = b64url_encode(raw)
     key = {
         "kid": "test-key",
@@ -48,9 +46,7 @@ def _iso_now() -> str:
     return moment.strftime("%Y-%m-%dT%H:%M:%S.") + f"{moment.microsecond // 1000:03d}Z"
 
 
-def _receipt(
-    seed: str, sent: dict[str, Any], *, decision: str = "approved", summary: str = "probe"
-) -> dict[str, Any]:
+def _receipt(seed: str, sent: dict[str, Any], *, decision: str = "approved", summary: str = "probe") -> dict[str, Any]:
     request_id = "req-test"
     metadata = sent.get("metadata") or {}
     source = metadata.get("source") or "sdk"
@@ -106,9 +102,7 @@ class _Server(ThreadingHTTPServer):
     daemon_threads = True
     allow_reuse_address = True
 
-    def __init__(
-        self, responder: Callable[[str, bytes, Any], tuple[int, dict[str, str], bytes]]
-    ) -> None:
+    def __init__(self, responder: Callable[[str, bytes, Any], tuple[int, dict[str, str], bytes]]) -> None:
         self.responder = responder
         self.seen: list[tuple[str, bytes, dict[str, str]]] = []
         super().__init__(("127.0.0.1", 0), _Handler)
@@ -176,9 +170,7 @@ def test_degraded_decision_denies_only_high_stakes_unless_strict() -> None:
 
 def test_config_file_and_env_precedence(isolate_home, monkeypatch) -> None:
     (isolate_home / ".oked").mkdir()
-    (isolate_home / ".oked" / "config.json").write_text(
-        json.dumps({"apiKey": "from-file", "strictFailClosed": True})
-    )
+    (isolate_home / ".oked" / "config.json").write_text(json.dumps({"apiKey": "from-file", "strictFailClosed": True}))
     client = OkedClient()
     assert client.api_key == "from-file"
     assert client.strict_fail_closed is True
@@ -279,9 +271,7 @@ def test_tampered_receipt_and_missing_receipt(serve) -> None:
     with pytest.raises(OkedReceiptError) as missing:
         client.approve(ask)
     assert "missing" in missing.value.problems
-    relaxed = OkedClient(
-        api_key="k", backend_url=server.url, timeout=5000, receipt_keys=[key], require_receipt=False
-    )
+    relaxed = OkedClient(api_key="k", backend_url=server.url, timeout=5000, receipt_keys=[key], require_receipt=False)
     allowed = relaxed.approve(ask)
     assert allowed.approved is True
     assert allowed.receipt is None
@@ -363,9 +353,7 @@ def test_closed_port_is_unreachable() -> None:
     sock.bind(("127.0.0.1", 0))
     port = sock.getsockname()[1]
     sock.close()
-    client = OkedClient(
-        api_key="k", backend_url=f"http://127.0.0.1:{port}", timeout=2000, require_receipt=False
-    )
+    client = OkedClient(api_key="k", backend_url=f"http://127.0.0.1:{port}", timeout=2000, require_receipt=False)
     with pytest.raises(OkedBackendUnreachableError):
         client.approve({"action": "x", "description": "y", "tier": "high_stakes"})
 
@@ -389,9 +377,7 @@ def test_approve_async(serve) -> None:
 
     server = serve(respond)
     client = OkedClient(api_key="k", backend_url=server.url, timeout=5000, require_receipt=False)
-    result = asyncio.run(
-        client.approve_async({"action": "x", "description": "y", "tier": "review"})
-    )
+    result = asyncio.run(client.approve_async({"action": "x", "description": "y", "tier": "review"}))
     assert result.decision == "denied"
 
 
