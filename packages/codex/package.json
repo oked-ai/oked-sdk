@@ -1,6 +1,6 @@
 {
   "name": "@oked/codex",
-  "version": "0.6.21",
+  "version": "0.6.22",
   "description": "OKed for Codex CLI. A PreToolUse hook that holds risky tool calls for a human decision.",
   "type": "module",
   "bin": {
@@ -45,8 +45,8 @@
     "access": "public"
   },
   "dependencies": {
-    "@oked/hook-core": "0.6.21",
-    "@oked/sdk": "0.6.21"
+    "@oked/hook-core": "0.6.22",
+    "@oked/sdk": "0.6.22"
   },
   "devDependencies": {
     "@types/node": "^26.6.5",

@@ -27,7 +27,7 @@ Then add the Trusted Publisher on npmjs (same fields as above) and list the pack
 
 ### On npm
 
-Every package that has already been published is on npm and has a Trusted Publisher: organization `oked-ai`, repository `oked-sdk`, workflow `publish.yml`. `@oked/langgraph`, `@oked/ai-sdk`, and `@oked/openai-agents` are not on npm yet. Publish each first version by hand, then add its Trusted Publisher, before a tag can publish it. A `vX.Y.Z` tag publishes every package in the matrix that already exists on npm. Do not publish from a pull request.
+Every package that has already been published is on npm and has a Trusted Publisher: organization `oked-ai`, repository `oked-sdk`, workflow `publish.yml`. `@oked/langgraph`, `@oked/ai-sdk`, and `@oked/openai-agents` were first published by hand at 0.6.21. Confirm each has a Trusted Publisher (same fields as above) before tagging. A tag pushed before that publisher exists fails that package's job (`ENEEDAUTH`) while the rest publish. A `vX.Y.Z` tag publishes every package in the matrix that already exists on npm. Do not publish from a pull request.
 
 ### Why the workflow publishes one package per job
 

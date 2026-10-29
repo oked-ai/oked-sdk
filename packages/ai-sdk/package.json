@@ -1,6 +1,6 @@
 {
   "name": "@oked/ai-sdk",
-  "version": "0.6.21",
+  "version": "0.6.22",
   "description": "OKed for the Vercel AI SDK. Risky tool calls wait for a person in Telegram or on the web dashboard before they run.",
   "type": "module",
   "main": "dist/index.js",
@@ -32,7 +32,7 @@
     }
   },
   "dependencies": {
-    "@oked/sdk": "0.6.21"
+    "@oked/sdk": "0.6.22"
   },
   "devDependencies": {
     "@types/node": "^26.6.5",
