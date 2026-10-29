@@ -1,9 +1,16 @@
 // Unit tests for @oked/langgraph. approve() is mocked. One real-client
 // timeout test mocks fetch so a hung request becomes a denial, not a run.
 import assert from "node:assert/strict";
+import { webcrypto } from "node:crypto";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+
+// Node 18 ESM does not define the Web Crypto global. LangGraph 1.5's tracer
+// calls it. Node 22 already defines it.
+if (typeof globalThis.crypto === "undefined") {
+  globalThis.crypto = webcrypto;
+}
 
 process.env.HOME = mkdtempSync(join(tmpdir(), "oked-langgraph-"));
 process.env.USERPROFILE = process.env.HOME;
