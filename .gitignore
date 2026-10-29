@@ -2,3 +2,8 @@ node_modules/
 dist/
 .DS_Store
 npm-debug.log*
+__pycache__/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/

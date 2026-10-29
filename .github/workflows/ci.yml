@@ -45,6 +45,33 @@ jobs:
       # resolves and produces a tarball before any release.
       - run: npm pack --dry-run --workspaces
 
+  python:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.9", "3.12"]
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Test oked
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e "python/oked[dev]"
+          python -m pytest python/oked/tests
+      - name: Lint, typecheck, and test oked-langgraph
+        if: matrix.python-version != '3.9'
+        run: |
+          python -m pip install -e "python/oked-langgraph[dev]"
+          python -m pip install ruff mypy
+          ruff check python/oked python/oked-langgraph
+          ruff format --check python/oked python/oked-langgraph
+          mypy --config-file python/oked/pyproject.toml -p oked
+          mypy --config-file python/oked-langgraph/pyproject.toml -p oked_langgraph
+          python -m pytest python/oked-langgraph/tests
+
   audit:
     runs-on: ubuntu-latest
     steps:

@@ -17,6 +17,8 @@ Questions and security reports go to [contact@oked.ai](mailto:contact@oked.ai). 
 | [packages/openai-agents](./packages/openai-agents) | OpenAI Agents SDK tools. `okedTool()`, `withOkedTools()`, or `settleOkedInterruptions()` |
 | [packages/openclaw](./packages/openclaw) | OpenClaw plugin |
 | [packages/langgraph](./packages/langgraph) | LangChain tool wrapper for LangGraph `ToolNode` and `createReactAgent`. `npm install @oked/langgraph` |
+| [python/oked](./python/oked) | Python client. `pip install oked`. Python 3.9 or newer. |
+| [python/oked-langgraph](./python/oked-langgraph) | Python LangGraph and LangChain wrapper. `pip install oked-langgraph`. Python 3.10 or newer. |
 | [packages/receipt-core](./packages/receipt-core) | Receipt format |
 | [packages/verify](./packages/verify) | Offline export check |
 | [docs/hosts.md](./docs/hosts.md) | Which agents are covered |
@@ -35,7 +37,14 @@ npm run build
 npm test
 ```
 
-`npm test` runs every workspace that has a test script. CI (`.github/workflows/ci.yml`) runs that on Node.js 18 and 22, then `npm pack --dry-run` for every package. A package without a `test` script fails CI.
+`npm test` runs every workspace that has a test script. CI (`.github/workflows/ci.yml`) runs that on Node.js 18 and 22, then `npm pack --dry-run` for every package. A package without a `test` script fails CI. The same workflow runs the Python tests: `oked` on Python 3.9 and 3.12, and `oked-langgraph` on 3.12.
+
+```bash
+pip install -e "python/oked[dev]"
+pytest python/oked/tests
+pip install -e "python/oked-langgraph[dev]"
+pytest python/oked-langgraph/tests
+```
 
 Do not use an em dash in docs or in user-facing copy.
 

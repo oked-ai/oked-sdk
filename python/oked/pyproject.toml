@@ -1,0 +1,57 @@
+[build-system]
+requires = ["setuptools>=77", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "oked"
+version = "0.6.21"
+description = "Human approval for Python agents. Risky actions wait for a person."
+readme = "README.md"
+requires-python = ">=3.9"
+license = "Apache-2.0"
+authors = [{name = "OKed", email = "contact@oked.ai"}]
+keywords = ["oked", "approval", "agents", "ai", "security"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Typing :: Typed",
+]
+dependencies = ["cryptography>=42"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8,<9"]
+
+[project.urls]
+Homepage = "https://oked.ai"
+Documentation = "https://oked.ai/docs"
+Repository = "https://github.com/oked-ai/oked-sdk"
+Issues = "https://github.com/oked-ai/oked-sdk/issues"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+oked = ["py.typed"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py39"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B"]
+
+[tool.mypy]
+python_version = "3.10"
+packages = ["oked"]
+mypy_path = "src"
+disallow_untyped_defs = true
+check_untyped_defs = true
+warn_unused_ignores = true
+no_implicit_optional = true
