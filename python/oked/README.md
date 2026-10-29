@@ -59,7 +59,7 @@ Set `OKED_REQUIRE_RECEIPT=0` only for a backend that does not sign receipts. Rec
 
 ## Package
 
-Version `0.6.21`, the same number as the `@oked/*` packages in this repo. The PyPI name is `oked`. The first publish is by hand. Later publishes use a `py-v*` tag. See [RELEASING.md](../../RELEASING.md).
+The version is set in `pyproject.toml`. It does not have to match the `@oked/*` npm version. The PyPI name is `oked`. The first publish is by hand. Later publishes are a separate release on a `py-v*` tag. See [RELEASING.md](../../RELEASING.md).
 
 ## License
 
