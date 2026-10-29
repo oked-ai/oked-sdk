@@ -1,6 +1,6 @@
 # Releasing
 
-All `@oked/*` packages are versioned in lockstep. They share one version number and are published together. There are twelve: `sdk`, `hook-core`, `claude-code`, `codex`, `cursor`, `copilot`, `claude-agent-sdk`, `openclaw`, `openclaw-cli`, `receipt-core`, `verify`, and `langgraph`.
+All `@oked/*` packages are versioned in lockstep. They share one version number and are published together. There are thirteen: `sdk`, `hook-core`, `claude-code`, `codex`, `cursor`, `copilot`, `claude-agent-sdk`, `ai-sdk`, `openclaw`, `openclaw-cli`, `receipt-core`, `verify`, and `langgraph`.
 
 Releases are cut by hand with a git tag. Pushing a `vX.Y.Z` tag runs `.github/workflows/publish.yml`, which publishes every package with npm's OIDC trusted publishing (the workflow has `id-token: write` and stores no npm token).
 
@@ -27,7 +27,7 @@ Then add the Trusted Publisher on npmjs (same fields as above) and list the pack
 
 ### On npm
 
-Every package that has already been published is on npm and has a Trusted Publisher: organization `oked-ai`, repository `oked-sdk`, workflow `publish.yml`. `@oked/langgraph` is not on npm yet. Publish that first version by hand, then add the Trusted Publisher, before a tag can publish it. A `vX.Y.Z` tag publishes every package in the matrix. Do not publish from a pull request.
+Every package that has already been published is on npm and has a Trusted Publisher: organization `oked-ai`, repository `oked-sdk`, workflow `publish.yml`. `@oked/langgraph` and `@oked/ai-sdk` are not on npm yet. Publish each first version by hand, then add its Trusted Publisher, before a tag can publish it. A `vX.Y.Z` tag publishes every package in the matrix that already exists on npm. Do not publish from a pull request.
 
 ### Why the workflow publishes one package per job
 
@@ -56,7 +56,7 @@ Every package that has already been published is on npm and has a Trusted Publis
    git tag vX.Y.Z
    git push origin main --tags
    ```
-6. Watch the `Publish` workflow. When it is green, every package in the matrix shows the new version on npm. A package that has not had its first manual publish yet fails that job only (`ENEEDAUTH`); the others still publish.
+6. Watch the `Publish` workflow. When it is green, every package in the matrix that already exists on npm shows the new version. A package that has not had its first manual publish yet fails that job only (`ENEEDAUTH`); the others still publish.
 
 ### Release channels (dist-tags)
 
@@ -74,7 +74,7 @@ npm dist-tag add @oked/sdk@0.2.0 latest   # repeat per package
 ## Verifying a release
 
 ```bash
-npm view @oked/sdk version          # should equal X.Y.Z (repeat for the other packages)
+npm view @oked/sdk version          # should equal X.Y.Z (repeat for each other package already on npm)
 npx -y @oked/claude-code@X.Y.Z --help
 ```
 

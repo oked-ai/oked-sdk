@@ -1,0 +1,67 @@
+{
+  "name": "@oked/ai-sdk",
+  "version": "0.6.21",
+  "description": "OKed for the Vercel AI SDK. Risky tool calls wait for a person in Telegram or on the web dashboard before they run.",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "prebuild": "npm run build --workspace=@oked/sdk",
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "test": "npm run build && node --test src/gate.test.mjs",
+    "prepublishOnly": "npm run build"
+  },
+  "peerDependencies": {
+    "ai": ">=5.0.0"
+  },
+  "peerDependenciesMeta": {
+    "ai": {
+      "optional": true
+    }
+  },
+  "dependencies": {
+    "@oked/sdk": "0.6.21"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.10",
+    "typescript": "^5.6.0"
+  },
+  "keywords": [
+    "oked",
+    "ai-agent",
+    "approval",
+    "human-in-the-loop",
+    "hooks",
+    "ai-sdk",
+    "vercel",
+    "tool-calling"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/oked-ai/oked-sdk.git",
+    "directory": "packages/ai-sdk"
+  },
+  "bugs": {
+    "url": "https://github.com/oked-ai/oked-sdk/issues"
+  },
+  "homepage": "https://oked.ai",
+  "license": "Apache-2.0",
+  "engines": {
+    "node": ">=18"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

@@ -13,6 +13,7 @@ Questions and security reports go to [contact@oked.ai](mailto:contact@oked.ai). 
 | [packages/cursor](./packages/cursor) | Cursor hook. `npm install -g @oked/cursor`, then `oked-cursor init` |
 | [packages/copilot](./packages/copilot) | Copilot CLI and VS Code hook. `npm install -g @oked/copilot`, then `oked-copilot init` |
 | [packages/claude-agent-sdk](./packages/claude-agent-sdk) | Programmatic hook for the Claude Agent SDK |
+| [packages/ai-sdk](./packages/ai-sdk) | Vercel AI SDK. `okedToolApproval()`, `withOked()`, `okedTools()` |
 | [packages/openclaw](./packages/openclaw) | OpenClaw plugin |
 | [packages/langgraph](./packages/langgraph) | LangChain tool wrapper for LangGraph `ToolNode` and `createReactAgent`. `npm install @oked/langgraph` |
 | [packages/receipt-core](./packages/receipt-core) | Receipt format |

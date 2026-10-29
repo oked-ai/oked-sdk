@@ -29,6 +29,7 @@ jobs:
           - cursor
           - copilot
           - claude-agent-sdk
+          - ai-sdk
           - openclaw
           - openclaw-cli
           - receipt-core
