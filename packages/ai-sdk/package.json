@@ -35,8 +35,8 @@
     "@oked/sdk": "0.6.21"
   },
   "devDependencies": {
-    "@types/node": "^22.13.10",
-    "typescript": "^5.6.0"
+    "@types/node": "^26.6.5",
+    "typescript": "^7.0.2"
   },
   "keywords": [
     "oked",
