@@ -50,8 +50,8 @@
     "@oked/receipt-core": "0.6.21"
   },
   "devDependencies": {
-    "@types/node": "^22.13.10",
-    "tsx": "^4.22.0",
-    "typescript": "^5.6.0"
+    "@types/node": "^26.6.5",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2"
   }
 }
