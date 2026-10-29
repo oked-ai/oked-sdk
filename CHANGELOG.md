@@ -6,6 +6,10 @@ Decisions are made in Telegram and on the [web dashboard](https://oked.ai/dashbo
 
 ## Unreleased
 
+### Docs
+
+- The Python `oked` README no longer says version `0.6.21` is the same number as the `@oked/*` packages. The version is set in `pyproject.toml` and later publishes use a separate `py-v*` tag.
+
 ### Python (`oked` and `oked-langgraph`)
 
 - New Python packages, not on PyPI yet. The first publish of each is by hand (see RELEASING.md). `pip install oked` is the Python client (`OkedClient.approve()`). `pip install oked-langgraph` is the Python LangGraph and LangChain integration (`with_oked_approvals`). These are not the Node.js `@oked/sdk` and `@oked/langgraph` packages. A denial or a timeout does not run the tool. Later publishes use a `py-v*` tag.
