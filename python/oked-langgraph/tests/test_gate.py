@@ -326,8 +326,11 @@ def test_toolnode_runs_only_the_approved_tool_and_create_react_agent_accepts_the
     assert "Please fix your mistakes" not in denied.content
     assert allowed.content == "created"
     assert calls == [("create_invoice", 10)]
-    assert client.calls[0]["tool_input"] == {"to": "a@example.com", "body": "hi"}
-    assert client.calls[1]["tool_input"] == {"amount": 10}
+    # ToolNode runs the two calls concurrently, so approval order is not fixed.
+    by_action = {call["action"]: call for call in client.calls}
+    assert set(by_action) == {"send_email", "create_invoice"}
+    assert by_action["send_email"]["tool_input"] == {"to": "a@example.com", "body": "hi"}
+    assert by_action["create_invoice"]["tool_input"] == {"amount": 10}
 
     from langchain_core.language_models.chat_models import BaseChatModel
     from langchain_core.outputs import ChatGeneration, ChatResult

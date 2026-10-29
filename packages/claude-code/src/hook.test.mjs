@@ -17,9 +17,13 @@ const HIGH_STAKES = { tool_name: "Bash", tool_input: { command: `curl -X DELETE 
 const REVIEW = { tool_name: "mcp__github__create_issue", tool_input: { title: "x", body: SECRET } };
 
 let reply = { status: 200, headers: {}, body: "{}" };
+const requests = [];
 const server = createServer((req, res) => {
-  req.resume();
+  let body = "";
+  req.setEncoding("utf8");
+  req.on("data", (d) => (body += d));
   req.on("end", () => {
+    requests.push({ method: req.method, url: req.url, body });
     if (req.url === "/api/v1/rules" && reply.status < 300) {
       res.writeHead(200, { "Content-Type": "application/json" }).end("[]");
       return;
@@ -191,9 +195,110 @@ try {
     for (const l of lines) assert.ok(l.ts && l.decision && l.reason && l.client, "each line has ts, decision, reason, client");
     passed++;
   }
+
+  const bash = (command, extra = {}) => ({ tool_name: "Bash", tool_input: { command }, ...extra });
+  const approvePosts = () => requests.filter((r) => r.method === "POST" && r.url === "/api/v1/approve");
+  const FORCE = bash("git push --force origin main");
+
+  // A safe read-only command is allowed, and no approval request is sent.
+  {
+    reply = { status: 200, headers: {}, body: JSON.stringify({ approval_id: "nope", decision: "approved", status: "approved" }) };
+    const before = approvePosts().length;
+    const out = await runHook(bash("cat README.md"));
+    assert.equal(out.permissionDecision, "allow");
+    assert.equal(out.permissionDecisionReason, undefined);
+    assert.equal(approvePosts().length, before, "a read-only command does not ask");
+    passed++;
+  }
+
+  // `rm -rf build` deletes build output. That tier is warning: allow, no approval.
+  {
+    const before = approvePosts().length;
+    const out = await runHook(bash("rm -rf build"));
+    assert.equal(out.permissionDecision, "allow");
+    assert.equal(out.permissionDecisionReason, undefined);
+    assert.equal(approvePosts().length, before, "rm -rf build does not ask");
+    passed++;
+  }
+
+  // A force push asks, and an approval allows it.
+  {
+    reply = { status: 200, headers: {}, body: JSON.stringify({ approval_id: "appr-force-ok", decision: "approved", status: "approved" }) };
+    const before = approvePosts().length;
+    const out = await runHook(FORCE);
+    assert.equal(out.permissionDecision, "allow");
+    assert.match(out.permissionDecisionReason, /^Approved via OKed/);
+    assert.equal(approvePosts().length, before + 1);
+    const body = JSON.parse(approvePosts().at(-1).body);
+    assert.equal(body.action, "Bash");
+    assert.equal(body.tier, "high_stakes");
+    assert.equal(body.metadata.tool_input.command, "git push --force origin main");
+    assert.match(body.client, /^@oked\/claude-code@/);
+    passed++;
+  }
+
+  // The same command is blocked when the person denies it.
+  {
+    reply = { status: 200, headers: {}, body: JSON.stringify({ approval_id: "appr-force-no", decision: "denied", status: "denied" }) };
+    const out = await runHook(FORCE);
+    assert.equal(out.permissionDecision, "deny");
+    assert.match(out.permissionDecisionReason, /^Denied via OKed: /);
+    passed++;
+  }
+
+  // No decision in time blocks the command.
+  {
+    reply = { status: 200, headers: {}, body: JSON.stringify({ approval_id: "appr-force-to", decision: "timeout", status: "timeout" }) };
+    const out = await runHook(FORCE);
+    assert.equal(out.permissionDecision, "deny");
+    assert.match(out.permissionDecisionReason, /no decision within the approval window \(timed out\)/);
+    passed++;
+  }
+
+  // The API is unreachable. A high-stakes command fails closed.
+  {
+    const closed = createServer();
+    await new Promise((r) => closed.listen(0, "127.0.0.1", r));
+    const port = closed.address().port;
+    await new Promise((r) => closed.close(r));
+    const out = await runHook(FORCE, { OKED_BACKEND_URL: `http://127.0.0.1:${port}` });
+    assert.equal(out.permissionDecision, "deny");
+    assert.match(out.permissionDecisionReason, /backend unreachable/);
+    assert.match(out.permissionDecisionReason, /high-stakes denied \(fail-safe\)/);
+    passed++;
+  }
+
+  // permission_mode bypassPermissions (what --dangerously-skip-permissions sends)
+  // still gates a risky command.
+  {
+    reply = { status: 200, headers: {}, body: JSON.stringify({ approval_id: "appr-bypass", decision: "denied", status: "denied" }) };
+    const before = approvePosts().length;
+    const out = await runHook({ ...FORCE, permission_mode: "bypassPermissions" });
+    assert.equal(out.permissionDecision, "deny");
+    assert.match(out.permissionDecisionReason, /^Denied via OKed: /);
+    assert.equal(approvePosts().length, before + 1, "bypassPermissions still asks");
+    const body = JSON.parse(approvePosts().at(-1).body);
+    assert.equal(body.tier, "high_stakes");
+    assert.equal(body.metadata.tool_input.command, "git push --force origin main");
+    passed++;
+  }
+
+  // A missing tool_input must stay a fail-safe deny. Coercing it to {} would
+  // classify Bash as safe and allow the call.
+  {
+    const out = await runHook({ tool_name: "Bash" });
+    assert.equal(out.permissionDecision, "deny");
+    assert.match(out.permissionDecisionReason, /internal error \(fail-safe\)/);
+    const read = await runHook({ tool_name: "Read" });
+    assert.equal(read.permissionDecision, "deny");
+    assert.match(read.permissionDecisionReason, /internal error \(fail-safe\)/);
+    passed++;
+  }
+
+  assert.equal(passed, 19);
 } finally {
   server.close();
   rmSync(home, { recursive: true, force: true });
 }
 
-console.log(`ok - @oked/claude-code hook: ${passed}/11 passed`);
+console.log(`ok - @oked/claude-code hook: ${passed}/19 passed`);

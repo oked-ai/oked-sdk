@@ -59,6 +59,14 @@ const toolNode = new ToolNode(
 );
 ```
 
+On Node 18, LangGraph 1.5 expects a global `crypto`. Set it before you build a `ToolNode`, or use Node 20 or newer.
+
+```js
+globalThis.crypto = require("node:crypto").webcrypto;
+```
+
+The ESM equivalent is `import { webcrypto } from "node:crypto"`, then `globalThis.crypto = webcrypto`.
+
 `name`, `description`, and `schema` are unchanged, so the same objects can go to `bindTools`. `createAgent` from the `langchain` package takes the wrapped list the same way.
 
 The wrapper gates `invoke`, `call`, `func`, and `batch`. `ToolNode` and `createReactAgent` call `invoke`. On an approval, that call is forwarded with the same arguments and the same config, including `configurable.thread_id` (recorded as the approval session).

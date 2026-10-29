@@ -32,7 +32,7 @@ export interface GateDecision {
 }
 
 export interface DecideOptions {
-  /** Recorded on receipts and in the decision log, e.g. `@oked/claude-code@0.6.21`. */
+  /** Recorded on receipts and in the decision log, e.g. `@oked/claude-code@0.6.22`. */
   clientId: string;
   /** Receipt subject source, e.g. `claude-code`. */
   source: string;

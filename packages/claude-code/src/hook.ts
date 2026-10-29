@@ -40,7 +40,10 @@ async function main(): Promise<void> {
   const decision = await decide(
     {
       toolName: input.tool_name,
-      toolInput: (input.tool_input ?? {}) as Record<string, unknown>,
+      // Pass tool_input through. Replacing a missing value with {} makes Bash
+      // and Write look safe, and the hook would allow them. 0.6.21 did not
+      // coerce it: classify threw, and the fail-safe handler denied.
+      toolInput: input.tool_input as Record<string, unknown>,
       cwd: input.cwd,
       sessionId: input.session_id,
     },
