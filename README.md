@@ -22,6 +22,7 @@
   <a href="https://www.npmjs.com/package/@oked/copilot"><img src="https://img.shields.io/npm/v/@oked/copilot?label=%40oked%2Fcopilot" alt="@oked/copilot on npm"></a>
   <a href="https://www.npmjs.com/package/@oked/claude-agent-sdk"><img src="https://img.shields.io/npm/v/@oked/claude-agent-sdk?label=%40oked%2Fclaude-agent-sdk" alt="@oked/claude-agent-sdk on npm"></a>
   <a href="https://www.npmjs.com/package/@oked/openclaw"><img src="https://img.shields.io/npm/v/@oked/openclaw?label=%40oked%2Fopenclaw" alt="@oked/openclaw on npm"></a>
+  <a href="https://www.npmjs.com/package/@oked/langgraph"><img src="https://img.shields.io/npm/v/@oked/langgraph?label=%40oked%2Flanggraph" alt="@oked/langgraph on npm"></a>
   <a href="https://github.com/oked-ai/oked-sdk/actions/workflows/ci.yml"><img src="https://github.com/oked-ai/oked-sdk/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="./LICENSE"><img src="https://img.shields.io/npm/l/@oked/sdk" alt="Apache-2.0 license"></a>
 </p>
@@ -50,6 +51,7 @@ The Claude Code integration is a `PreToolUse` hook (`oked-hook`) in its own proc
 | **GitHub Copilot** | `npm install -g @oked/copilot`, then `oked-copilot init`. CLI and VS Code. See the [package README](./packages/copilot). |
 | **Claude Agent SDK** | `npm install @oked/claude-agent-sdk`, then pass `okedHooks()` in `options.hooks`. See the [package README](./packages/claude-agent-sdk). |
 | **OpenClaw** | `npm install -g @oked/openclaw @oked/openclaw-cli`, then `oked-openclaw init`. See the [package README](./packages/openclaw). |
+| **LangGraph / LangChain** | `npm install @oked/langgraph`, then pass `withOkedApprovals(tools)` to `ToolNode` or `createReactAgent`. See the [package README](./packages/langgraph). |
 | **NVIDIA OpenShell** | Separate repo: [oked-openshell](https://github.com/oked-ai/oked-openshell). `oked init --key-only` creates a key without installing the Claude Code hook. |
 | **Any Node.js agent** | `npm install @oked/sdk` |
 
@@ -81,7 +83,7 @@ An explicit denial is final. An invalid API key, a receipt that does not verify,
 
 If the backend is unreachable, OKed denies `high_stakes` and, by default, allows lower tiers. Set `OKED_STRICT_FAIL_CLOSED=1` (or `strictFailClosed: true`) to deny every sensitive action during an outage. HTTP 429 (too many approvals already waiting) is not an outage: the action is denied until those are decided in Telegram or on the dashboard.
 
-On Claude Code, a device that is not paired returns `ask`, so Claude's own permission prompt can decide. Codex, Cursor, and Copilot deny that case (`Pair first: run` the host's init command). Codex treats `ask` as a failed hook and still runs the tool. Cursor accepts `ask` on `preToolUse` and does not enforce it. Copilot cloud agent and CLI autopilot turn `ask` into deny. The OpenClaw plugin denies sensitive calls when no API key is set.
+On Claude Code, a device that is not paired returns `ask`, so Claude's own permission prompt can decide. Codex, Cursor, and Copilot deny that case (`Pair first: run` the host's init command). Codex treats `ask` as a failed hook and still runs the tool. Cursor accepts `ask` on `preToolUse` and does not enforce it. Copilot cloud agent and CLI autopilot turn `ask` into deny. The OpenClaw plugin denies sensitive calls when no API key is set. A LangGraph tool wrapped with `@oked/langgraph` denies the same way: with no API key the tool does not run, and the model receives the reason.
 
 ### Rules
 
@@ -102,6 +104,7 @@ All `@oked/*` packages share one version and are published together. Node.js 18 
 | [`@oked/claude-agent-sdk`](./packages/claude-agent-sdk) | `PreToolUse` hook for the Claude Agent SDK. Pass it in `options.hooks`. |
 | [`@oked/openclaw`](./packages/openclaw) | OpenClaw plugin. `before_tool_call` classifies every tool the host reports. |
 | [`@oked/openclaw-cli`](./packages/openclaw-cli) | `oked-openclaw`: installs the plugin and writes `~/.openclaw/openclaw.json`. |
+| [`@oked/langgraph`](./packages/langgraph) | Wraps LangChain tools so a risky call waits on `approve()` before `ToolNode` or `createReactAgent` runs it. |
 | [`@oked/receipt-core`](./packages/receipt-core) | Receipt format: canonical JSON, digests, Ed25519 signing and verification, chain checks. |
 | [`@oked/verify`](./packages/verify) | `npx @oked/verify <export.zip>`: check an export offline. |
 

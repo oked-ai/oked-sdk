@@ -10,6 +10,7 @@ OKed stops a risky tool call until a person decides in Telegram or on the [web d
 | GitHub Copilot CLI and VS Code | [`@oked/copilot`](../packages/copilot) | `npm install -g @oked/copilot`, then `oked-copilot init`. Writes `.github/hooks/oked.json` with `timeoutSec` 690. Timeouts fail open. VS Code hooks are Preview. The cloud agent needs `api.oked.ai` allowlisted. Skips install when a project Claude Code hook would also run. |
 | Claude Agent SDK | [`@oked/claude-agent-sdk`](../packages/claude-agent-sdk) | `npm install @oked/claude-agent-sdk`, then pass `okedHooks()`. |
 | OpenClaw | [`@oked/openclaw`](../packages/openclaw) | `npm install -g @oked/openclaw @oked/openclaw-cli`, then `oked-openclaw init`. |
+| LangGraph.js and LangChain tools | [`@oked/langgraph`](../packages/langgraph) | `npm install @oked/langgraph`, then `withOkedApprovals(tools)` on the list you pass to `ToolNode` or `createReactAgent`. A denial or a timeout does not run the tool. This does not use LangGraph `interrupt()`. |
 | NVIDIA OpenShell | [oked-openshell](https://github.com/oked-ai/oked-openshell) | Separate repo. `oked init --key-only` creates a key and does not install the Claude Code hook. |
 | Any Node.js agent | [`@oked/sdk`](../packages/sdk) | `npm install @oked/sdk`, then call `approve()`. |
 

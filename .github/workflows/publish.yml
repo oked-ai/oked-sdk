@@ -33,6 +33,7 @@ jobs:
           - openclaw-cli
           - receipt-core
           - verify
+          - langgraph
     steps:
       - uses: actions/checkout@v6
       # Do NOT set registry-url here: it makes setup-node write an .npmrc with

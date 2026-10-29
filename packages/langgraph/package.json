@@ -1,0 +1,70 @@
+{
+  "name": "@oked/langgraph",
+  "version": "0.6.21",
+  "description": "OKed for LangGraph and LangChain. Wraps a tool so a risky call waits for a human approval before it runs.",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "prebuild": "npm run build --workspace=@oked/sdk",
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "test": "npm run build && node src/langgraph.test.mjs",
+    "prepublishOnly": "npm run build"
+  },
+  "peerDependencies": {
+    "@langchain/core": ">=0.2.31",
+    "@langchain/langgraph": ">=0.2.0"
+  },
+  "peerDependenciesMeta": {
+    "@langchain/langgraph": {
+      "optional": true
+    }
+  },
+  "dependencies": {
+    "@oked/sdk": "0.6.21"
+  },
+  "devDependencies": {
+    "@langchain/core": "0.3.80",
+    "@langchain/langgraph": "0.4.9",
+    "@types/node": "^22.13.10",
+    "typescript": "^5.6.0",
+    "zod": "^3.25.32"
+  },
+  "keywords": [
+    "oked",
+    "langgraph",
+    "langchain",
+    "ai-agent",
+    "approval",
+    "human-in-the-loop",
+    "hooks"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/oked-ai/oked-sdk.git",
+    "directory": "packages/langgraph"
+  },
+  "bugs": {
+    "url": "https://github.com/oked-ai/oked-sdk/issues"
+  },
+  "homepage": "https://oked.ai",
+  "license": "Apache-2.0",
+  "engines": {
+    "node": ">=18"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

@@ -36,6 +36,10 @@ Decisions are made in Telegram and on the [web dashboard](https://oked.ai/dashbo
 
 - The README links to `https://oked.ai/dashboard` and `https://oked.ai/docs#verify`. The `?ref=` tracking parameters are gone.
 
+### @oked/langgraph
+
+- New package (not on npm yet; the first publish is by hand, see [RELEASING.md](./RELEASING.md)). `withOkedApproval` and `withOkedApprovals` wrap LangChain tools so a risky call waits on `approve()` before it runs. Pass the wrapped tools to `ToolNode` or `createReactAgent`. A denial, a timeout, a bad receipt, or an unexpected error returns an error tool result and does not run the tool. Install with `npm install @oked/langgraph`. The gate does not use LangGraph `interrupt()`.
+
 ## 0.6.21
 
 - `@oked/hook-core`, `@oked/codex`, `@oked/cursor`, and `@oked/copilot` are on npm at 0.6.21. Each has a Trusted Publisher (`oked-ai` / `oked-sdk` / `publish.yml`). Codex: `npm install -g @oked/codex`, then `oked-codex init`. Cursor: `npm install -g @oked/cursor`, then `oked-cursor init`. Copilot: `npm install -g @oked/copilot`, then `oked-copilot init`. `@oked/hook-core` is `npm install @oked/hook-core` and has no init command.
