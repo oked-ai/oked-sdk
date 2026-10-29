@@ -54,6 +54,7 @@ Decisions are made in Telegram and on the [web dashboard](https://oked.ai/dashbo
 ### @oked/langgraph
 
 - `withOkedApproval` and `withOkedApprovals` wrap LangChain tools so a risky call waits on `approve()` before it runs. Pass the wrapped tools to `ToolNode` or `createReactAgent`. A denial, a timeout, a bad receipt, or an unexpected error returns an error tool result and does not run the tool. Install with `npm install @oked/langgraph`. The gate does not use LangGraph `interrupt()`.
+- On Node 18, LangGraph 1.5 expects a global `crypto`. Set `globalThis.crypto = require("node:crypto").webcrypto` before you build a `ToolNode`, or use the ESM equivalent: `import { webcrypto } from "node:crypto"` and then `globalThis.crypto = webcrypto`. Node 20 or newer already has that global.
 
 ## 0.6.21
 
