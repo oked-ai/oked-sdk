@@ -670,9 +670,11 @@ check("ToolNode runs only the approved tool and preserves its arguments", async 
   assert.doesNotMatch(String(denied.content), /Please fix your mistakes/);
   assert.equal(String(allowed.content), "created");
   assert.deepEqual(calls, [["create_invoice", { amount: 10 }]]);
+  // ToolNode runs the two calls concurrently, so approval order is not fixed.
   assert.equal(client.calls.length, 2);
-  assert.deepEqual(client.calls[0].tool_input, { to: "a@example.com", body: "hi" });
-  assert.deepEqual(client.calls[1].tool_input, { amount: 10 });
+  const byAction = Object.fromEntries(client.calls.map((call) => [call.action, call]));
+  assert.deepEqual(byAction.send_email.tool_input, { to: "a@example.com", body: "hi" });
+  assert.deepEqual(byAction.create_invoice.tool_input, { amount: 10 });
 });
 
 let passed = 0;
