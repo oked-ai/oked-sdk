@@ -6,6 +6,10 @@ Decisions are made in Telegram and on the [web dashboard](https://oked.ai/dashbo
 
 ## Unreleased
 
+### @oked/ai-sdk
+
+- New package, not on npm yet. The first publish is by hand (see RELEASING.md). `okedToolApproval()` is the AI SDK 7 `toolApproval` callback for `generateText`, `streamText`, and `ToolLoopAgent`. A denial or a timeout comes back as `{ type: "denied", reason }`, and the tool does not run. `withOked()` wraps one tool's `execute`. `okedTools()` wraps a tools object. Those wrappers also cover AI SDK 5 and 6.
+
 ### Docs
 
 - Public docs no longer document the backend URL override, either as an environment variable or as a config option. OKed is hosted only at `api.oked.ai`. Code behavior is unchanged.
