@@ -1,0 +1,48 @@
+name: Publish Python
+
+on:
+  push:
+    tags:
+      - "py-v*"
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    strategy:
+      fail-fast: false
+      matrix:
+        package:
+          - oked
+          - oked-langgraph
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Verify tag matches pyproject version
+        run: |
+          set -euo pipefail
+          VERSION=$(python -c "import pathlib,re; text=pathlib.Path('python/${{ matrix.package }}/pyproject.toml').read_text(); print(re.search(r'(?m)^version = \"([^\"]+)\"', text).group(1))")
+          if [[ "${{ github.ref_type }}" == "tag" ]]; then
+            TAG_VERSION="${GITHUB_REF_NAME#py-v}"
+            if [[ "$TAG_VERSION" != "$VERSION" ]]; then
+              echo "::error::git tag $GITHUB_REF_NAME ($TAG_VERSION) != python/${{ matrix.package }} version $VERSION"
+              exit 1
+            fi
+          fi
+          echo "publishing ${{ matrix.package }} $VERSION"
+      - name: Build
+        run: |
+          python -m pip install --upgrade pip build
+          python -m build "python/${{ matrix.package }}"
+      # Trusted publishing. The project must already exist on PyPI, and its
+      # trusted publisher must name this workflow (publish-python.yml) with a
+      # blank environment. The first upload of each package is by hand.
+      # See RELEASING.md.
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: python/${{ matrix.package }}/dist

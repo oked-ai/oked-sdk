@@ -1,0 +1,63 @@
+[build-system]
+requires = ["setuptools>=77", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "oked-langgraph"
+version = "0.6.21"
+description = "OKed for LangGraph and LangChain. A risky tool call waits for a person before it runs."
+readme = "README.md"
+requires-python = ">=3.10"
+license = "Apache-2.0"
+authors = [{name = "OKed", email = "contact@oked.ai"}]
+keywords = ["oked", "langgraph", "langchain", "approval", "agents", "human-in-the-loop"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Typing :: Typed",
+]
+dependencies = [
+  "oked==0.6.21",
+  "langchain-core>=0.3",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8,<9", "langgraph>=0.2"]
+
+[project.urls]
+Homepage = "https://oked.ai"
+Documentation = "https://oked.ai/docs"
+Repository = "https://github.com/oked-ai/oked-sdk"
+Issues = "https://github.com/oked-ai/oked-sdk/issues"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+oked_langgraph = ["py.typed"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B"]
+
+[tool.mypy]
+python_version = "3.10"
+packages = ["oked_langgraph"]
+mypy_path = "src"
+disallow_untyped_defs = true
+check_untyped_defs = true
+warn_unused_ignores = true
+no_implicit_optional = true
+
+[[tool.mypy.overrides]]
+module = ["langchain_core.*", "langgraph.*"]
+ignore_missing_imports = true

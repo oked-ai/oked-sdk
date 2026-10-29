@@ -6,6 +6,10 @@ Decisions are made in Telegram and on the [web dashboard](https://oked.ai/dashbo
 
 ## Unreleased
 
+### Python (`oked` and `oked-langgraph`)
+
+- New Python packages, not on PyPI yet. The first publish of each is by hand (see RELEASING.md). `pip install oked` is the Python client (`OkedClient.approve()`). `pip install oked-langgraph` is the Python LangGraph and LangChain integration (`with_oked_approvals`). These are not the Node.js `@oked/sdk` and `@oked/langgraph` packages. A denial or a timeout does not run the tool. Later publishes use a `py-v*` tag.
+
 ### @oked/ai-sdk
 
 - New package, not on npm yet. The first publish is by hand (see RELEASING.md). `okedToolApproval()` is the AI SDK 7 `toolApproval` callback for `generateText`, `streamText`, and `ToolLoopAgent`. A denial or a timeout comes back as `{ type: "denied", reason }`, and the tool does not run. `withOked()` wraps one tool's `execute`. `okedTools()` wraps a tools object. Those wrappers also cover AI SDK 5 and 6.

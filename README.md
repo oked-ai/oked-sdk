@@ -55,7 +55,9 @@ The Claude Code integration is a `PreToolUse` hook (`oked-hook`) in its own proc
 | **Vercel AI SDK** | `npm install @oked/ai-sdk`, then pass `okedToolApproval()` as `toolApproval`. See the [package README](./packages/ai-sdk). |
 | **OpenAI Agents SDK** | `npm install @oked/openai-agents`, then wrap tools with `okedTool()` or `withOkedTools()`. See the [package README](./packages/openai-agents). |
 | **OpenClaw** | `npm install -g @oked/openclaw @oked/openclaw-cli`, then `oked-openclaw init`. See the [package README](./packages/openclaw). |
-| **LangGraph / LangChain** | `npm install @oked/langgraph`, then pass `withOkedApprovals(tools)` to `ToolNode` or `createReactAgent`. See the [package README](./packages/langgraph). |
+| **LangGraph / LangChain (JavaScript)** | `npm install @oked/langgraph`, then pass `withOkedApprovals(tools)` to `ToolNode` or `createReactAgent`. See the [package README](./packages/langgraph). |
+| **LangGraph / LangChain (Python)** | `pip install oked-langgraph`, then pass `with_oked_approvals(tools)` to `ToolNode` or `create_react_agent`. See [python/oked-langgraph](./python/oked-langgraph). |
+| **Any Python agent** | `pip install oked`, then call `OkedClient().approve(...)`. See [python/oked](./python/oked). |
 | **NVIDIA OpenShell** | Separate repo: [oked-openshell](https://github.com/oked-ai/oked-openshell). `oked init --key-only` creates a key without installing the Claude Code hook. |
 | **Any Node.js agent** | `npm install @oked/sdk` |
 
@@ -111,6 +113,8 @@ All `@oked/*` packages share one version and are published together. Node.js 18 
 | [`@oked/openclaw`](./packages/openclaw) | OpenClaw plugin. `before_tool_call` classifies every tool the host reports. |
 | [`@oked/openclaw-cli`](./packages/openclaw-cli) | `oked-openclaw`: installs the plugin and writes `~/.openclaw/openclaw.json`. |
 | [`@oked/langgraph`](./packages/langgraph) | Wraps LangChain tools so a risky call waits on `approve()` before `ToolNode` or `createReactAgent` runs it. |
+| [`oked`](./python/oked) (PyPI) | Python client. `pip install oked`, then `OkedClient().approve()`. Python 3.9 or newer. |
+| [`oked-langgraph`](./python/oked-langgraph) (PyPI) | Python LangGraph and LangChain. `pip install oked-langgraph`, then `with_oked_approvals(tools)` for `ToolNode` or `create_react_agent`. Python 3.10 or newer. |
 | [`@oked/receipt-core`](./packages/receipt-core) | Receipt format: canonical JSON, digests, Ed25519 signing and verification, chain checks. |
 | [`@oked/verify`](./packages/verify) | `npx @oked/verify <export.zip>`: check an export offline. |
 
@@ -138,7 +142,7 @@ npm run build
 npm test
 ```
 
-CI runs that build and test on Node.js 18 and 22 (`.github/workflows/ci.yml`).
+CI runs that build and test on Node.js 18 and 22, and runs the Python tests (`.github/workflows/ci.yml`). Python packages live under `python/` and are not part of the npm workspace.
 
 Releases are cut by pushing a `vX.Y.Z` tag. The publish workflow checks the tag against `package.json`, then publishes every package to npm with OIDC trusted publishing. Stable versions use the `latest` dist-tag. Prerelease versions (`vX.Y.Z-beta.1`) use `next`. The checklist is [RELEASING.md](./RELEASING.md).
 

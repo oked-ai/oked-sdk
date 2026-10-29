@@ -78,6 +78,45 @@ npm view @oked/sdk version          # should equal X.Y.Z (repeat for each other 
 npx -y @oked/claude-code@X.Y.Z --help
 ```
 
+## Python packages on PyPI
+
+`oked` and `oked-langgraph` live under `python/`. They are not npm packages, and `npm run bump` does not change them. Their version strings are in `python/*/pyproject.toml` and in each package's `__version__`. Keep those aligned with the `@oked/*` version when you want one release number across languages. A `vX.Y.Z` tag publishes npm only. A `py-vX.Y.Z` tag publishes PyPI, and only after the one-time steps below.
+
+The PyPI names `oked` and `oked-langgraph` were unclaimed when this was added. Do not publish from a pull request.
+
+### First publish (once per package, by hand)
+
+PyPI trusted publishing can only be attached to a project that already exists, the same constraint npm has. Publish `oked` first, then `oked-langgraph`, because the LangGraph package depends on that exact `oked` version.
+
+```bash
+python -m pip install build twine
+python -m build python/oked
+python -m twine upload python/oked/dist/*
+python -m build python/oked-langgraph
+python -m twine upload python/oked-langgraph/dist/*
+```
+
+Use a PyPI account that can create these projects. Then, on pypi.org, open each project, go to Publishing, and add a trusted publisher:
+
+- Owner: `oked-ai`
+- Repository name: `oked-sdk`
+- Workflow name: `publish-python.yml`
+- Environment name: leave blank
+
+Do that for both `oked` and `oked-langgraph`.
+
+### Later Python releases
+
+1. Set `version` in both `python/*/pyproject.toml` files, `__version__` in `python/oked/src/oked/__init__.py` and `python/oked-langgraph/src/oked_langgraph/gate.py`, and the `oked==` pin in `python/oked-langgraph/pyproject.toml`, all to the same `X.Y.Z`.
+2. Tag and push. The tag must match that version:
+
+```bash
+git tag py-vX.Y.Z
+git push origin py-vX.Y.Z
+```
+
+`.github/workflows/publish-python.yml` checks the tag against both packages, builds them, and publishes with PyPI's OIDC trusted publishing. The workflow stores no PyPI token. A tag pushed before the manual first publish fails that package (`invalid-publisher` or a trusted-publisher error) until the project exists and the publisher above is saved.
+
 ## Bootstrap (first ever publish only)
 
 The first `0.1.0` was published by hand, from a maintainer's machine, to create the packages on npm. OIDC trusted publishing can only be attached to packages that already exist. See `packages/*/package.json` and the npm org for the publishers. Later releases use the tag-triggered workflow above.
