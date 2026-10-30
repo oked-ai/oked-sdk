@@ -2295,6 +2295,12 @@ function classifyMcpTool(toolName: string, toolInput: Record<string, unknown> = 
   // The PR bar's CI monitor switches. auto_fix lets the session push fixes,
   // but each push is gated on its own. Log it, no prompt.
   if (parts.includes("ccd_pr") && tool === "set_monitor") return "warning";
+  // The PR bar's auto-merge switch. On, GitHub merges the PR when checks pass
+  // and no other card comes, the same as `gh pr merge --auto`. Off only stops
+  // a merge that has not happened yet: log it, no prompt.
+  if (parts.includes("ccd_pr") && tool === "set_auto_merge") {
+    return toolInput.enabled === false ? "warning" : "high_stakes";
+  }
   // Start a new local Claude session, or move this task into one. Its own tool
   // calls are gated by OKed like this one's, so log it, no prompt. A cloud or
   // SSH session runs outside this machine's hook, so it stays `review`.

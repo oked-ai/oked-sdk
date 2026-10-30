@@ -3,6 +3,32 @@
 Every change the approval review loop made to a card's tier, text or layout, newest first.
 Built from `changes.jsonl` by `node scripts/approval-review/record.mjs log`. Do not edit by hand.
 
+## 2026-10-30 · text · `mcp__ccd_session_mgmt__send_message`
+
+**Why:** The card title was Send Claude desktop app message. It did not say that the message goes to a different Claude session, which then acts on it. Now the title is Send a message to another Claude session, and the kind is agent_message. The body shows the message as before. The tier stays review, because the message can tell the other session to do steps. Both cards were approved. No card was denied.
+
+| | Before | After |
+|---|---|---|
+| Tier | 🔵 review (asks you) | 🔵 review (asks you) |
+| Title | Send Claude desktop app message | Send a message to another Claude session |
+| Body | Oren approved the merge and the TestFlight upload. His words: "merge and upload to testflight i wanna test it end to end on my device".<br>Skip the simulator sign-in test; he will test on his iPhone.<br>1.… | Oren approved the merge and the TestFlight upload. His words: "merge and upload to testflight i wanna test it end to end on my device".<br>Skip the simulator sign-in test; he will test on his iPhone.<br>1.… |
+| Kind | chat_message | agent_message |
+
+Seen 2× (✅ 2, ❌ 0) · Corpus: `2026-10-30-desktop-session-message`
+
+## 2026-10-30 · tier · `mcp__ccd_pr__set_auto_merge`
+
+**Why:** The desktop app auto-merge switch was review, and the card said only Set auto merge via Claude desktop app. When auto-merge is on, GitHub merges the PR after the checks pass, and no other card comes. A merge is hard to undo, and gh pr merge --auto is already high_stakes. Now this switch is high_stakes and shows the same card as gh pr merge --auto: the PR, the repo, the merge method and when checks pass. Auto-merge off stops a merge that did not occur yet, so it is warning. The one card was approved. No card was denied.
+
+| | Before | After |
+|---|---|---|
+| Tier | 🔵 review (asks you) | 🔴 high stakes (Face ID) |
+| Title | Set auto merge via Claude desktop app | Merge PR #11 in oked-ai/oked-ios |
+| Annotation | · | squash, when checks pass |
+| Kind | unknown_tool | git_pr_merge |
+
+Seen 1× (✅ 1, ❌ 0) · Corpus: `2026-10-30-desktop-auto-merge`
+
 ## 2026-10-26 · text · `Bash`
 
 **Why:** The target had a stray closing parenthesis. The curl ran inside a $( ) substitution, and the URL took its closing parenthesis. Now the URL drops a closing parenthesis that has no opening one.

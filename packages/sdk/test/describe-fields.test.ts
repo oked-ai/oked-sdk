@@ -1027,7 +1027,29 @@ describe("claude.ai connectors (UUID server names)", () => {
   });
 
   it("names the desktop app, not its internal server name", () => {
-    assert.equal(describeFields("mcp__ccd_pr__set_auto_merge", {})!.Title, "Set auto merge via Claude desktop app");
+    assert.equal(describeFields("mcp__ccd_host__clean_up_worktrees", {})!.Title, "Clean up worktrees via Claude desktop app");
+  });
+});
+
+describe("approval review fixes (2026-10-30)", () => {
+  it("auto-merge shows the same card as gh pr merge --auto", () => {
+    const url = "https://github.com/o/r/pull/11";
+    const f = describeFields("mcp__ccd_pr__set_auto_merge", { url, enabled: true, merge_method: "squash" })!;
+    assert.equal(f.Title, "Merge PR #11 in o/r");
+    assert.equal(f.Annotation, "squash, when checks pass");
+    assert.equal(f.Link, url);
+    assert.equal(f.Kind, "git_pr_merge");
+    const gh = describeFields("Bash", { command: "gh pr merge 11 -R o/r --auto --squash" })!;
+    assert.equal(gh.Title, f.Title);
+    assert.equal(gh.Annotation, f.Annotation);
+    assert.equal(describeFields("mcp__ccd_pr__set_auto_merge", { url, enabled: false })!.Title, "Turn off auto-merge for PR #11 in o/r");
+  });
+
+  it("a message to another Claude session says so and shows the message", () => {
+    const f = describeFields("mcp__ccd_session_mgmt__send_message", { session_id: "local_1", message: "Fix the test and push." })!;
+    assert.equal(f.Title, "Send a message to another Claude session");
+    assert.equal(f.Body, "Fix the test and push.");
+    assert.equal(f.Kind, "agent_message");
   });
 });
 

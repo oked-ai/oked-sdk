@@ -428,8 +428,15 @@ describe("MCP tools", () => {
     assert.equal(classify("mcp__ccd_pr__set_monitor", { auto_fix: true, url: "https://github.com/o/r/pull/1" }), "warning");
   });
 
+  it("turning on auto-merge is a merge, like gh pr merge --auto", () => {
+    const url = "https://github.com/o/r/pull/11";
+    assert.equal(classify("mcp__ccd_pr__set_auto_merge", { url, enabled: true, merge_method: "squash" }), "high_stakes");
+    assert.equal(classify("mcp__ccd_pr__set_auto_merge", { url }), "high_stakes");
+    assert.equal(classify("Bash", { command: "gh pr merge 11 -R o/r --auto --squash" }), "high_stakes");
+    assert.equal(classify("mcp__ccd_pr__set_auto_merge", { url, enabled: false }), "warning");
+  });
+
   it("desktop app tools with a real effect still need approval", () => {
-    assert.equal(classify("mcp__ccd_pr__set_auto_merge", { enabled: true }), "review");
     assert.equal(classify("mcp__ccd_settings__set_setting", {}), "review");
     assert.equal(classify("mcp__ccd_session_mgmt__set_session_permission_mode", {}), "review");
     assert.equal(classify("mcp__ccd_host__discard_kept_worktree", {}), "review");
