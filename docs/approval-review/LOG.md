@@ -15,7 +15,7 @@ Built from `changes.jsonl` by `node scripts/approval-review/record.mjs log`. Do 
 | Body | kill $MP | S=/private/tmp/claude-501/-Users-oren-Dev-OKed--claude-worktrees-ios-app-release-48c54a/b2ad787b-c409-4e8b-9116-1c52bac22cf1/scratchpad; mkdir -p $S/fakebin && printf '#!/bin/sh\ncat >/dev/null\n' >… |
 | Kind | kill_process | file_create |
 
-Seen 3× (✅ 3, ❌ 0) · Corpus: `2026-10-30-kill-own-background-job`
+Seen 3× (✅ 3, ❌ 0) · Corpus: `2026-10-30-kill-own-background-job` · PR: https://github.com/oked-ai/oked-sdk/pull/115
 
 ## 2026-10-30 · tier · `Bash`
 
@@ -29,7 +29,7 @@ Seen 3× (✅ 3, ❌ 0) · Corpus: `2026-10-30-kill-own-background-job`
 | Body | gh api repos/oked-ai/oked-sdk/pulls -f base=main -f head=approval-review/2026-10-30T1421 -f title="Approval review 2026-10-30T1421: auto-merge switch is a merge" -F body=@/private/tmp/claude-501/-Use… | gh api repos/oked-ai/oked-sdk/pulls -f base=main -f head=approval-review/2026-10-30T1421 -f title="Approval review 2026-10-30T1421: auto-merge switch is a merge" -F body=@/private/tmp/claude-501/-Use… |
 | Kind | http_post | git_pr_create |
 
-Seen 3× (✅ 3, ❌ 0) · Corpus: `2026-10-30-gh-api-create-pr`
+Seen 3× (✅ 3, ❌ 0) · Corpus: `2026-10-30-gh-api-create-pr` · PR: https://github.com/oked-ai/oked-sdk/pull/115
 
 ## 2026-10-30 · text · `mcp__ccd_session_mgmt__send_message`
 
