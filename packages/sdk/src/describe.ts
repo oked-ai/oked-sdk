@@ -1423,6 +1423,25 @@ function summarizeDesktopApp(server: string, tool: string, input: Record<string,
       };
     }
   }
+  if (server === "ccd_pr" && tool === "set_auto_merge") {
+    // Same card as `gh pr merge --auto`: the PR, the method, and when it merges.
+    const pr = str(input.url)?.match(/^https:\/\/github\.com\/([^/\s]+\/[^/\s]+)\/pull\/(\d+)/);
+    const where = pr ? `PR #${pr[2]} in ${pr[1]}` : "PR";
+    const link = pr ? `https://github.com/${pr[1]}/pull/${pr[2]}` : undefined;
+    if (input.enabled === false) {
+      return { title: `Turn off auto-merge for ${where}`, link, kind: "git_pr_write" };
+    }
+    return {
+      title: `Merge ${where}`,
+      annotation: [str(input.merge_method), "when checks pass"].filter(Boolean).join(", "),
+      link,
+      kind: "git_pr_merge",
+    };
+  }
+  if (server === "ccd_session_mgmt" && tool === "send_message") {
+    const message = str(input.message);
+    return { title: "Send a message to another Claude session", body: message ? truncateBody(message) : undefined, kind: "agent_message" };
+  }
   if (server === "ccd_turn" && tool === "update_plan") {
     return { title: "Update the task list in the Claude app", kind: "session_housekeeping" };
   }
