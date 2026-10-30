@@ -592,6 +592,10 @@ function classifyCloudCliStage(stage: string): RiskTier | null {
 function classifyGhApiStage(stage: string): RiskTier | null {
   if (!/^gh\s+api\b/.test(stage)) return null;
   const method = stage.match(/\s(?:-X|--method)(?:\s+|=)?([A-Za-z]+)\b/)?.[1]?.toUpperCase();
+  // A POST to `repos/<owner>/<repo>/pulls` opens a PR. It leaves the machine,
+  // but a PR can be closed, so it asks without Face ID.
+  if ((!method || method === "POST") && /\s['"]?\/?repos\/[\w.-]+\/[\w.-]+\/pulls['"]?(?:\s|$)/.test(stage)
+    && (method === "POST" || /\s(?:-f|-F|--field|--raw-field|--input)(?:\s|=)/.test(stage))) return "review";
   if (method && method !== "GET" && method !== "HEAD") return "high_stakes";
   if (/^gh\s+api\s+graphql\b/.test(stage)) return /\bmutation\b/.test(stage) ? "high_stakes" : "safe";
   if (!method && /\s(?:-f|-F|--field|--raw-field|--input)(?:\s|=)/.test(stage)) return "high_stakes";
@@ -712,10 +716,23 @@ const CREATED_PATH = "path:";
 const TEMP_CWD = "cwd:temp";
 // An earlier stage exported a DATABASE_URL on this machine (see isLocalPrismaDeploy).
 const LOCAL_DB = "db:local";
+// `pid:<NAME>`: an earlier stage set NAME to `$!`, the PID of a job this same
+// command started in the background (`node mock.mjs & MP=$!`).
+const BG_PID = "pid:";
+
+// `kill $MP` (or `kill "${MP}"`) where an earlier stage set MP=$!: it stops only
+// the background job that this same command started. Nothing outside the
+// command is lost, so it is a reversible local change.
+function isOwnJobKill(stage: string, vars: Set<string>): boolean {
+  const m = stage.match(/^kill\s+(?:-\w+\s+)*"?\$\{?(\w+)\}?"?\s*(?:2>\s*\/dev\/null)?$/);
+  return !!m && vars.has(BG_PID + m[1]);
+}
 
 function noteEphemeralEffects(stage: string, into: Set<string>): void {
   const assign = stage.match(/^(?:export\s+)?(\w+)=("[^"$`]*"|'[^']*'|[^\s;&|$`'"()]+)$/);
   if (assign && isEphemeralPath(unquote(assign[2]))) into.add(assign[1]);
+  const bgPid = stage.match(/(?:^|&\s*)(?:export\s+)?(\w+)=\$!$/);
+  if (bgPid) into.add(BG_PID + bgPid[1]);
   for (const op of extractShellWriteOps(stage)) {
     if (op.kind === "create" || op.kind === "copy" || op.kind === "touch") into.add(CREATED_PATH + unquote(op.target));
   }
@@ -1614,6 +1631,7 @@ function classifyStageEffects(stage: string, ephemeralVars: Set<string>, sandbox
     const pattern = unquote(splitArgs(bareStage.replace(/^pkill\s+(?:-\w+\s+)*-f\s+/, ""))[0] ?? "");
     if (/(?:^|\/)scratchpad\//.test(pattern) || EPHEMERAL_PATH_RE.test(pattern)) return "warning";
   }
+  if (isOwnJobKill(bareStage, ephemeralVars)) return "warning";
   // Stopping a local dev server or a read-only watcher is review: it asks,
   // without Face ID.
   if (isRestartableKill(bareStage)) return "review";

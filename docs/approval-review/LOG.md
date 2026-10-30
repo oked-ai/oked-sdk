@@ -3,6 +3,34 @@
 Every change the approval review loop made to a card's tier, text or layout, newest first.
 Built from `changes.jsonl` by `node scripts/approval-review/record.mjs log`. Do not edit by hand.
 
+## 2026-10-30 · tier · `Bash`
+
+**Why:** Three cards asked for Face ID to stop a mock server. The same command started the server in the background, kept its PID with MP=$!, and then ran kill $MP. This stops only the job that the command started, so it is a reversible local change: warning. A kill of a PID from a different source stays high_stakes. All three cards were approved.
+
+| | Before | After |
+|---|---|---|
+| Tier | 🔴 high stakes (Face ID) | 🟡 warning (logged, no card) |
+| Title | Stop processes | Create file |
+| Target | · | $S/fakebin/pbcopy |
+| Body | kill $MP | S=/private/tmp/claude-501/-Users-oren-Dev-OKed--claude-worktrees-ios-app-release-48c54a/b2ad787b-c409-4e8b-9116-1c52bac22cf1/scratchpad; mkdir -p $S/fakebin && printf '#!/bin/sh\ncat >/dev/null\n' >… |
+| Kind | kill_process | file_create |
+
+Seen 3× (✅ 3, ❌ 0) · Corpus: `2026-10-30-kill-own-background-job` · PR: https://github.com/oked-ai/oked-sdk/pull/115
+
+## 2026-10-30 · tier · `Bash`
+
+**Why:** Three cards asked for Face ID to open a PR through gh api. Opening a PR leaves the machine, but a person can close the PR, so it is not hard to undo. Now a POST to repos/owner/repo/pulls is review, and the card says Create PR in the repo and shows the branches. Other writes under pulls, such as a merge or a comment, stay high_stakes. All three cards were approved.
+
+| | Before | After |
+|---|---|---|
+| Tier | 🔴 high stakes (Face ID) | 🔵 review (asks you) |
+| Title | POST request to GitHub API | Create PR in oked-ai/oked-sdk |
+| Target | repos/oked-ai/oked-sdk/pulls | approval-review/2026-10-30T1421 → main |
+| Body | gh api repos/oked-ai/oked-sdk/pulls -f base=main -f head=approval-review/2026-10-30T1421 -f title="Approval review 2026-10-30T1421: auto-merge switch is a merge" -F body=@/private/tmp/claude-501/-Use… | gh api repos/oked-ai/oked-sdk/pulls -f base=main -f head=approval-review/2026-10-30T1421 -f title="Approval review 2026-10-30T1421: auto-merge switch is a merge" -F body=@/private/tmp/claude-501/-Use… |
+| Kind | http_post | git_pr_create |
+
+Seen 3× (✅ 3, ❌ 0) · Corpus: `2026-10-30-gh-api-create-pr` · PR: https://github.com/oked-ai/oked-sdk/pull/115
+
 ## 2026-10-30 · text · `mcp__ccd_session_mgmt__send_message`
 
 **Why:** The card title was Send Claude desktop app message. It did not say that the message goes to a different Claude session, which then acts on it. Now the title is Send a message to another Claude session, and the kind is agent_message. The body shows the message as before. The tier stays review, because the message can tell the other session to do steps. Both cards were approved. No card was denied.

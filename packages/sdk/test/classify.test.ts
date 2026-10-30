@@ -1383,6 +1383,15 @@ describe("GitHub CLI and Railway", () => {
     assert.equal(bash("gh api graphql -f query='mutation { addStar(input:{}) { clientMutationId } }'"), "high_stakes");
   });
 
+  it("gh api that opens a PR asks without Face ID (review)", () => {
+    assert.equal(bash("gh api repos/o/r/pulls -f base=main -f head=fix -f title=\"Fix\" -F body=@pr.md --jq .html_url"), "review");
+    assert.equal(bash("gh api -X POST repos/o/r/pulls -f base=main -f head=fix"), "review");
+    // Other writes under pulls stay high stakes.
+    assert.equal(bash("gh api -X POST repos/o/r/pulls/3/comments -f body=x"), "high_stakes");
+    assert.equal(bash("gh api -X PUT repos/o/r/pulls/3/merge"), "high_stakes");
+    assert.equal(bash("gh api -X PATCH repos/o/r/pulls/3 -f state=closed"), "high_stakes");
+  });
+
   it("Railway deploys are high stakes, reads are safe", () => {
     assert.equal(bash("railway up"), "high_stakes");
     assert.equal(bash("railway redeploy --yes"), "high_stakes");
@@ -1480,6 +1489,15 @@ describe("approval review 2026-10-18 (2 weeks of cards): false high stakes", () 
     assert.equal(bash('pkill -f "gh pr merge 136"'), "high_stakes");
     assert.equal(bash("pkill gh"), "high_stakes");
     assert.equal(bash("killall gh"), "high_stakes");
+  });
+
+  it("stopping a job that the same command started is a warning", () => {
+    assert.equal(bash("node $S/mock.mjs & MP=$!; sleep 1; curl -s localhost:4789; kill $MP"), "warning");
+    assert.equal(bash('python3 -m http.server 8000 & PID=$!\ncurl -s localhost:8000\nkill "$PID" 2>/dev/null'), "warning");
+    // A PID from somewhere else, or a kill before the job starts, stays high stakes.
+    assert.equal(bash("kill $MP"), "high_stakes");
+    assert.equal(bash("MP=$(pgrep node); kill $MP"), "high_stakes");
+    assert.equal(bash("kill $MP; node m.mjs & MP=$!"), "high_stakes");
   });
 
   it("prisma migrate deploy to a local database is logged, any other database is high stakes", () => {

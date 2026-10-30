@@ -1083,6 +1083,14 @@ describe("approval review seed fixes (2026-10-18)", () => {
     assert.equal(describeFields("Bash", { command: "gh api graphql -f query='query { viewer { login } }'" })!.Title, "Query GitHub GraphQL API");
   });
 
+  it("gh api that opens a PR names the repo and the branches", () => {
+    const f = describeFields("Bash", { command: "gh api repos/o/r/pulls -f base=main -f head=fix/x -f title=\"Fix x\" --jq .number" })!;
+    assert.equal(f.Title, "Create PR in o/r");
+    assert.equal(f.Target, "fix/x → main");
+    assert.equal(f.Kind, "git_pr_create");
+    assert.equal(describeFields("Bash", { command: "gh api repos/o/r/pulls -f base=main -f head=$B" })!.Target, undefined);
+  });
+
   it("desktop app turn tools say what they do", () => {
     assert.equal(describeFields("mcp__ccd_turn__update_plan", {})!.Title, "Update the task list in the Claude app");
     assert.equal(describeFields("mcp__ccd_turn__wrap_up", { recap: "r" })!.Title, "Show the end-of-turn summary in the Claude app");
