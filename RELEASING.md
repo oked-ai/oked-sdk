@@ -12,7 +12,8 @@ The repository is public. The workflow runs `npm publish` and does not pass `--p
 - A Trusted Publisher on npmjs for each package. Every field must match the workflow:
   - Organization or user: `oked-ai`
   - Repository: `oked-sdk`, this monorepo, not the package name. All of them use `oked-sdk`. A wrong repo here shows up as a misleading `ENEEDAUTH` at publish (npm/cli#9088), not a clear mismatch error.
-  - Workflow filename: `publish.yml`. Environment name: blank. Allowed action: `npm publish`.
+  - Workflow filename: `publish.yml`. Environment name: blank.
+  - Allowed actions: tick "Allow npm publish". `npm stage publish` is always on, and "Allow npm dist-tag" stays off. The box on the settings page must list both `npm publish` and `npm stage publish`. A publisher with only `npm stage publish` fails the publish with `403 OIDC permission denied for this action`, after the provenance is signed. New publishers default to stage only, so tick the box every time.
 
 ### Adding a new package
 
@@ -27,7 +28,7 @@ Then add the Trusted Publisher on npmjs (same fields as above) and list the pack
 
 ### On npm
 
-Every package that has already been published is on npm and has a Trusted Publisher: organization `oked-ai`, repository `oked-sdk`, workflow `publish.yml`. `@oked/langgraph`, `@oked/ai-sdk`, and `@oked/openai-agents` were first published by hand at 0.6.21. Confirm each has a Trusted Publisher (same fields as above) before tagging. A tag pushed before that publisher exists fails that package's job (`ENEEDAUTH`) while the rest publish. A `vX.Y.Z` tag publishes every package in the matrix that already exists on npm. Do not publish from a pull request.
+Every package that has already been published is on npm and has a Trusted Publisher: organization `oked-ai`, repository `oked-sdk`, workflow `publish.yml`. `hook-core`, `codex`, `cursor`, `copilot`, `langgraph`, `ai-sdk`, and `openai-agents` were first published by hand at 0.6.21. In v0.6.22, `hook-core`, `codex`, `cursor`, and `copilot` failed with the 403 above, because their publishers had only `npm stage publish`. They were fixed for v0.6.23. Confirm each new package has a Trusted Publisher with both permissions (same fields as above) before tagging. A tag pushed before that publisher exists fails that package's job (`ENEEDAUTH`) while the rest publish. A `vX.Y.Z` tag publishes every package in the matrix that already exists on npm. Do not publish from a pull request.
 
 ### Why the workflow publishes one package per job
 
