@@ -14,7 +14,7 @@ Built from `changes.jsonl` by `node scripts/approval-review/record.mjs log`. Do 
 | Body | Oren approved the merge and the TestFlight upload. His words: "merge and upload to testflight i wanna test it end to end on my device".<br>Skip the simulator sign-in test; he will test on his iPhone.<br>1.… | Oren approved the merge and the TestFlight upload. His words: "merge and upload to testflight i wanna test it end to end on my device".<br>Skip the simulator sign-in test; he will test on his iPhone.<br>1.… |
 | Kind | chat_message | agent_message |
 
-Seen 2× (✅ 2, ❌ 0) · Corpus: `2026-10-30-desktop-session-message`
+Seen 2× (✅ 2, ❌ 0) · Corpus: `2026-10-30-desktop-session-message` · PR: https://github.com/oked-ai/oked-sdk/pull/113
 
 ## 2026-10-30 · tier · `mcp__ccd_pr__set_auto_merge`
 
@@ -27,7 +27,7 @@ Seen 2× (✅ 2, ❌ 0) · Corpus: `2026-10-30-desktop-session-message`
 | Annotation | · | squash, when checks pass |
 | Kind | unknown_tool | git_pr_merge |
 
-Seen 1× (✅ 1, ❌ 0) · Corpus: `2026-10-30-desktop-auto-merge`
+Seen 1× (✅ 1, ❌ 0) · Corpus: `2026-10-30-desktop-auto-merge` · PR: https://github.com/oked-ai/oked-sdk/pull/113
 
 ## 2026-10-26 · text · `Bash`
 
