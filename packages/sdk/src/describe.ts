@@ -595,6 +595,20 @@ function summarizeGh(cmd: string, cwd?: string): Rendered | null {
       return { title: mutation ? "Change data via GitHub GraphQL API" : "Query GitHub GraphQL API", body: truncateBody(cmd), kind: mutation ? "http_post" : "http_get" };
     }
     const m2 = method ?? (/\s(?:-f|-F|--field|--raw-field|--input)(?:\s|=)/.test(args) ? "POST" : "GET");
+    // A POST to `repos/<owner>/<repo>/pulls` opens a PR: say so, like `gh pr create`.
+    const pulls = endpoint?.match(/^\/?repos\/([\w.-]+\/[\w.-]+)\/pulls$/);
+    if (pulls && m2 === "POST") {
+      const field = (k: string) => args.match(new RegExp(`\\s(?:-f|-F|--field|--raw-field)[\\s=]+${k}=(?:'([^']*)'|"((?:[^"\\\\]|\\\\.)*)"|([^\\s'"]+))`));
+      const val = (m: RegExpMatchArray | null) => m ? (m[1] ?? m[2] ?? m[3] ?? "") : undefined;
+      const head = val(field("head"));
+      const base = val(field("base"));
+      return {
+        title: `Create PR in ${pulls[1]}`,
+        target: head && base && !/[$`@]/.test(head + base) ? `${head} → ${base}` : undefined,
+        body: truncateBody(cmd),
+        kind: "git_pr_create",
+      };
+    }
     return {
       title: `${m2} request to GitHub API`,
       target: endpoint,
