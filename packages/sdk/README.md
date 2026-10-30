@@ -91,7 +91,7 @@ Returns `true` when `GET https://api.oked.ai/health` succeeds within 3 seconds.
 
 ### Helpers
 
-- `classify(toolName, toolInput)` returns a risk tier for a tool call.
+- `classify(toolName, toolInput)` returns a risk tier for a tool call. Pass `{ sandboxEnforced: false }` to ask (`review`) before an opaque runner (`cargo test`, `npm test`, `npm run`, `pytest`, `go test`, `make`, `./script.sh`, `node scripts/x.mjs`, `npx`). Omit the option, or pass `true`, and those commands stay `safe`. Claude Code sets this from sandbox settings. Other hosts omit it.
 - `describe(toolName, toolInput, ctx?)` returns a one-line description.
 - `describeFields(toolName, toolInput, ctx?)` returns the card fields.
 

@@ -99,7 +99,11 @@ const WARNING_SESSION_TOOLS = new Set([
 ]);
 
 /** Built-ins whose tier depends on their input. Returns null for other tools. */
-function classifySessionTool(toolName: string, toolInput: Record<string, unknown>): RiskTier | null {
+function classifySessionTool(
+  toolName: string,
+  toolInput: Record<string, unknown>,
+  sandboxEnforced?: boolean,
+): RiskTier | null {
   switch (toolName) {
     // "keep" leaves everything on disk. "remove" refuses when there is
     // unsaved work, unless discard_changes deletes it for good.
@@ -108,7 +112,7 @@ function classifySessionTool(toolName: string, toolInput: Record<string, unknown
       return toolInput.discard_changes === true ? "high_stakes" : "warning";
     // Monitor runs a shell command (classified like Bash) or reads a WebSocket.
     case "Monitor":
-      if (typeof toolInput.command === "string") return classifyBashCommand(toolInput.command);
+      if (typeof toolInput.command === "string") return classifyBashCommand(toolInput.command, new Set(), sandboxEnforced);
       return "warning";
     // Artifact: publishing puts content on claude.ai; delete is permanent;
     // read / list / open / quickstart / pin only look or arrange.
@@ -600,12 +604,13 @@ function classifyGhApiStage(stage: string): RiskTier | null {
 // (silent) label, and cover the local mutations we can recognize by shape but
 // that aren't a plain file write (those are handled by extractShellWriteOps).
 //
-// Opaque code execution (node/npx/python/claude/test runners) is intentionally
-// NOT here: we can't tell whether it mutated anything, and a destructive effect
-// buried inside `node -e …` would slip through regardless of the label — so
-// logging it adds terminal noise without buying safety. It stays `safe`, just
-// like any other unrecognized command. A real file write it performs is a
-// separate Bash/Write call that gets classified on its own.
+// Opaque code execution (node -e, npx, python -c, test runners, script files)
+// is intentionally NOT a warning marker. A warning only adds a log line, and
+// the hook still cannot see what the child process runs. When the host sandbox
+// is not enforcing containment, classify() with `sandboxEnforced: false` raises
+// test runners and script files to `review` (see isOpaqueCodeRunner). Other
+// hosts omit that option, so those commands stay `safe`. Inline interpreter
+// bodies stay unscanned as shell, because shell tokens in the body are data.
 const WARNING_COMMANDS = [
   // Local, reversible git writes — stage/commit/switch/stash. They mutate the
   // local repo but can be undone (amend, reset, checkout). Destructive git
@@ -792,10 +797,22 @@ function isSensitiveWritePath(filePath: string): boolean {
   return false;
 }
 
+/**
+ * `sandboxEnforced: false` asks for `review` before an opaque code runner
+ * (a test runner, package script, script file, or npx tool). `true` or omitted
+ * leaves those commands `safe`. Claude Code sets this from sandbox settings.
+ * Other hosts omit it and keep the previous behaviour.
+ */
+export interface ClassifyOptions {
+  sandboxEnforced?: boolean;
+}
+
 export function classify(
   toolName: string,
-  toolInput: Record<string, unknown>
+  toolInput: Record<string, unknown>,
+  options?: ClassifyOptions,
 ): RiskTier {
+  const sandboxEnforced = options?.sandboxEnforced;
   // Check tool-level classification first
   if (SAFE_TOOLS.has(toolName)) return "safe";
   if (SAFE_TOOL_ALIASES.has(toolName.toLowerCase())) return "safe";
@@ -803,7 +820,7 @@ export function classify(
   if (REVIEW_TOOLS.has(toolName)) return "review";
   if (SAFE_SESSION_TOOLS.has(toolName)) return "safe";
   if (WARNING_SESSION_TOOLS.has(toolName)) return "warning";
-  const sessionTier = classifySessionTool(toolName, toolInput);
+  const sessionTier = classifySessionTool(toolName, toolInput, sandboxEnforced);
   if (sessionTier !== null) return sessionTier;
 
   // File-editing tools: a write/edit can't act on its own — whatever later
@@ -824,7 +841,7 @@ export function classify(
 
   // Bash commands need deeper analysis
   if (toolName === "Bash") {
-    return classifyBashCommand(toolInput.command as string);
+    return classifyBashCommand(toolInput.command as string, new Set(), sandboxEnforced);
   }
 
   // MCP tools: mcp__<server>__<tool>
@@ -837,7 +854,7 @@ export function classify(
   // command/cmd field. Route through bash classification.
   const shellCommand = (toolInput.command ?? toolInput.cmd) as unknown;
   if (typeof shellCommand === "string") {
-    return classifyBashCommand(shellCommand);
+    return classifyBashCommand(shellCommand, new Set(), sandboxEnforced);
   }
 
   // File-write-style tools from other agents (OpenClaw `write`, generic
@@ -858,11 +875,11 @@ export function classify(
  * read: a step sees the temp files and temp folders that earlier steps made
  * (`cat > _s.mjs <<EOF … && rm _s.mjs`). `classify` of one step alone does not.
  */
-export function classifyBashSteps(steps: string[]): RiskTier[] {
+export function classifyBashSteps(steps: string[], sandboxEnforced?: boolean): RiskTier[] {
   const vars = new Set<string>();
   for (const step of steps) for (const stage of splitTopLevel(step)) collectMktempVars(stage, vars);
   return steps.map((step) => {
-    const tier = classifyBashCommand(step, vars);
+    const tier = classifyBashCommand(step, vars, sandboxEnforced);
     for (const stage of splitTopLevel(step)) noteEphemeralEffects(stripHeredocBodies(stage), vars);
     return tier;
   });
@@ -1008,7 +1025,7 @@ function isBuildOutputOnlyDeletion(command: string): boolean {
  * values, plus any trailing command. A purely literal assignment is `safe`.
  * Returns null if the stage is not assignment-prefixed.
  */
-function classifyAssignmentStage(stage: string): RiskTier | null {
+function classifyAssignmentStage(stage: string, sandboxEnforced?: boolean): RiskTier | null {
   if (!/^\w+=/.test(stage)) return null;
   const inners: string[] = [];
   let i = 0;
@@ -1042,8 +1059,8 @@ function classifyAssignmentStage(stage: string): RiskTier | null {
   }
   const rest = stage.slice(i).trim();
   let tier: RiskTier = "safe";
-  for (const inner of inners) tier = maxTier(tier, classifyBashCommand(inner));
-  if (rest) tier = maxTier(tier, classifyBashCommand(rest));
+  for (const inner of inners) tier = maxTier(tier, classifyBashCommand(inner, new Set(), sandboxEnforced));
+  if (rest) tier = maxTier(tier, classifyBashCommand(rest, new Set(), sandboxEnforced));
   return tier;
 }
 
@@ -1055,7 +1072,7 @@ function classifyAssignmentStage(stage: string): RiskTier | null {
  * (quote-preserving) offset. `env` with no command just prints the environment
  * → safe. Returns null if the stage doesn't start with `env`.
  */
-function classifyEnvStage(stage: string): RiskTier | null {
+function classifyEnvStage(stage: string, sandboxEnforced?: boolean): RiskTier | null {
   const lead = /^env\b[ \t]*/.exec(stage);
   if (!lead) return null;
   // env options that consume a following argument token.
@@ -1089,7 +1106,7 @@ function classifyEnvStage(stage: string): RiskTier | null {
       continue;
     }
     if (/^\w+=/.test(tok)) continue;                            // NAME=VALUE
-    return classifyBashCommand(stage.slice(start).trim());      // first real word → the command
+    return classifyBashCommand(stage.slice(start).trim(), new Set(), sandboxEnforced); // first real word → the command
   }
   return "safe"; // `env` / `env -u X` with no command just prints the environment
 }
@@ -1109,7 +1126,7 @@ const GIT_GLOBAL_ARG_OPTS = new Set([
  * can define a shell command, so it gets a `review` floor. Returns null if the
  * stage is not a git call with global options.
  */
-function classifyGitGlobalOptsStage(stage: string, ephemeralVars: Set<string>): RiskTier | null {
+function classifyGitGlobalOptsStage(stage: string, ephemeralVars: Set<string>, sandboxEnforced?: boolean): RiskTier | null {
   const lead = /^git[ \t]+(?=-)/.exec(stage);
   if (!lead) return null;
   const readToken = (from: number): number => {
@@ -1133,7 +1150,7 @@ function classifyGitGlobalOptsStage(stage: string, ephemeralVars: Set<string>): 
     i = readToken(i);
     const tok = stage.slice(start, i);
     if (!tok.startsWith("-")) {
-      const inner = classifyBashCommand(`git ${stage.slice(start).trim()}`, ephemeralVars);
+      const inner = classifyBashCommand(`git ${stage.slice(start).trim()}`, ephemeralVars, sandboxEnforced);
       return maxTier(floor, inner);
     }
     let value = "";
@@ -1166,7 +1183,7 @@ const SSH_ARG_OPTS = new Set([
  * isn't an ssh invocation. Excludes `ssh-keygen`/`ssh-add`/`ssh-keyscan` (the
  * `^ssh\s` anchor requires whitespace, not a hyphen).
  */
-function classifySshStage(stage: string): RiskTier | null {
+function classifySshStage(stage: string, sandboxEnforced?: boolean): RiskTier | null {
   const lead = /^ssh\s+/.exec(stage);
   if (!lead) return null;
   const readToken = (from: number): number => {
@@ -1207,7 +1224,7 @@ function classifySshStage(stage: string): RiskTier | null {
     if (rest.length >= 2 && (rest[0] === '"' || rest[0] === "'") && rest[rest.length - 1] === rest[0]) {
       rest = rest.slice(1, -1);
     }
-    return classifyBashCommand(rest);
+    return classifyBashCommand(rest, new Set(), sandboxEnforced);
   }
   return "review"; // only options / a bare host token → treat as remote access
 }
@@ -1220,12 +1237,12 @@ function classifySshStage(stage: string): RiskTier | null {
  * `grep -c`) is unaffected because the stage doesn't start with a shell name.
  * Returns null if the stage isn't a `sh -c`-style invocation.
  */
-function classifyShellCStage(stage: string): RiskTier | null {
+function classifyShellCStage(stage: string, sandboxEnforced?: boolean): RiskTier | null {
   const m = stage.match(
     /^(?:bash|sh|zsh|ksh|dash)\b[^'"]*?\s-[A-Za-z]*c\s+(['"])([\s\S]*?)\1/,
   );
   if (!m) return null;
-  return classifyBashCommand(m[2]);
+  return classifyBashCommand(m[2], new Set(), sandboxEnforced);
 }
 
 // A curl/wget whose target host is loopback (localhost, 127.0.0.0/8, 0.0.0.0,
@@ -1254,7 +1271,7 @@ function isLoopbackHttpStage(stage: string): boolean {
   return /(?:^|[\s@])(?:localhost|127(?:\.\d{1,3}){3}|0\.0\.0\.0|\[::1\])(?::\d+)?(?:[/\s'"]|$)/i.test(stage);
 }
 
-function classifyBashCommand(command: string, ephemeralVars: Set<string> = new Set()): RiskTier {
+function classifyBashCommand(command: string, ephemeralVars: Set<string> = new Set(), sandboxEnforced?: boolean): RiskTier {
   if (!command) return "safe";
 
   // Two views of the command:
@@ -1315,7 +1332,7 @@ function classifyBashCommand(command: string, ephemeralVars: Set<string> = new S
     // before the create still counts as a real delete.
     let worst: RiskTier = pipesToShell ? "review" : "safe";
     for (const stage of stages) {
-      worst = maxTier(worst, classifyBashCommand(stage, vars));
+      worst = maxTier(worst, classifyBashCommand(stage, vars, sandboxEnforced));
       noteEphemeralEffects(stripHeredocBodies(stage), vars);
     }
     return worst;
@@ -1330,7 +1347,7 @@ function classifyBashCommand(command: string, ephemeralVars: Set<string> = new S
   const sql = findSqlInCommand(intact);
   const sqlTier: RiskTier = sql ? classifySqlSeverity(sql) : "safe";
 
-  return maxTier(maxTier(sqlTier, pipesToShell ? "review" : "safe"), classifyStageShellEffects(stripped, ephemeralVars));
+  return maxTier(maxTier(sqlTier, pipesToShell ? "review" : "safe"), classifyStageShellEffects(stripped, ephemeralVars, sandboxEnforced));
 }
 
 /**
@@ -1340,11 +1357,234 @@ function classifyBashCommand(command: string, ephemeralVars: Set<string> = new S
  * A cloud CLI tier is a floor: it never lowers what the other detectors find
  * (`kubectl exec pod -- curl -X DELETE …` stays high_stakes).
  */
-function classifyStageShellEffects(stage: string, ephemeralVars: Set<string> = new Set()): RiskTier {
-  return maxTier(classifyCloudCliStage(stage) ?? "safe", classifyStageEffects(stage, ephemeralVars));
+// Package-manager subcommands that do not run a package script. `yarn build`
+// and `pnpm build` do: those tools treat an unknown word as a script name.
+const PM_NON_SCRIPT = new Set([
+  "access", "add", "adduser", "approve-builds", "audit", "bin", "bugs", "cache", "ci", "cit",
+  "completion", "config", "create", "dedupe", "deploy", "deprecate", "diff", "dist-tag", "docs",
+  "doctor", "env", "explain", "explore", "fetch", "find", "fund", "get", "help", "hook", "i",
+  "import", "info", "init", "install", "install-ci-test", "install-test", "it", "licenses",
+  "link", "list", "ll", "login", "logout", "ls", "node", "org", "outdated", "owner", "pack",
+  "patch", "ping", "pkg", "prefix", "profile", "prune", "publish", "query", "rebuild", "repo",
+  "root", "search", "set", "setup", "shrinkwrap", "star", "stars", "store", "team", "token",
+  "uninstall", "unlink", "unplug", "unstar", "update", "upgrade", "up", "version", "view",
+  "whoami", "why",
+]);
+
+/**
+ * A test runner, package script, script file, or package executor. The hook
+ * sees the runner command, not the processes it starts (a `cargo test` can
+ * run `rm` without a second tool call). Command position only: `echo cargo
+ * test` and `git commit -m "npm test"` are not runners.
+ */
+function isOpaqueCodeRunner(stage: string): boolean {
+  const words = stripRunnerPrefixes(withoutShellRedirects(splitArgs(stage)));
+  if (words.length === 0) return false;
+  const [cmd, ...args] = words;
+  if (isDirectScript(cmd)) return true;
+  const base = commandBase(cmd);
+  if (base === "source" || cmd === ".") return args.some((w) => w !== "--" && !w.startsWith("-"));
+  if (base === "bash" || base === "sh" || base === "zsh" || base === "dash" || base === "ksh") return shellInvokesFile(args);
+  if (base === "node" || base === "nodejs" || base === "tsx" || base === "deno") return nodeInvokesFile(args);
+  if (base === "npx" || base === "bunx") return npxInvokes(args);
+  if (base === "bun") return pmInvokes(base, args) || bunInvokesFile(args);
+  if (base === "npm" || base === "pnpm" || base === "yarn") return pmInvokes(base, args);
+  if (base === "pytest" || base === "py.test") return true;
+  if (base === "python" || base === "python3" || /^python3\.\d+$/.test(base)) return pythonInvokes(args);
+  if (base === "cargo") return cargoInvokesTest(args);
+  if (base === "go") return goInvokesTest(args);
+  if (base === "make" || base === "gmake") return makeInvokes(args);
+  return false;
 }
 
-function classifyStageEffects(stage: string, ephemeralVars: Set<string>): RiskTier {
+function commandBase(cmd: string): string {
+  const slash = Math.max(cmd.lastIndexOf("/"), cmd.lastIndexOf("\\"));
+  return slash >= 0 ? cmd.slice(slash + 1) : cmd;
+}
+
+function isDirectScript(cmd: string): boolean {
+  if (cmd.startsWith("./") || cmd.startsWith("../")) return true;
+  return cmd.includes("/") && /\.(?:sh|bash|zsh|py|rb|pl|[cm]?js|[cm]?ts|mjs|cjs|mts|cts)$/i.test(cmd);
+}
+
+function withoutShellRedirects(words: string[]): string[] {
+  const out: string[] = [];
+  for (let i = 0; i < words.length; i++) {
+    const w = words[i];
+    if (w === ">" || w === ">>" || w === "<" || w === "<<" || w === ">&" || w === "&>") {
+      i++;
+      continue;
+    }
+    if (/^(?:&>>?|\d*>&?\d*|\d*>>?|[<>])\S*$/.test(w)) continue;
+    out.push(w);
+  }
+  return out;
+}
+
+function stripRunnerPrefixes(words: string[]): string[] {
+  let i = 0;
+  while (i < words.length && /^[A-Za-z_][A-Za-z0-9_]*=/.test(words[i])) i++;
+  while (i < words.length && (words[i] === "command" || words[i] === "builtin")) i++;
+  return words.slice(i);
+}
+
+function shellInvokesFile(args: string[]): boolean {
+  for (let i = 0; i < args.length; i++) {
+    const w = args[i];
+    if (w === "--") return Boolean(args[i + 1]);
+    // `-c` / `-lc` is inline shell. classifyShellCStage already classified a
+    // quoted body. `-n` checks syntax and does not run the file.
+    if (w === "-c" || w === "--command" || /^-[^-]*c/.test(w)) return false;
+    if (w === "-n" || w === "--noexec" || /^-[^-]*n/.test(w)) return false;
+    if (w.startsWith("-")) continue;
+    return true;
+  }
+  return false;
+}
+
+function nodeInvokesFile(args: string[]): boolean {
+  const argTaking = new Set(["-r", "--require", "--import", "--loader", "--experimental-loader", "-C", "--conditions"]);
+  for (let i = 0; i < args.length; i++) {
+    const w = args[i];
+    if (w === "--") return Boolean(args[i + 1]);
+    if (w === "-e" || w === "--eval" || w === "-p" || w === "--print" || w === "-c" || w === "--check") return false;
+    if (w.startsWith("--eval=") || w.startsWith("--print=")) return false;
+    if (w === "--test" || w.startsWith("--test")) return true;
+    if (w.startsWith("-")) {
+      if (argTaking.has(w) && !w.includes("=")) i++;
+      continue;
+    }
+    return true;
+  }
+  return false;
+}
+
+function npxInvokes(args: string[]): boolean {
+  const argTaking = new Set(["-p", "--package", "-c", "--call", "--npm", "--node-options"]);
+  for (let i = 0; i < args.length; i++) {
+    const w = args[i];
+    if (w === "--") return Boolean(args[i + 1]);
+    if (w === "-v" || w === "--version" || w === "-h" || w === "--help") return false;
+    if (w.startsWith("-")) {
+      if ((argTaking.has(w) || w.startsWith("--package=") || w.startsWith("--call=")) && !w.includes("=")) i++;
+      continue;
+    }
+    return true;
+  }
+  return false;
+}
+
+function pmPositionals(args: string[]): string[] {
+  const skip = new Set(["--prefix", "-C", "--dir", "--workspace", "-w", "--filter", "--cwd"]);
+  const out: string[] = [];
+  for (let i = 0; i < args.length; i++) {
+    const w = args[i];
+    if (w === "--") break;
+    if (w.startsWith("-")) {
+      if (skip.has(w)) i++;
+      continue;
+    }
+    out.push(w);
+  }
+  return out;
+}
+
+function bunInvokesFile(args: string[]): boolean {
+  const file = pmPositionals(args)[0];
+  if (!file) return false;
+  return file.startsWith("./") || file.startsWith("../") || file.includes("/") || /\.(?:[cm]?[jt]sx?|mjs|cjs)$/i.test(file);
+}
+
+function pmInvokes(pm: string, args: string[]): boolean {
+  const pos = pmPositionals(args);
+  const sub = pos[0];
+  if (!sub) return false;
+  if (sub === "test" || sub === "t" || sub === "tst" || sub === "start" || sub === "stop" || sub === "restart") return true;
+  if ((sub === "run" || sub === "run-script") && pos[1]) return true;
+  if ((sub === "exec" || sub === "dlx") && pos[1]) return true;
+  // yarn and pnpm run a package script named by the first word (`yarn build`).
+  if ((pm === "yarn" || pm === "pnpm") && !PM_NON_SCRIPT.has(sub)) return true;
+  return false;
+}
+
+function pythonInvokes(args: string[]): boolean {
+  const takes = new Set(["-W", "-X"]);
+  for (let i = 0; i < args.length; i++) {
+    const w = args[i];
+    if (w === "-c" || w === "--command") return false;
+    if (w === "-m" || w === "--module") {
+      const mod = args[i + 1];
+      return mod === "pytest" || mod === "unittest";
+    }
+    if (w.startsWith("-")) {
+      if (takes.has(w)) i++;
+      continue;
+    }
+    return true;
+  }
+  return false;
+}
+
+function cargoInvokesTest(args: string[]): boolean {
+  let i = 0;
+  if (args[0]?.startsWith("+")) i++;
+  const takes = new Set([
+    "--manifest-path", "--target", "--target-dir", "--config", "-Z", "--color",
+    "--features", "-F", "--package", "-p", "--exclude", "--bin", "--example", "--test", "--bench",
+  ]);
+  for (; i < args.length; i++) {
+    const w = args[i];
+    if (w.startsWith("-")) {
+      if (takes.has(w) && !w.includes("=")) i++;
+      continue;
+    }
+    return w === "test";
+  }
+  return false;
+}
+
+function goInvokesTest(args: string[]): boolean {
+  const takes = new Set(["-C", "-o", "-p"]);
+  for (let i = 0; i < args.length; i++) {
+    const w = args[i];
+    if (w.startsWith("-")) {
+      if ((takes.has(w) || w === "-ldflags" || w === "-gcflags") && !w.includes("=")) i++;
+      continue;
+    }
+    return w === "test";
+  }
+  return false;
+}
+
+function makeInvokes(args: string[]): boolean {
+  let dry = false;
+  let help = false;
+  const positionals: string[] = [];
+  const takes = new Set([
+    "-C", "--directory", "-f", "--file", "--makefile", "-I", "--include-dir",
+    "-o", "--old-file", "-W", "--what-if", "--assume-new", "--eval",
+  ]);
+  for (let i = 0; i < args.length; i++) {
+    const w = args[i];
+    if (w === "-n" || w === "--dry-run" || w === "--just-print" || w === "--recon") { dry = true; continue; }
+    if (w === "--version" || w === "-v" || w === "--help" || w === "-h") { help = true; continue; }
+    if (w.startsWith("-")) {
+      if (/^-[^-]*n/.test(w)) dry = true;
+      if (takes.has(w)) i++;
+      continue;
+    }
+    positionals.push(w);
+  }
+  if (dry) return false;
+  if (help && positionals.length === 0) return false;
+  return true;
+}
+
+function classifyStageShellEffects(stage: string, ephemeralVars: Set<string> = new Set(), sandboxEnforced?: boolean): RiskTier {
+  return maxTier(classifyCloudCliStage(stage) ?? "safe", classifyStageEffects(stage, ephemeralVars, sandboxEnforced));
+}
+
+function classifyStageEffects(stage: string, ephemeralVars: Set<string>, sandboxEnforced?: boolean): RiskTier {
   // File deletion in COMMAND POSITION, per-stage so the ephemeral-temp carve-out
   // can win: deleting only throwaway temp files (/tmp, $TMPDIR, /var/folders, …)
   // → warning; any non-temp target (or the temp root itself) → high_stakes.
@@ -1353,7 +1593,7 @@ function classifyStageEffects(stage: string, ephemeralVars: Set<string>): RiskTi
   if (isEphemeralOnlyDeletion(stage, ephemeralVars)) return "warning";
   // `git -C repo …` / `git -c k=v …`: classify the subcommand without the
   // global options, so the git patterns below and in the full scan apply.
-  const gitTier = classifyGitGlobalOptsStage(stage, ephemeralVars);
+  const gitTier = classifyGitGlobalOptsStage(stage, ephemeralVars, sandboxEnforced);
   if (gitTier !== null) return gitTier;
   if (isBuildOutputOnlyDeletion(stage.replace(DELETE_LEAD, ""))) return "warning";
   // rmdir removes only EMPTY folders (it fails on a folder with files), so no
@@ -1407,19 +1647,19 @@ function classifyStageEffects(stage: string, ephemeralVars: Set<string>): RiskTi
   // / capture). Classify the command-substitution inners and any trailing
   // command; a purely literal assignment is safe. Dangerous substitutions were
   // already caught by the high-stakes/delete scans above.
-  const assignTier = classifyAssignmentStage(stage);
+  const assignTier = classifyAssignmentStage(stage, sandboxEnforced);
   if (assignTier !== null) return assignTier;
 
   // `env [opts] [NAME=VAL]... cmd` runs cmd with a modified environment. Strip
   // the env prefix and classify the inner command (a dangerous inner was already
   // caught by the high-stakes full scan). Bare `env` just prints the env → safe.
-  const envTier = classifyEnvStage(stage);
+  const envTier = classifyEnvStage(stage, sandboxEnforced);
   if (envTier !== null) return envTier;
 
   // ssh is a transport — classify the remote command it runs (interactive /
   // port-forwarding ssh has no inspectable command → review floor). scp/rsync
   // to a remote are file transfers and stay high_stakes (HIGH_STAKES_STAGE).
-  const sshTier = classifySshStage(stage);
+  const sshTier = classifySshStage(stage, sandboxEnforced);
   if (sshTier !== null) return sshTier;
 
   // `sh -c '<shell>'` / `bash -c "<shell>"` runs the quoted argument AS shell —
@@ -1427,7 +1667,7 @@ function classifyStageEffects(stage: string, ephemeralVars: Set<string>): RiskTi
   // is why the command-position delete scan above can ignore quoted text: a real
   // shell-out like `bash -c 'rm -rf /important'` is caught HERE, by re-running
   // the body as a command, while `echo 'rm …'` (data) is not.
-  const shellCTier = classifyShellCStage(stage);
+  const shellCTier = classifyShellCStage(stage, sandboxEnforced);
   if (shellCTier !== null) return shellCTier;
 
   // sudo: privilege escalation. A high-stakes inner command was already caught
@@ -1460,6 +1700,11 @@ function classifyStageEffects(stage: string, ephemeralVars: Set<string>): RiskTi
 
   // Default: safe. No destructive/outward/sensitive effect was detected, so we
   // do NOT put a human in the loop just for "running a command".
+  // Exception: an opaque runner (test runner, package script, script file, npx)
+  // hides child processes from this hook. When the host sandbox is not
+  // enforcing containment, that asks for review. A higher tier above already
+  // returned. Other hosts leave sandboxEnforced unset and stay safe.
+  if (sandboxEnforced === false && isOpaqueCodeRunner(stage)) return "review";
   return "safe";
 }
 
@@ -1623,13 +1868,13 @@ export function blankTextCommandArgs(command: string): string {
 }
 
 // Interpreters whose inline `-e`/`-c`/`--eval` (and perl/deno one-liner) body is
-// opaque CODE — not shell. We blank that body before the SHELL-pattern scans so
+// opaque CODE, not shell. We blank that body before the SHELL-pattern scans so
 // tokens embedded as code or data (`rm`, `curl -d`, a `>` redirect) don't trip a
-// destructive/outward rule. This matches the documented policy that opaque code
-// execution is `safe` (see the WARNING_COMMANDS note): we can't tell what a
-// `node -e`/`python -c` body does, and a real destructive shell effect buried
-// inside it would slip through the label regardless — so scanning the body for
-// shell tokens only manufactures false positives.
+// destructive/outward rule. Inline interpreter bodies stay unscanned as shell
+// (see the WARNING_COMMANDS note): we can't tell what a `node -e`/`python -c`
+// body does, and scanning it for shell tokens only manufactures false positives.
+// A test runner or a script file is different: its body is not in the command
+// at all. Those ask for review when sandboxEnforced is false.
 //
 // NOTE: SQL is the deliberate exception. classifyBashCommand still runs SQL
 // detection on the body-INTACT view, so inline SQL in a `node -e`/`python -c`

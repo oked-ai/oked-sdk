@@ -450,8 +450,9 @@ export {
   type ReceiptKey,
 } from "@oked/receipt-core";
 export { TIER_ORDER, degradedDecision } from "./degraded.js";
-export { classify } from "./classify.js";
-export { describe, describeFields } from "./describe.js";
+export { classify, splitTopLevel, type ClassifyOptions } from "./classify.js";
+export { describe, describeFields, OPAQUE_RUNNER_FOOTNOTE } from "./describe.js";
+export type { DescribeContext } from "./describe.js";
 export { lookupPrTitle } from "./pr-title.js";
 export { applyRules } from "./rules.js";
 export type {

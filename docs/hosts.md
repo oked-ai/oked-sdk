@@ -4,7 +4,7 @@ OKed stops a risky tool call until a person decides in Telegram or on the [web d
 
 | Host | Package | Install |
 |---|---|---|
-| Claude Code | [`@oked/claude-code`](../packages/claude-code) | `npm install -g @oked/claude-code`, then `oked init`. Writes `.claude/settings.json`. Unpaired devices return `ask`. The gate is `@oked/hook-core`, and Claude's behavior is unchanged. |
+| Claude Code | [`@oked/claude-code`](../packages/claude-code) | `npm install -g @oked/claude-code`, then `oked init`. Writes `.claude/settings.json`. Unpaired devices return `ask`. The gate is `@oked/hook-core`. Test runners and script files ask for approval unless the Bash sandbox is on with `allowUnsandboxedCommands` set to false. |
 | Codex CLI | [`@oked/codex`](../packages/codex) | `npm install -g @oked/codex`, then `oked-codex init`. Writes `.codex/hooks.json` with timeout 690. Run `/hooks` and trust the hook. Timeouts fail open. An allow prints nothing. |
 | Cursor | [`@oked/cursor`](../packages/cursor) | `npm install -g @oked/cursor`, then `oked-cursor init`. Writes `.cursor/hooks.json` with timeout 690 and `failClosed: true`. The real timeout ceiling is not documented. Skips install when a Claude Code hook would also run. `--native` installs anyway. |
 | GitHub Copilot CLI and VS Code | [`@oked/copilot`](../packages/copilot) | `npm install -g @oked/copilot`, then `oked-copilot init`. Writes `.github/hooks/oked.json` with `timeoutSec` 690. Timeouts fail open. VS Code hooks are Preview. The cloud agent needs `api.oked.ai` allowlisted. Skips install when a project Claude Code hook would also run. |
@@ -19,5 +19,7 @@ OKed stops a risky tool call until a person decides in Telegram or on the [web d
 | Any Node.js agent | [`@oked/sdk`](../packages/sdk) | `npm install @oked/sdk`, then call `approve()`. |
 
 [`@oked/hook-core`](../packages/hook-core) is the shared gate those hooks call (`npm install @oked/hook-core`). It has no `init` command. Do not install it on its own unless you are building a host package.
+
+Claude Code is the host that reads sandbox settings (`.claude/settings.json`, `.claude/settings.local.json`, and `~/.claude/settings.json`). When `sandbox.enabled` is true and `allowUnsandboxedCommands` is false, `cargo test`, `npm test`, `npm run`, `pytest`, `go test`, `make`, `./script.sh`, and `npx` stay allowed, because child processes cannot write outside the working directory. Otherwise those commands ask (`review`). Codex, Cursor, Copilot, and the SDK hosts do not read those files, so the same commands stay allowed there.
 
 The hook timeout hosts should set, when they allow it, is 690 seconds (`HOOK_TIMEOUT_SECONDS`). That sits above the SDK wait of 630 seconds.

@@ -19,7 +19,7 @@ Decisions are made in Telegram or on the [web dashboard](https://oked.ai/dashboa
 
 ## What `decide()` does
 
-1. Classify the call with `@oked/sdk`. `safe` returns allow, with no notification. `warning` returns allow and writes a terminal line. A cached user rule that matches either tier sends the call to the backend instead.
+1. Classify the call with `@oked/sdk`. `safe` returns allow, with no notification. `warning` returns allow and writes a terminal line. A cached user rule that matches either tier sends the call to the backend instead. For `source: "claude-code"`, an opaque runner (`cargo test`, `npm test`, a script file, `npx`) is `review` unless Claude Code's Bash sandbox is on with `allowUnsandboxedCommands: false`. Other sources leave those commands `safe`.
 2. With no API key, return the host's unpaired decision. Claude Code asks the host's own prompt. A host that cannot enforce `ask` should deny, and the reason should say `Pair first`.
 3. For `review` and `high_stakes`, send the approval and wait. The SDK waits 630 seconds (`DEFAULT_APPROVAL_TIMEOUT_MS`), which is 30 seconds past the backend's 10 minute window.
 4. An approval counts only when the signed receipt verifies. The hook keeps a copy in `~/.oked/receipts.jsonl`.

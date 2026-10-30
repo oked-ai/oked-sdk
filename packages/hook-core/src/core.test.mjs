@@ -1,5 +1,6 @@
 // Offline tests for the shared gate: unpaired deny vs ask, a safe allow, the
-// 690s hook budget, patch and delete mapping, and Claude hook detection.
+// 690s hook budget, patch and delete mapping, Claude hook detection, and
+// Claude Code sandbox detection for opaque runners.
 import assert from "node:assert";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
@@ -8,7 +9,10 @@ import { join } from "node:path";
 import { classify, DEFAULT_APPROVAL_TIMEOUT_MS } from "@oked/sdk";
 import {
   HOOK_TIMEOUT_SECONDS,
+  SANDBOX_INIT_HINT,
+  claudeSandboxEnforced,
   decide,
+  exclusionCoversCommand,
   findClaudeOkedHooks,
   mapFileDelete,
   mapPatch,
@@ -226,4 +230,127 @@ let passed = 0;
   }
 }
 
-console.log(`ok - @oked/hook-core: ${passed}/6 passed`);
+{
+  const { mkdirSync } = await import("node:fs");
+  const root = mkdtempSync(join(tmpdir(), "oked-sandbox-"));
+  const prevConfig = process.env.CLAUDE_CONFIG_DIR;
+  const prevKey = process.env.OKED_API_KEY;
+  const configDir = join(root, "claude-config");
+  const project = join(root, "proj");
+  process.env.CLAUDE_CONFIG_DIR = configDir;
+  process.env.OKED_API_KEY = "";
+  const write = (path, body) => {
+    mkdirSync(join(path, ".."), { recursive: true });
+    writeFileSync(path, JSON.stringify(body));
+  };
+  const userSettings = join(configDir, "settings.json");
+  const projectSettings = join(project, ".claude", "settings.json");
+  const localSettings = join(project, ".claude", "settings.local.json");
+  const strict = { sandbox: { enabled: true, allowUnsandboxedCommands: false } };
+  try {
+    assert.equal(claudeSandboxEnforced(project), false);
+    assert.equal(SANDBOX_INIT_HINT.includes("\u2014"), false);
+    assert.match(SANDBOX_INIT_HINT, /allowUnsandboxedCommands/);
+
+    write(userSettings, strict);
+    assert.equal(claudeSandboxEnforced(project), true);
+    assert.equal(claudeSandboxEnforced(project, "cargo test"), true);
+
+    write(userSettings, { sandbox: { enabled: true } });
+    assert.equal(claudeSandboxEnforced(project), false);
+
+    write(userSettings, { sandbox: { enabled: true, allowUnsandboxedCommands: false, filesystem: { disabled: true } } });
+    assert.equal(claudeSandboxEnforced(project), false);
+
+    write(projectSettings, {
+      sandbox: { enabled: true, allowUnsandboxedCommands: false, filesystem: { disabled: true } },
+    });
+    write(userSettings, strict);
+    assert.equal(claudeSandboxEnforced(project), true);
+
+    write(projectSettings, { sandbox: { enabled: true, allowUnsandboxedCommands: true } });
+    write(userSettings, { sandbox: { allowUnsandboxedCommands: false, enabled: true } });
+    assert.equal(claudeSandboxEnforced(project), true);
+
+    write(localSettings, { sandbox: { enabled: true, allowUnsandboxedCommands: true } });
+    assert.equal(claudeSandboxEnforced(project), true);
+
+    write(userSettings, {});
+    write(projectSettings, { sandbox: { enabled: true, allowUnsandboxedCommands: false } });
+    write(localSettings, { sandbox: { allowUnsandboxedCommands: true } });
+    assert.equal(claudeSandboxEnforced(project), false);
+
+    write(localSettings, strict);
+    write(projectSettings, { sandbox: { enabled: false, allowUnsandboxedCommands: false } });
+    write(userSettings, {});
+    assert.equal(claudeSandboxEnforced(project), true);
+
+    writeFileSync(userSettings, "{");
+    write(projectSettings, strict);
+    write(localSettings, {});
+    assert.equal(claudeSandboxEnforced(project), true);
+
+    write(projectSettings, { sandbox: { ...strict.sandbox, excludedCommands: ["cargo test", "docker *"] } });
+    assert.equal(claudeSandboxEnforced(project, "cargo test"), false);
+    assert.equal(claudeSandboxEnforced(project, "cargo test --lib"), true);
+    assert.equal(claudeSandboxEnforced(project, "cd x && cargo test"), true);
+    assert.equal(claudeSandboxEnforced(project, "docker build ."), false);
+    assert.equal(claudeSandboxEnforced(project, "npm test"), true);
+    assert.equal(exclusionCoversCommand("cargo test", ["cargo test"]), true);
+    assert.equal(exclusionCoversCommand("cd x && cargo test", ["cargo test"]), false);
+
+    const askOpts = {
+      clientId: "@oked/hook-core@test",
+      source: "claude-code",
+      unpaired: "ask",
+      unpairedReason: "pair",
+      unpairedLog: "not paired",
+      log() {},
+    };
+    write(projectSettings, {});
+    write(localSettings, {});
+    write(userSettings, {});
+    const unsandboxed = await decide(
+      { toolName: "Bash", toolInput: { command: "cargo test" }, cwd: project },
+      askOpts,
+    );
+    assert.equal(unsandboxed.decision, "ask");
+    const read = await decide(
+      { toolName: "Bash", toolInput: { command: "ls" }, cwd: project },
+      askOpts,
+    );
+    assert.equal(read.decision, "allow");
+    const install = await decide(
+      { toolName: "Bash", toolInput: { command: "npm install left-pad" }, cwd: project },
+      askOpts,
+    );
+    assert.equal(install.decision, "allow");
+    const otherHost = await decide(
+      { toolName: "Bash", toolInput: { command: "cargo test" }, cwd: project },
+      { ...askOpts, source: "codex" },
+    );
+    assert.equal(otherHost.decision, "allow");
+
+    write(userSettings, strict);
+    const sandboxed = await decide(
+      { toolName: "Bash", toolInput: { command: "cargo test" }, cwd: project },
+      askOpts,
+    );
+    assert.equal(sandboxed.decision, "allow");
+    write(userSettings, { sandbox: { ...strict.sandbox, excludedCommands: ["cargo test"] } });
+    const excluded = await decide(
+      { toolName: "Bash", toolInput: { command: "cargo test" }, cwd: project },
+      askOpts,
+    );
+    assert.equal(excluded.decision, "ask");
+    passed++;
+  } finally {
+    if (prevConfig === undefined) delete process.env.CLAUDE_CONFIG_DIR;
+    else process.env.CLAUDE_CONFIG_DIR = prevConfig;
+    if (prevKey === undefined) delete process.env.OKED_API_KEY;
+    else process.env.OKED_API_KEY = prevKey;
+    rmSync(root, { recursive: true, force: true });
+  }
+}
+
+console.log(`ok - @oked/hook-core: ${passed}/7 passed`);
