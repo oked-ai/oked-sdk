@@ -15,6 +15,7 @@ import {
 } from "@oked/sdk";
 import { appendReceipt } from "./receipts.js";
 import { errorInfo, logDecision, type DecisionLogEntry } from "./log.js";
+import { claudeSandboxEnforced } from "./sandbox.js";
 
 export interface ToolCallInput {
   toolName: string;
@@ -52,6 +53,14 @@ export interface DecideOptions {
    */
   invalidKeyReason?: (status: number) => string;
   log?: (msg: string) => void;
+  /**
+   * When set, overrides Claude Code sandbox detection.
+   * `false`: an opaque code runner (test runner, script file, npx) is `review`.
+   * `true`: those commands stay `safe`.
+   * Omitted: `source: "claude-code"` reads sandbox settings. Other hosts omit
+   * it and keep the previous behaviour.
+   */
+  sandboxEnforced?: boolean;
 }
 
 type Context = Omit<DecisionLogEntry, "ts" | "decision" | "reason" | "client">;
@@ -63,6 +72,11 @@ function defaultInvalidKeyReason(status: number): string {
 function errorText(err: unknown): string {
   const info = errorInfo(err);
   return `${info.name}: ${info.message}`;
+}
+
+function commandOf(toolInput: Record<string, unknown>): string | undefined {
+  const command = toolInput.command ?? toolInput.cmd;
+  return typeof command === "string" ? command : undefined;
 }
 
 /**
@@ -98,7 +112,22 @@ export async function decide(call: ToolCallInput, options: DecideOptions): Promi
 
   const toolName = call.toolName;
   const toolInput = call.toolInput;
-  const tier = classify(toolName, toolInput);
+  const command = commandOf(toolInput);
+  const sandboxEnforced =
+    options.sandboxEnforced !== undefined
+      ? options.sandboxEnforced
+      : options.source === "claude-code"
+        ? claudeSandboxEnforced(call.cwd ?? process.cwd(), command)
+        : undefined;
+  const tier = classify(
+    toolName,
+    toolInput,
+    sandboxEnforced === undefined ? undefined : { sandboxEnforced },
+  );
+  const describeCtx = {
+    cwd: call.cwd,
+    ...(sandboxEnforced === false ? { sandboxEnforced: false as const } : {}),
+  };
   const client = new OKedClient({ client: options.clientId, source: options.source });
 
   // Presence ping (throttled to once/day on disk, never throws). Fired before
@@ -107,7 +136,7 @@ export async function decide(call: ToolCallInput, options: DecideOptions): Promi
   // and only the once/day send actually waits.
   if (client.apiKey) await client.heartbeat();
 
-  let fields = describeFields(toolName, toolInput, { cwd: call.cwd }) ?? undefined;
+  let fields = describeFields(toolName, toolInput, describeCtx) ?? undefined;
 
   // safe/warning normally short-circuit locally with no network call. But a
   // user rule can escalate (or auto-decide) such an action, and rules live
@@ -144,9 +173,9 @@ export async function decide(call: ToolCallInput, options: DecideOptions): Promi
   }
 
   const prTitle = await lookupPrTitle(fields);
-  if (prTitle) fields = describeFields(toolName, toolInput, { cwd: call.cwd, prTitle }) ?? undefined;
+  if (prTitle) fields = describeFields(toolName, toolInput, { ...describeCtx, prTitle }) ?? undefined;
 
-  const description = describe(toolName, toolInput, { cwd: call.cwd, prTitle });
+  const description = describe(toolName, toolInput, { ...describeCtx, prTitle });
   log(`${toolName}: "${description}" - ${tier}`);
   log("Requesting approval... (check your phone)");
 

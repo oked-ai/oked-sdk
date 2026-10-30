@@ -40,12 +40,24 @@ The hook uses a four-tier classifier. Classification is effect-based: it detects
 
 | Tier | Behavior | Examples |
 |---|---|---|
-| `safe` | Allow, no notification | Reads and queries, a DB `SELECT`, and any Bash command with no detected side effect: `ls`, `grep`, `jq`, `node`, `npx`, plain `curl` GET |
+| `safe` | Allow, no notification | Reads and queries, a DB `SELECT`, and any Bash command with no detected side effect: `ls`, `grep`, `jq`, plain `curl` GET. Test runners and script files are included only when the Bash sandbox is containing child processes (see below). |
 | `warning` | Terminal log only, no approval | A reversible local change (file create, `cp`, `mv`, a `/tmp` delete, local git `add`/`commit`, `npm install`, SQL `INSERT` or `CREATE`), plus a plain `git push` |
 | `review` | Wait for approval | Sensitive-path writes (`~/.ssh`, shell rc, system dirs, OKed config), `sudo`, outward message or email sends, `curl` POST/PUT/PATCH with an inline body, other cloud CLI writes (`aws s3 cp` to a bucket, `kubectl apply`, `helm upgrade`, a preview deploy), MCP tools named `create_*`, `send_*`, or `update_*` |
 | `high_stakes` | Wait for approval, with confirmation | Destructive or hard to undo: `rm` of non-temp data, `DROP TABLE` or `DELETE FROM`, a force push (`git push --force`, `-f`, or `--force-with-lease`), a remote branch delete (`git push --delete`, `-d`, or `git push origin :branch`), `reset --hard`, `branch -D`, `mkfs`, `dd` to a device, `shutdown`, `curl` DELETE, file upload, pay or send APIs, `ssh` / `scp`, `npm publish`, `kill`, cloud and cluster deletes (`aws s3 rm`, `kubectl delete`), `terraform apply` / `destroy`, production deploys (`vercel --prod`, `fly deploy`), Stripe CLI writes |
 
 A Bash command that matches none of those effect categories defaults to `safe`. Cloud CLI reads (`aws s3 ls`, `kubectl get`, `terraform plan`), `--help`, and dry runs are `safe`. Running a command is not, by itself, a reason to interrupt you. Unknown tools that are not Bash default to `review`. MCP tools named `delete_*`, `drop_*`, or `remove_*` are `high_stakes`.
+
+### Test runners and scripts
+
+`cargo test`, `npm test`, `npm run <script>`, `pnpm` / `yarn` test and scripts, `pytest`, `go test`, `make <target>`, `./script.sh`, `bash script.sh`, `node scripts/x.mjs`, and `npx <tool>` run code the hook never sees. A child process can delete files without a second tool call. When the Bash sandbox is not containing those processes, OKed asks (`review`) before the runner. `ls`, `git status`, `git commit`, and `npm install` are unchanged. `node -e` and `python -c` stay `safe`, because the body is in the command string.
+
+The sandbox contains them when `sandbox.enabled` is true and `allowUnsandboxedCommands` is false. Child processes are then limited to the working directory, and OKed allows the runner with no prompt. `oked init` prints this when that is not already set. Put it in `~/.claude/settings.json` or `.claude/settings.local.json`:
+
+```json
+{ "sandbox": { "enabled": true, "allowUnsandboxedCommands": false } }
+```
+
+The hook also reads the project `.claude/settings.json`. A `false` for `allowUnsandboxedCommands` in `~/.claude/settings.json` holds against a project `true`, matching Claude Code. `sandbox.filesystem.disabled: true` in user settings turns filesystem isolation off, so the runner still asks. An entry in `sandbox.excludedCommands` that covers the command runs outside the sandbox, so that command still asks. The approval card footnote repeats how to turn the prompts off.
 
 ## How it works
 

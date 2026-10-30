@@ -30,4 +30,11 @@ export {
   mapPatch,
 } from "./normalize.js";
 export { pairDevice, writeOkedConfig, maskKey, type PairOptions } from "./pair.js";
+export {
+  claudeSandboxEnforced,
+  readClaudeSandbox,
+  exclusionCoversCommand,
+  SANDBOX_INIT_HINT,
+  type ClaudeSandboxView,
+} from "./sandbox.js";
 export { encodeQR, renderQR } from "./qr.js";

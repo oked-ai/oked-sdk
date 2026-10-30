@@ -3,9 +3,11 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync } from "fs";
 import { join } from "path";
 import { OKedClient, OKED_CONFIG_PATH } from "@oked/sdk";
 import {
+  claudeSandboxEnforced,
   maskKey,
   OKED_RECEIPTS_LOG,
   pairDevice,
+  SANDBOX_INIT_HINT,
   verifyReceiptsFile,
   writeOkedConfig,
 } from "@oked/hook-core";
@@ -48,6 +50,13 @@ function writeSettings(
   const dir = join(process.cwd(), ".claude");
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
   writeFileSync(path, JSON.stringify(settings, null, 2) + "\n");
+}
+
+/** Suggest the Bash sandbox when it is not already containing child processes. */
+function printSandboxHint(): void {
+  if (claudeSandboxEnforced(process.cwd())) return;
+  console.log("");
+  for (const line of SANDBOX_INIT_HINT.split("\n")) console.log(`  ${line}`);
 }
 
 /**
@@ -151,6 +160,7 @@ async function init(): Promise<void> {
     console.log(`  Backend: ${existingClient.backendUrl} (${ok ? "connected" : "not reachable"})`);
     console.log("");
     console.log("Every Claude Code session in this project is now protected.");
+    printSandboxHint();
     return;
   }
 
@@ -161,7 +171,10 @@ async function init(): Promise<void> {
     clientVersion: CLIENT_VERSION,
     noBrowser: NO_BROWSER,
   });
-  if (!apiKey) return;
+  if (!apiKey) {
+    printSandboxHint();
+    return;
+  }
 
   writeOkedConfig(apiKey, DEFAULT_BACKEND_URL);
   console.log("");
@@ -169,6 +182,7 @@ async function init(): Promise<void> {
   console.log("");
   console.log("Every Claude Code session in this project is now protected.");
   console.log("Open a new Claude Code session to activate the hook.");
+  printSandboxHint();
 }
 
 async function status(): Promise<void> {

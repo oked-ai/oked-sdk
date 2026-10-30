@@ -31,6 +31,10 @@ export interface Rendered {
   kind: OperationKind;  // stable analytics category
 }
 
+/** Shown when an opaque runner asks for review because the sandbox is off. */
+export const OPAQUE_RUNNER_FOOTNOTE =
+  "OKed cannot see the commands inside this run. Enable Claude Code's Bash sandbox and set allowUnsandboxedCommands to false to allow these without a prompt.";
+
 /** Optional caller context. `cwd` lets describers read local files (e.g. the
  *  package.json behind `npm publish`) to show what an action will touch. */
 export interface DescribeContext {
@@ -38,6 +42,11 @@ export interface DescribeContext {
   /** Title of the PR the card links to, when the command does not say it.
    *  `lookupPrTitle()` gets it from GitHub. */
   prTitle?: string;
+  /**
+   * `false` when the host sandbox is not enforcing containment. An opaque
+   * runner then gets a footnote explaining how to skip the prompt.
+   */
+  sandboxEnforced?: boolean;
 }
 
 export function describe(
@@ -80,7 +89,15 @@ export function describeFields(
 
 function summarize(toolName: string, toolInput: Record<string, unknown>, ctx: DescribeContext): Rendered {
   const r = summarizeTool(toolName, toolInput, ctx);
-  return ctx.prTitle ? namePr(r, ctx.prTitle) : r;
+  const named = ctx.prTitle ? namePr(r, ctx.prTitle) : r;
+  if (ctx.sandboxEnforced !== false || named.footnote) return named;
+  // The runner is the reason for the card: the same call is safe when the
+  // sandbox flag is omitted. A higher effect (rm, a force push) keeps its
+  // own text.
+  const plain = classify(toolName, toolInput);
+  const gated = classify(toolName, toolInput, { sandboxEnforced: false });
+  if (plain === "safe" && gated === "review") return { ...named, footnote: OPAQUE_RUNNER_FOOTNOTE };
+  return named;
 }
 
 /**
@@ -100,7 +117,7 @@ function summarizeTool(toolName: string, toolInput: Record<string, unknown>, ctx
   const fileSizeBytes = typeof toolInput._file_size_bytes === "number" ? toolInput._file_size_bytes : undefined;
   switch (toolName) {
     case "Bash":
-      return summarizeBash((toolInput.command as string) || "", fileSizeBytes, ctx.cwd);
+      return summarizeBash((toolInput.command as string) || "", fileSizeBytes, ctx.cwd, ctx.sandboxEnforced);
     case "Write":
       return summarizeWrite(toolInput);
     case "Edit":
@@ -126,7 +143,7 @@ function summarizeTool(toolName: string, toolInput: Record<string, unknown>, ctx
   // Shell-exec wrappers: signature is a string command/cmd field
   const shellCommand = (toolInput.command ?? toolInput.cmd) as unknown;
   if (typeof shellCommand === "string") {
-    return summarizeBash(shellCommand, fileSizeBytes);
+    return summarizeBash(shellCommand, fileSizeBytes, undefined, ctx.sandboxEnforced);
   }
 
   // File-write wrappers: signature is a path + content/data string
@@ -226,11 +243,11 @@ function extractCurlPayload(cmd: string): string | undefined {
   return parts.length ? parts.join("\n") : undefined;
 }
 
-function summarizeBash(command: string, sizeBytes?: number, cwd?: string): Rendered {
+function summarizeBash(command: string, sizeBytes?: number, cwd?: string, sandboxEnforced?: boolean): Rendered {
   let cmd = (command || "").trim();
   if (!cmd) return { title: "Run empty command", kind: "unknown_bash" };
 
-  const compound = summarizeCompoundBash(cmd, sizeBytes, cwd);
+  const compound = summarizeCompoundBash(cmd, sizeBytes, cwd, sandboxEnforced);
   if (compound) return compound;
 
   // SQL detection runs before shell-write detection so that inline-interpreter
@@ -492,15 +509,16 @@ function summarizeBash(command: string, sizeBytes?: number, cwd?: string): Rende
  * from a pattern that spans steps (`curl … | sh`): the whole-command rules
  * below describe those.
  */
-function summarizeCompoundBash(cmd: string, sizeBytes?: number, cwd?: string): Rendered | null {
+function summarizeCompoundBash(cmd: string, sizeBytes?: number, cwd?: string, sandboxEnforced?: boolean): Rendered | null {
   const steps = splitTopLevel(cmd, { pipes: false });
   if (steps.length < 2) return null;
   // Each step sees what earlier steps made (a temp file a later `rm` deletes),
   // as the whole command does. Alone, that `rm` would outrank the real step.
-  const rank = classifyBashSteps(steps).map((t) => TIER_ORDER[t]);
+  const rank = classifyBashSteps(steps, sandboxEnforced).map((t) => TIER_ORDER[t]);
   const top = Math.max(...rank);
   if (top < TIER_ORDER.review) return null;
-  if (TIER_ORDER[classify("Bash", { command: cmd })] !== top) return null;
+  const whole = classify("Bash", { command: cmd }, sandboxEnforced === undefined ? undefined : { sandboxEnforced });
+  if (TIER_ORDER[whole] !== top) return null;
   const lead = rank.indexOf(top);
   // Variables set by earlier steps (`D=/dir; rm $D/x`) show as their values.
   const vars = literalAssignments(cmd);

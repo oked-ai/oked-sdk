@@ -6,6 +6,20 @@ Decisions are made in Telegram and on the [web dashboard](https://oked.ai/dashbo
 
 ## Unreleased
 
+### @oked/claude-code and @oked/sdk
+
+- Opaque code runners now ask for approval on Claude Code when the Bash sandbox is not containing child processes. The hook only sees the runner command. A test or script can run `rm` (or anything else) without a second tool call. That is what happened in [anthropics/claude-code#105342](https://github.com/anthropics/claude-code/issues/105342): `cargo test` ran `rm -rf ~` and the hook never saw the `rm`. The tier for these runners is `review`.
+- The runners are `cargo test`, `npm test` / `npm run <script>` (and `pnpm` / `yarn` / `bun` equivalents, including `yarn <script>` and `pnpm <script>`), `pytest` and `python -m pytest`, `go test`, `make` and `make <target>`, `./script.sh`, `bash script.sh` / `sh script.sh`, `node <script>` (for example `node scripts/x.mjs`), and `npx <tool>` (also `bunx`, `npm exec`, `pnpm dlx`). Env prefixes (`FOO=bar npm test`), `env`, and compound commands (`cd pkg && cargo test`) count. A higher tier still wins: `cargo test && rm -rf ~` stays `high_stakes`.
+- They stay `safe` when Claude Code's sandbox is on and `allowUnsandboxedCommands` is `false`. The hook reads `.claude/settings.local.json`, `.claude/settings.json`, and `~/.claude/settings.json` (`CLAUDE_CONFIG_DIR` moves the user file). A user `false` holds against a project `true`, matching Claude Code. `sandbox.filesystem.disabled: true` in user settings is not containment. A command listed in `sandbox.excludedCommands` is not contained when the pattern covers every part of the command.
+- To skip the prompts, put this in `~/.claude/settings.json` or `.claude/settings.local.json`:
+
+  ```json
+  { "sandbox": { "enabled": true, "allowUnsandboxedCommands": false } }
+  ```
+
+- `oked init` prints that hint when the sandbox is not already enforcing it. The approval card footnote says the same.
+- Reads, ordinary commands, `npm install`, and local git stay as they were. Inline `node -e` / `python -c` stay `safe` (the body is in the command string). Other hosts do not read Claude Code sandbox settings, so these runners stay `safe` there unless the caller passes `classify(..., { sandboxEnforced: false })`.
+
 ### Docs
 
 - The Python `oked` README no longer says version `0.6.21` is the same number as the `@oked/*` packages. The version is set in `pyproject.toml` and later publishes use a separate `py-v*` tag.

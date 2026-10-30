@@ -63,6 +63,8 @@ The Claude Code integration is a `PreToolUse` hook (`oked-hook`) in its own proc
 
 `oked init` writes a `PreToolUse` hook into the current project's `.claude/settings.json`, pairs this machine in the browser, and stores the API key in `~/.oked/config.json`. Open a new Claude Code session in that project. On a TTY, unless `NO_COLOR` is set, init also prints a QR code of the pairing link. A phone camera opens that link in the browser.
 
+On Claude Code, test runners and scripts (`cargo test`, `npm test`, `npm run`, `pytest`, `go test`, `make`, `./script.sh`, `npx`) ask for approval unless the Bash sandbox is containing child processes. The hook cannot see commands those runners start. To allow them with no prompt, set `sandbox.enabled` to true and `allowUnsandboxedCommands` to false in `~/.claude/settings.json` or `.claude/settings.local.json`. `oked init` prints this when it is not already set. Other hosts do not read those files, so the same commands stay allowed there.
+
 From Node.js, call `approve` before the action. A timeout is a denial. The client waits 630 seconds (`DEFAULT_APPROVAL_TIMEOUT_MS`) so the backend's 10 minute timeout is the one that comes back.
 
 ```ts
