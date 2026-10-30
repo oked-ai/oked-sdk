@@ -1,6 +1,6 @@
 {
   "name": "@oked/hook-core",
-  "version": "0.6.22",
+  "version": "0.6.23",
   "description": "Shared OKed approval gate for coding-agent hooks. Builds the request, waits for a decision, checks the receipt, and fails closed.",
   "type": "module",
   "main": "dist/index.js",
@@ -47,7 +47,7 @@
     "access": "public"
   },
   "dependencies": {
-    "@oked/sdk": "0.6.22"
+    "@oked/sdk": "0.6.23"
   },
   "devDependencies": {
     "@types/node": "^26.6.5",
