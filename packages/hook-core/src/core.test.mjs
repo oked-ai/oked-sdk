@@ -14,6 +14,12 @@ import {
   decide,
   exclusionCoversCommand,
   findClaudeOkedHooks,
+  installedOkedRecords,
+  isOkedPluginId,
+  matcherCoversTool,
+  pluginHookYieldsToSettingsHook,
+  resolveOkedPluginEnabled,
+  settingsHookYieldsToPlugin,
   mapFileDelete,
   mapPatch,
 } from "../dist/index.js";
@@ -353,4 +359,94 @@ let passed = 0;
   }
 }
 
-console.log(`ok - @oked/hook-core: ${passed}/7 passed`);
+{
+  assert.equal(isOkedPluginId("oked"), true);
+  assert.equal(isOkedPluginId("oked@oked"), true);
+  assert.equal(isOkedPluginId("oked@inline"), true);
+  assert.equal(isOkedPluginId("other@oked"), false);
+  const records = installedOkedRecords({
+    plugins: {
+      "oked@oked": [{ installPath: "/plugins/oked" }],
+      "demo@other": [{ installPath: "/plugins/demo" }],
+    },
+  });
+  assert.deepEqual(records, [{ id: "oked@oked", installPath: "/plugins/oked" }]);
+  assert.equal(resolveOkedPluginEnabled(["oked@oked"], []).enabled, true);
+  assert.equal(
+    resolveOkedPluginEnabled(["oked@oked"], [{ enabledPlugins: { "oked@oked": false } }]).enabled,
+    false,
+  );
+  assert.equal(
+    resolveOkedPluginEnabled(
+      ["oked@oked"],
+      [{ enabledPlugins: { "oked@oked": true } }, { enabledPlugins: { "oked@oked": false } }],
+    ).enabled,
+    false,
+  );
+  assert.equal(
+    resolveOkedPluginEnabled(
+      [],
+      [{ enabledPlugins: { "oked@oked": false } }, { enabledPlugins: { "oked@oked": true } }],
+    ).id,
+    "oked@oked",
+  );
+  assert.equal(matcherCoversTool(undefined, "Read"), true);
+  assert.equal(matcherCoversTool("Bash|Write|Edit|Agent|mcp__.*", "Bash"), true);
+  assert.equal(matcherCoversTool("Bash|Write|Edit|Agent|mcp__.*", "mcp__github__create_issue"), true);
+  assert.equal(matcherCoversTool("Bash|Write", "mcp__github__create_issue"), false);
+  assert.equal(matcherCoversTool("[", "Bash"), false);
+
+  const { mkdirSync } = await import("node:fs");
+  const root = mkdtempSync(join(tmpdir(), "oked-plugin-yield-"));
+  const prev = {
+    HOME: process.env.HOME,
+    PATH: process.env.PATH,
+    CLAUDE_CONFIG_DIR: process.env.CLAUDE_CONFIG_DIR,
+    CLAUDE_CODE_PLUGIN_CACHE_DIR: process.env.CLAUDE_CODE_PLUGIN_CACHE_DIR,
+  };
+  const project = join(root, "proj");
+  const install = join(root, "install");
+  const bin = join(root, "bin");
+  process.env.HOME = root;
+  process.env.CLAUDE_CONFIG_DIR = join(root, "cfg");
+  delete process.env.CLAUDE_CODE_PLUGIN_CACHE_DIR;
+  process.env.PATH = bin;
+  try {
+    mkdirSync(join(install, "scripts"), { recursive: true });
+    mkdirSync(join(project, ".claude"), { recursive: true });
+    mkdirSync(join(process.env.CLAUDE_CONFIG_DIR, "plugins"), { recursive: true });
+    mkdirSync(bin, { recursive: true });
+    writeFileSync(join(install, "scripts", "oked-hook.mjs"), "// hook\n");
+    writeFileSync(join(bin, "oked-hook"), "");
+    writeFileSync(
+      join(process.env.CLAUDE_CONFIG_DIR, "plugins", "installed_plugins.json"),
+      JSON.stringify({ plugins: { "oked@oked": [{ installPath: install }] } }),
+    );
+    writeFileSync(
+      join(process.env.CLAUDE_CONFIG_DIR, "settings.json"),
+      JSON.stringify({ enabledPlugins: { "oked@oked": true } }),
+    );
+    writeFileSync(
+      join(project, ".claude", "settings.json"),
+      JSON.stringify({ hooks: { PreToolUse: [{ matcher: "Bash", hooks: [{ command: "oked-hook" }] }] } }),
+    );
+    assert.equal(settingsHookYieldsToPlugin(project), true, "plugin file is installed, settings hook yields");
+    assert.equal(pluginHookYieldsToSettingsHook("Bash", project), false, "plugin gates while settings hook yields");
+    writeFileSync(
+      join(process.env.CLAUDE_CONFIG_DIR, "settings.json"),
+      JSON.stringify({ enabledPlugins: { "oked@oked": false } }),
+    );
+    assert.equal(settingsHookYieldsToPlugin(project), false);
+    assert.equal(pluginHookYieldsToSettingsHook("Bash", project), true, "settings hook gates Bash");
+    assert.equal(pluginHookYieldsToSettingsHook("mcp__srv__tool", project), false, "plugin still gates MCP");
+    passed++;
+  } finally {
+    for (const [key, value] of Object.entries(prev)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+    rmSync(root, { recursive: true, force: true });
+  }
+}
+
+console.log(`ok - @oked/hook-core: ${passed}/8 passed`);

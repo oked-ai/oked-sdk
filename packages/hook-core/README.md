@@ -31,7 +31,7 @@ Decisions are made in Telegram or on the [web dashboard](https://oked.ai/dashboa
 
 `classify()` knows Claude Code names (`Bash`, `Write`, `Edit`, `mcp__server__tool`). Host packages map their own names onto those before calling `decide()`. Unknown names stay unknown, and the classifier treats an unknown tool as `review` (approval required). `mapPatch()` and `mapFileDelete()` turn patches and deletes into the same effect classes the bash classifier already uses.
 
-`findClaudeOkedHooks()` reports an existing `oked-hook` entry in Claude settings. A host that also loads those files uses it so one action is not asked twice.
+`findClaudeOkedHooks()` reports an existing `oked-hook` entry in Claude settings. A host that also loads those files uses it so one action is not asked twice. The Claude Code plugin uses the same check. When that plugin is enabled and its hook file is installed, the settings hook returns allow and the plugin is the only gate. When the plugin is not the gate, the plugin hook returns allow for tools the settings hook already matches.
 
 ## Troubleshooting
 

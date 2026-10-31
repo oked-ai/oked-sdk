@@ -154,9 +154,31 @@ try {
     assert.doesNotMatch(out, /scan this/i);
     passed++;
   }
+
+  // 6. The Claude Code plugin is enabled: init must not add a second hook.
+  {
+    rmSync(join(project, ".claude"), { recursive: true, force: true });
+    const install = join(home, "plugin-install");
+    mkdirSync(join(install, "scripts"), { recursive: true });
+    writeFileSync(join(install, "scripts", "oked-hook.mjs"), "// plugin hook\n");
+    mkdirSync(join(home, ".claude", "plugins"), { recursive: true });
+    writeFileSync(
+      join(home, ".claude", "plugins", "installed_plugins.json"),
+      JSON.stringify({ plugins: { "oked@oked": [{ installPath: install }] } }),
+    );
+    const user = JSON.parse(readFileSync(userSettings, "utf8"));
+    user.enabledPlugins = { "oked@oked": true };
+    writeFileSync(userSettings, JSON.stringify(user, null, 2) + "\n");
+    const { code, out } = await runCli(["init"]);
+    assert.equal(code, 0);
+    assert.match(out, /Not adding a settings hook/);
+    assert.match(out, /already paired/);
+    assert.ok(!existsSync(join(project, ".claude", "settings.json")), "no project hook while the plugin is enabled");
+    passed++;
+  }
 } finally {
   server.close();
   rmSync(root, { recursive: true, force: true });
 }
 
-console.log(`ok - @oked/claude-code cli: ${passed}/5 passed`);
+console.log(`ok - @oked/claude-code cli: ${passed}/6 passed`);

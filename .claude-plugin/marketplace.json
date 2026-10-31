@@ -1,0 +1,17 @@
+{
+  "name": "oked",
+  "description": "OKed plugins. Risky agent actions wait for a person in Telegram or on the web dashboard.",
+  "owner": {
+    "name": "OKed",
+    "email": "contact@oked.ai",
+    "url": "https://oked.ai"
+  },
+  "plugins": [
+    {
+      "name": "oked",
+      "source": "./plugins/claude-code",
+      "description": "Ask a person before Claude Code runs a risky action.",
+      "displayName": "OKed"
+    }
+  ]
+}

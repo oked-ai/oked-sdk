@@ -4,8 +4,11 @@ import { join } from "path";
 import { OKedClient, OKED_CONFIG_PATH } from "@oked/sdk";
 import {
   claudeSandboxEnforced,
+  findClaudeOkedHooks,
   maskKey,
   OKED_RECEIPTS_LOG,
+  okedPluginBundleOnDisk,
+  okedPluginIsEnabled,
   pairDevice,
   SANDBOX_INIT_HINT,
   verifyReceiptsFile,
@@ -16,6 +19,7 @@ import {
   hasOkedCommandHook,
   ensureMcpMatcher,
   ensureHookTimeout,
+  upgradeOkedHooks,
   upgradeSettingsFile,
   userSettingsPath,
 } from "./hook-config.js";
@@ -92,12 +96,51 @@ async function initKeyOnly(): Promise<void> {
   console.log("  No Claude Code hook was added. Run `oked init` without --key-only to add it.");
 }
 
+function projectHasOkedHook(settings: Record<string, unknown>): boolean {
+  const hooks = (settings.hooks || {}) as Record<string, unknown[]>;
+  const preToolUse = (hooks.PreToolUse || []) as Array<{ hooks?: unknown[] }>;
+  return preToolUse.some(hasOkedCommandHook);
+}
+
+/**
+ * The plugin and `oked-hook` must not both ask. When the plugin is enabled,
+ * leave any existing settings hook in place (it stands down while the plugin
+ * hook file is on disk) and do not add another one.
+ */
+function reportPluginInsteadOfHook(settings: Record<string, unknown>): void {
+  console.log("OKed Claude Code plugin is enabled. Not adding a settings hook.");
+  console.log("  The plugin gates tool calls. A second hook would ask twice.");
+  if (!okedPluginBundleOnDisk()) {
+    console.log("  The plugin hook file was not found on disk yet. If tool calls are not gated, reinstall the plugin.");
+  }
+  const hasSettingsHook = projectHasOkedHook(settings) || findClaudeOkedHooks(process.cwd()).length > 0;
+  if (hasSettingsHook) {
+    console.log("  An oked-hook entry is still installed. It stands down while the plugin hook file is on disk.");
+    console.log("  Run `oked uninstall` to remove the project entry. If you disable the plugin, that entry gates again.");
+  } else {
+    console.log("  Pair inside Claude Code with /oked:pair, then save the API key in the plugin configuration.");
+  }
+}
+
 async function init(): Promise<void> {
   if (KEY_ONLY) return initKeyOnly();
   const settingsPath = getSettingsPath();
   const settings = readSettings(settingsPath);
+  const pluginOn = okedPluginIsEnabled(process.cwd());
 
-  // Merge OKed hook into existing hooks
+  if (pluginOn) {
+    reportPluginInsteadOfHook(settings);
+    if (upgradeOkedHooks(settings)) {
+      const hooks = (settings.hooks || {}) as Record<string, unknown[]>;
+      settings.hooks = hooks;
+      writeSettings(settingsPath, settings);
+      console.log("OKed hook updated.");
+      console.log(`  Config: ${settingsPath}`);
+    }
+  }
+
+  // Merge OKed hook into existing hooks. Skipped when the plugin is the gate.
+  if (!pluginOn) {
   const hooks = (settings.hooks || {}) as Record<string, unknown[]>;
   const preToolUse = (hooks.PreToolUse || []) as Array<{
     matcher?: string;
@@ -136,6 +179,7 @@ async function init(): Promise<void> {
     console.log("OKed hook already configured.");
     console.log(`  Config: ${settingsPath}`);
   }
+  }
 
   // An oked-hook entry in the user-level settings (all projects) gets the
   // same upgrades, so existing users get a new timeout when they run init
@@ -160,6 +204,9 @@ async function init(): Promise<void> {
     console.log(`  Backend: ${existingClient.backendUrl} (${ok ? "connected" : "not reachable"})`);
     console.log("");
     console.log("Every Claude Code session in this project is now protected.");
+    if (pluginOn) {
+      console.log("The Claude Code plugin is the gate. Set its API key with /oked:pair if you have not.");
+    }
     printSandboxHint();
     return;
   }
@@ -181,7 +228,11 @@ async function init(): Promise<void> {
   console.log(`  Paired ✓  Key saved to ${OKED_CONFIG_PATH}`);
   console.log("");
   console.log("Every Claude Code session in this project is now protected.");
-  console.log("Open a new Claude Code session to activate the hook.");
+  if (pluginOn) {
+    console.log("The Claude Code plugin is the gate. Set its API key with /oked:pair if you have not.");
+  } else {
+    console.log("Open a new Claude Code session to activate the hook.");
+  }
   printSandboxHint();
 }
 
@@ -197,8 +248,10 @@ async function status(): Promise<void> {
   const hasOked = preToolUse.some(hasOkedCommandHook);
 
   const client = new OKedClient();
+  const pluginOn = okedPluginIsEnabled(process.cwd());
   console.log(`OKed status:`);
   console.log(`  Hook: ${hasOked ? "installed" : "not installed"}`);
+  console.log(`  Plugin: ${pluginOn ? "enabled" : "not enabled"}`);
   console.log(`  Project config: ${existsSync(settingsPath) ? settingsPath : "not found"}`);
   console.log(`  API key: ${client.apiKey ? client.apiKey.slice(0, 8) + "..." : "not paired"}`);
   console.log(`  User config: ${existsSync(OKED_CONFIG_PATH) ? OKED_CONFIG_PATH : "not found"}`);
@@ -284,6 +337,7 @@ switch (command) {
     console.log("");
     console.log("Commands:");
     console.log("  init        Install OKed hooks in current project and pair this device");
+    console.log("              If the OKed Claude Code plugin is enabled, init does not add a hook.");
     console.log("    --key-only    Only create or show the API key. Add no hook.");
     console.log("    --no-browser  Print the pairing link. Open no browser, use no clipboard.");
     console.log("  status      Show current config and connection status");

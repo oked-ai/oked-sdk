@@ -43,7 +43,7 @@ Every package that has already been published is on npm and has a Trusted Publis
    # or an explicit version, including a prerelease:
    npm run bump -- 0.2.0-beta.1
    ```
-   `scripts/bump-version.mjs` rewrites `version` in every `packages/*/package.json` and rewrites every internal `@oked/*` dependency pin to that exact version. All internal pins are exact (not caret) on purpose, so each package runs against the SDK it was tested with. There is no by-hand pin step.
+   `scripts/bump-version.mjs` rewrites `version` in every `packages/*/package.json`, rewrites every internal `@oked/*` dependency pin to that exact version, sets the same version in `plugins/claude-code/.claude-plugin/plugin.json`, and rebuilds `plugins/claude-code/scripts/oked-hook.mjs`. All internal pins are exact (not caret) on purpose, so each package runs against the SDK it was tested with. There is no by-hand pin step. Commit the plugin manifest and the bundle with the version bump. CI rejects a bundle that does not match a fresh build, and the publish workflow rejects a tag whose plugin version or bundle does not match the packages.
 3. Refresh the lockfile so `package-lock.json` records the new versions:
    ```bash
    npm install

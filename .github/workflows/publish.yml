@@ -64,6 +64,15 @@ jobs:
               exit 1
             fi
           fi
+          PLUGIN_VERSION=$(node -p "require('./plugins/claude-code/.claude-plugin/plugin.json').version")
+          if [[ "$PLUGIN_VERSION" != "$PKG_VERSION" ]]; then
+            echo "::error::Claude Code plugin.json $PLUGIN_VERSION != ${{ matrix.package }} package.json $PKG_VERSION"
+            exit 1
+          fi
+          if ! grep -q "oked-plugin@${PLUGIN_VERSION}" plugins/claude-code/scripts/oked-hook.mjs; then
+            echo "::error::plugin bundle is missing oked-plugin@${PLUGIN_VERSION}. Run node scripts/build-claude-plugin.mjs"
+            exit 1
+          fi
           echo "publishing ${{ matrix.package }}@$PKG_VERSION under dist-tag $DIST_TAG"
       # OIDC trusted publishing requires npm >= 11.5.1.
       # Node 22 ships npm 10.x, so upgrade before publishing.

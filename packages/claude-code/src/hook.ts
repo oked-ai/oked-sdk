@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { decide, errorInfo, logDecision } from "@oked/hook-core";
+import { decide, errorInfo, logDecision, settingsHookYieldsToPlugin } from "@oked/hook-core";
 import type { HookInput, HookOutput } from "@oked/sdk";
 import { CLIENT_ID } from "./version.js";
 
@@ -33,6 +33,17 @@ async function main(): Promise<void> {
     input = JSON.parse(rawInput);
   } catch {
     // Can't parse input - don't break Claude, let it through
+    process.stdout.write(JSON.stringify(makeOutput("allow")));
+    return;
+  }
+
+  // The Claude Code plugin gates this call when it is enabled and its hook
+  // file is installed. Returning allow here does not approve the action:
+  // the plugin's decision wins, and ask or deny from the plugin still applies.
+  if (settingsHookYieldsToPlugin(input.cwd || process.cwd())) {
+    process.stderr.write(
+      "[OKed] Claude Code plugin is enabled. This settings hook is not gating, so the action is asked once.\n",
+    );
     process.stdout.write(JSON.stringify(makeOutput("allow")));
     return;
   }
