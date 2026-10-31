@@ -24,7 +24,7 @@ npm install -g @oked/openclaw-cli
 oked-openclaw init
 ```
 
-If this package is not already installed, and there is no local checkout, `oked-openclaw init` runs `openclaw plugins install @oked/openclaw`. A checkout or a global npm copy is still linked with `openclaw plugins install --link`.
+If this package is not already installed, and there is no local checkout, `oked-openclaw init` tries `openclaw plugins install @oked/openclaw` (ClawHub). If that fails, it retries `openclaw plugins install npm:@oked/openclaw`. A checkout or a global npm copy is still linked with `openclaw plugins install --link`.
 
 To wire the config by hand after the plugin install, edit `~/.openclaw/openclaw.json`:
 

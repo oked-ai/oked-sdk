@@ -4,7 +4,8 @@
  *
  * Subcommands:
  *   oked-openclaw init       Install the plugin if needed (`openclaw plugins install
- *                            @oked/openclaw`, or `--link` for a local copy),
+ *                            @oked/openclaw`, then `npm:@oked/openclaw` if ClawHub
+ *                            fails, or `--link` for a local copy),
  *                            persist API key + minTier into ~/.openclaw/openclaw.json,
  *                            and restart the OpenClaw gateway daemon.
  *   oked-openclaw status     Print install state, config, and backend reachability.
@@ -275,18 +276,56 @@ function detectDaemon() {
 
 // --- commands -------------------------------------------------------------
 
+/** Bare package name. OpenClaw resolves this from ClawHub only, with no npm fallback. */
+export const CLAWHUB_INSTALL_ARGS = ['plugins', 'install', '@oked/openclaw'];
+/** npm specifier. Used when the ClawHub install fails. */
+export const NPM_INSTALL_ARGS = ['plugins', 'install', 'npm:@oked/openclaw'];
+/** Printed when both registry installs fail. */
+export const NPM_INSTALL_HINT = 'openclaw plugins install npm:@oked/openclaw';
+
 /**
  * Decide how init installs the plugin.
  * A local checkout or global npm copy stays on `--link`.
  * An already installed plugin with no local copy is left in place so pairing
- * does not replace a ClawHub install. Otherwise install from ClawHub.
+ * does not replace a ClawHub install. Otherwise try ClawHub, then npm.
  */
 export function resolvePluginInstall({ pluginPath, alreadyInstalled }) {
   if (pluginPath) {
-    return { kind: 'link', args: ['plugins', 'install', '--link', pluginPath] };
+    return {
+      kind: 'link',
+      args: ['plugins', 'install', '--link', pluginPath],
+      fallbacks: [],
+    };
   }
-  if (alreadyInstalled) return { kind: 'skip', args: [] };
-  return { kind: 'clawhub', args: ['plugins', 'install', '@oked/openclaw'] };
+  if (alreadyInstalled) return { kind: 'skip', args: [], fallbacks: [] };
+  return {
+    kind: 'clawhub',
+    args: CLAWHUB_INSTALL_ARGS,
+    fallbacks: [NPM_INSTALL_ARGS],
+  };
+}
+
+/**
+ * Run install argv lists in order. The first exit code 0 stops the sequence.
+ * `run` receives the argv after `openclaw` and returns an exit code.
+ * When the npm specifier was tried and every attempt failed, `hint` is the
+ * command a person can run by hand.
+ */
+export async function runInstallAttempts(attempts, run) {
+  const calls = [];
+  for (const args of attempts) {
+    const code = await run(args);
+    calls.push({ args: args.slice(), code });
+    if (code === 0) return { ok: true, code: 0, calls, hint: null };
+  }
+  const code = calls.length ? calls[calls.length - 1].code : -1;
+  const triedNpm = calls.some((call) => call.args.includes('npm:@oked/openclaw'));
+  return {
+    ok: false,
+    code,
+    calls,
+    hint: triedNpm ? NPM_INSTALL_HINT : null,
+  };
 }
 
 function pluginAlreadyInstalled() {
@@ -305,7 +344,7 @@ async function cmdInit() {
     process.exit(1);
   }
 
-  // 1. Find a local copy, or plan a ClawHub install.
+  // 1. Find a local copy, or plan ClawHub then npm.
   process.stdout.write('1. Locating @oked/openclaw plugin... ');
   const pluginPath = await findPluginPath();
   const plan = resolvePluginInstall({
@@ -320,7 +359,8 @@ async function cmdInit() {
     console.log('   Leaving the current install in place.\n');
   } else {
     console.log('not on disk');
-    console.log('   Will install from ClawHub: openclaw plugins install @oked/openclaw\n');
+    console.log('   Will try ClawHub: openclaw plugins install @oked/openclaw');
+    console.log('   If that fails: openclaw plugins install npm:@oked/openclaw\n');
   }
 
   // 2. Register the plugin with OpenClaw.
@@ -328,16 +368,24 @@ async function cmdInit() {
     console.log('2. Plugin is already installed. Skipping install.\n');
   } else {
     console.log('2. Installing into OpenClaw...');
-    console.log(`   $ openclaw ${plan.args.join(' ')}`);
-    const installCode = await runStreaming('openclaw', plan.args);
-    if (installCode !== 0) {
+    const attempts = [plan.args, ...(plan.fallbacks || [])];
+    let attempt = 0;
+    const result = await runInstallAttempts(attempts, async (args) => {
+      if (attempt > 0) {
+        console.log('   ClawHub install failed. Retrying from npm.');
+      }
+      attempt += 1;
+      console.log(`   $ openclaw ${args.join(' ')}`);
+      return runStreaming('openclaw', args);
+    });
+    if (!result.ok) {
       const present = plan.kind === 'clawhub' && pluginAlreadyInstalled();
       if (!present) {
-        console.error(`\n   X openclaw plugins install exited ${installCode}.`);
-        if (plan.kind === 'clawhub') {
-          console.error('   Install with: openclaw plugins install @oked/openclaw\n');
+        console.error(`\n   X openclaw plugins install exited ${result.code}.`);
+        if (result.hint) {
+          console.error(`   Install with: ${result.hint}\n`);
         }
-        process.exit(installCode);
+        process.exit(result.code);
       }
       console.log('   Already installed. Continuing.\n');
     } else {
