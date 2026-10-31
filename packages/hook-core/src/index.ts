@@ -15,11 +15,30 @@ export {
 } from "./receipts.js";
 export {
   findClaudeOkedHooks,
+  listClaudeOkedCommands,
   settingsHasOkedHook,
   claudeUserSettingsPath,
+  matcherCoversTool,
+  commandIsResolvable,
   type ClaudeHookHit,
   type ClaudeHookScope,
+  type ClaudeOkedCommand,
 } from "./claude-hooks.js";
+export {
+  OKED_PLUGIN_NAME,
+  OKED_PLUGIN_HOOK_FILE,
+  isOkedPluginId,
+  installedOkedRecords,
+  resolveOkedPluginEnabled,
+  loadInstalledOkedRecords,
+  okedPluginIsEnabled,
+  okedPluginBundleOnDisk,
+  bundleExistsAt,
+  settingsHookYieldsToPlugin,
+  pluginHookYieldsToSettingsHook,
+  type OkedInstallRecord,
+  type OkedPluginResolution,
+} from "./claude-plugin.js";
 export {
   stringField,
   withNormalizedFields,

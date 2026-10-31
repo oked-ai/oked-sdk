@@ -52,6 +52,12 @@ export interface DecideOptions {
    * Other hosts pass a sentence that names their own init command.
    */
   invalidKeyReason?: (status: number) => string;
+  /**
+   * When set to a non-empty string, this key is used instead of `OKED_API_KEY`
+   * and `~/.oked/config.json`. The Claude Code plugin passes
+   * `CLAUDE_PLUGIN_OPTION_APIKEY`.
+   */
+  apiKey?: string;
   log?: (msg: string) => void;
   /**
    * When set, overrides Claude Code sandbox detection.
@@ -128,7 +134,11 @@ export async function decide(call: ToolCallInput, options: DecideOptions): Promi
     cwd: call.cwd,
     ...(sandboxEnforced === false ? { sandboxEnforced: false as const } : {}),
   };
-  const client = new OKedClient({ client: options.clientId, source: options.source });
+  const client = new OKedClient({
+    client: options.clientId,
+    source: options.source,
+    ...(options.apiKey ? { apiKey: options.apiKey } : {}),
+  });
 
   // Presence ping (throttled to once/day on disk, never throws). Fired before
   // the safe/warning fast-path return so installs that only ever run safe

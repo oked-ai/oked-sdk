@@ -1,0 +1,30 @@
+{
+  "name": "oked",
+  "displayName": "OKed",
+  "version": "0.6.24",
+  "description": "Ask a person before Claude Code runs a risky action. Decisions happen in Telegram or on the web dashboard.",
+  "author": {
+    "name": "OKed",
+    "email": "contact@oked.ai",
+    "url": "https://oked.ai"
+  },
+  "homepage": "https://oked.ai",
+  "repository": "https://github.com/oked-ai/oked-sdk",
+  "license": "Apache-2.0",
+  "keywords": [
+    "approval",
+    "security",
+    "hooks",
+    "oked"
+  ],
+  "documentationUrl": "https://oked.ai/docs",
+  "userConfig": {
+    "apiKey": {
+      "type": "string",
+      "title": "API key",
+      "description": "OKed API key from /oked:pair. Leave this empty until you pair. Risky actions return ask until a key is saved.",
+      "sensitive": true
+    }
+  },
+  "icon": "./.claude-plugin/icon.png"
+}

@@ -5,7 +5,7 @@
 // Run via `npm test` (builds first).
 import assert from "node:assert";
 import { spawn } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync, statSync, existsSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -295,10 +295,33 @@ try {
     passed++;
   }
 
-  assert.equal(passed, 19);
+  // The Claude Code plugin is enabled and its hook file is on disk.
+  // This settings hook must not call OKed. The plugin gates.
+  {
+    const install = join(home, "plugin-install");
+    mkdirSync(join(install, "scripts"), { recursive: true });
+    writeFileSync(join(install, "scripts", "oked-hook.mjs"), "// plugin hook\n");
+    mkdirSync(join(home, ".claude", "plugins"), { recursive: true });
+    writeFileSync(
+      join(home, ".claude", "plugins", "installed_plugins.json"),
+      JSON.stringify({ plugins: { "oked@oked": [{ installPath: install }] } }),
+    );
+    writeFileSync(
+      join(home, ".claude", "settings.json"),
+      JSON.stringify({ enabledPlugins: { "oked@oked": true } }),
+    );
+    const before = approvePosts().length;
+    const out = await runHook(REVIEW);
+    assert.equal(out.permissionDecision, "allow");
+    assert.equal(out.permissionDecisionReason, undefined);
+    assert.equal(approvePosts().length, before, "settings hook does not ask when the plugin gates");
+    passed++;
+  }
+
+  assert.equal(passed, 20);
 } finally {
   server.close();
   rmSync(home, { recursive: true, force: true });
 }
 
-console.log(`ok - @oked/claude-code hook: ${passed}/19 passed`);
+console.log(`ok - @oked/claude-code hook: ${passed}/20 passed`);

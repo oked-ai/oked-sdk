@@ -24,6 +24,8 @@ jobs:
       # `packages/*` is the workspace set, so a new package is tested when it
       # has a test script. The check below fails the job if one is missing.
       - run: npm test --workspaces --if-present
+      - name: Claude Code plugin bundle is current
+        run: node scripts/check-claude-plugin.mjs
       - name: Every package has a test script
         run: |
           node --input-type=module -e '

@@ -47,7 +47,7 @@ The Claude Code integration is a `PreToolUse` hook (`oked-hook`) in its own proc
 
 | Agent | Install |
 |---|---|
-| **Claude Code** | `npm install -g @oked/claude-code`, then `oked init` |
+| **Claude Code** | `npm install -g @oked/claude-code`, then `oked init`. Or install the plugin with no global package: `/plugin marketplace add oked-ai/oked-sdk`, then `/plugin install oked@oked`, then `/oked:pair`. See [plugins/claude-code](./plugins/claude-code). |
 | **Codex CLI** | `npm install -g @oked/codex`, then `oked-codex init`. In Codex, run `/hooks` and trust the hook. See the [package README](./packages/codex). |
 | **Cursor** | `npm install -g @oked/cursor`, then `oked-cursor init`. See the [package README](./packages/cursor). |
 | **GitHub Copilot** | `npm install -g @oked/copilot`, then `oked-copilot init`. CLI and VS Code. See the [package README](./packages/copilot). |
@@ -62,6 +62,8 @@ The Claude Code integration is a `PreToolUse` hook (`oked-hook`) in its own proc
 | **Any Node.js agent** | `npm install @oked/sdk` |
 
 `oked init` writes a `PreToolUse` hook into the current project's `.claude/settings.json`, pairs this machine in the browser, and stores the API key in `~/.oked/config.json`. Open a new Claude Code session in that project. On a TTY, unless `NO_COLOR` is set, init also prints a QR code of the pairing link. A phone camera opens that link in the browser.
+
+The Claude Code plugin is the same gate without a global install. In Claude Code, run `/plugin marketplace add oked-ai/oked-sdk`, then `/plugin install oked@oked`, then `/oked:pair`. The plugin hook reads the API key from the plugin configuration. Until that key is set, a risky action returns `ask`. If the plugin is enabled and you also have the `oked init` hook, only one of them calls OKed. `oked init` does not add a hook while the plugin is enabled.
 
 On Claude Code, test runners and scripts (`cargo test`, `npm test`, `npm run`, `pytest`, `go test`, `make`, `./script.sh`, `npx`) ask for approval unless the Bash sandbox is containing child processes. The hook cannot see commands those runners start. To allow them with no prompt, set `sandbox.enabled` to true and `allowUnsandboxedCommands` to false in `~/.claude/settings.json` or `.claude/settings.local.json`. `oked init` prints this when it is not already set. Other hosts do not read those files, so the same commands stay allowed there.
 
@@ -105,7 +107,7 @@ All `@oked/*` packages share one version and are published together. Node.js 18 
 |---|---|
 | [`@oked/sdk`](./packages/sdk) | `OKedClient.approve()`, the tier classifier, and action descriptions. Call it from any Node.js agent. |
 | [`@oked/hook-core`](./packages/hook-core) | Shared approval gate: classify, wait, check the receipt, fail closed. `npm install @oked/hook-core`. No init command. Host packages call `decide()`. |
-| [`@oked/claude-code`](./packages/claude-code) | Claude Code hook. `oked init` writes `oked-hook` into `.claude/settings.json`. |
+| [`@oked/claude-code`](./packages/claude-code) | Claude Code hook. `oked init` writes `oked-hook` into `.claude/settings.json`. The [Claude Code plugin](./plugins/claude-code) installs the same gate with `/plugin install oked@oked`. |
 | [`@oked/codex`](./packages/codex) | Codex CLI `PreToolUse` hook. Writes `.codex/hooks.json`. `oked-codex init`, then `/hooks` to trust it. |
 | [`@oked/cursor`](./packages/cursor) | Cursor `preToolUse` hook. Writes `.cursor/hooks.json` with timeout 690 and `failClosed`. `oked-cursor init`. |
 | [`@oked/copilot`](./packages/copilot) | Copilot CLI and VS Code `preToolUse` hook. Writes `.github/hooks/oked.json` with `timeoutSec` 690. `oked-copilot init`. |

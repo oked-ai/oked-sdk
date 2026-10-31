@@ -9,6 +9,7 @@ Questions and security reports go to [contact@oked.ai](mailto:contact@oked.ai). 
 | [packages/sdk](./packages/sdk) | `OKedClient.approve()` and the classifier |
 | [packages/hook-core](./packages/hook-core) | Shared hook gate. `npm install @oked/hook-core`. Host packages call `decide()` |
 | [packages/claude-code](./packages/claude-code) | Claude Code `PreToolUse` hook. `oked init` |
+| [plugins/claude-code](./plugins/claude-code) | Claude Code plugin (`oked@oked`). No global install. `node scripts/build-claude-plugin.mjs` refreshes the hook bundle |
 | [packages/codex](./packages/codex) | Codex CLI hook. `npm install -g @oked/codex`, then `oked-codex init` |
 | [packages/cursor](./packages/cursor) | Cursor hook. `npm install -g @oked/cursor`, then `oked-cursor init` |
 | [packages/copilot](./packages/copilot) | Copilot CLI and VS Code hook. `npm install -g @oked/copilot`, then `oked-copilot init` |

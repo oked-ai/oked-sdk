@@ -14,6 +14,7 @@
 // Prereleases are passed explicitly (e.g. 0.2.0-beta.1) and publish under the
 // `next` dist-tag; see .github/workflows/publish.yml.
 
+import { spawnSync } from "child_process";
 import { readFileSync, writeFileSync, readdirSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
@@ -90,8 +91,23 @@ for (const { path, json } of pkgs) {
   writeFileSync(path, JSON.stringify(json, null, 2) + "\n");
 }
 
+const pluginManifest = join(ROOT, "plugins", "claude-code", ".claude-plugin", "plugin.json");
+const plugin = JSON.parse(readFileSync(pluginManifest, "utf-8"));
+plugin.version = next;
+writeFileSync(pluginManifest, JSON.stringify(plugin, null, 2) + "\n");
+
 console.log(`bumped ${pkgs.length} packages: ${current} -> ${next}`);
 console.log("internal @oked/* pins rewritten to exact " + next);
+console.log("Claude Code plugin manifest set to " + next);
+const bundle = spawnSync(process.execPath, [join(ROOT, "scripts", "build-claude-plugin.mjs")], {
+  cwd: ROOT,
+  stdio: "inherit",
+});
+if (bundle.status !== 0) {
+  console.error("plugin bundle rebuild failed");
+  process.exit(bundle.status || 1);
+}
+
 console.log("\nnext steps:");
 console.log(`  npm install                       # refresh package-lock`);
 console.log(`  git commit -am "Release v${next}"`);

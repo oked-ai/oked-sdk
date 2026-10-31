@@ -10,11 +10,16 @@
     "build": "npm run build --workspaces --if-present",
     "test": "npm test --workspaces --if-present",
     "dev": "npm run dev --workspace @oked/sdk",
-    "bump": "node scripts/bump-version.mjs"
+    "bump": "node scripts/bump-version.mjs",
+    "plugin:build": "node scripts/build-claude-plugin.mjs",
+    "plugin:check": "node scripts/check-claude-plugin.mjs"
   },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/oked-ai/oked-sdk.git"
   },
-  "license": "Apache-2.0"
+  "license": "Apache-2.0",
+  "devDependencies": {
+    "esbuild": "0.28.0"
+  }
 }
