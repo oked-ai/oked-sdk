@@ -393,6 +393,11 @@ let passed = 0;
   assert.equal(matcherCoversTool(undefined, "Read"), true);
   assert.equal(matcherCoversTool("Bash|Write|Edit|Agent|mcp__.*", "Bash"), true);
   assert.equal(matcherCoversTool("Bash|Write|Edit|Agent|mcp__.*", "mcp__github__create_issue"), true);
+  assert.equal(matcherCoversTool("Bash|Write|Edit|Agent|mcp__.*", "PowerShell"), false);
+  const pluginMatcher = "Bash|PowerShell|Write|Edit|Agent|Task|mcp__.*";
+  assert.equal(matcherCoversTool(pluginMatcher, "PowerShell"), true);
+  assert.equal(matcherCoversTool(pluginMatcher, "Task"), true);
+  assert.equal(matcherCoversTool(pluginMatcher, "Bash"), true);
   assert.equal(matcherCoversTool("Bash|Write", "mcp__github__create_issue"), false);
   assert.equal(matcherCoversTool("[", "Bash"), false);
 

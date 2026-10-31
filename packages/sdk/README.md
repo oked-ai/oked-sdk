@@ -91,7 +91,7 @@ Returns `true` when `GET https://api.oked.ai/health` succeeds within 3 seconds.
 
 ### Helpers
 
-- `classify(toolName, toolInput)` returns a risk tier for a tool call. Pass `{ sandboxEnforced: false }` to ask (`review`) before an opaque runner (`cargo test`, `npm test`, `npm run`, `pytest`, `go test`, `make`, `./script.sh`, `node scripts/x.mjs`, `npx`). Omit the option, or pass `true`, and those commands stay `safe`. Claude Code sets this from sandbox settings. Other hosts omit it.
+- `classify(toolName, toolInput)` returns a risk tier for a tool call. `review` and `high_stakes` wait for a person. `rm` of non-temp data, PowerShell `Remove-Item -Recurse`, `rmdir /s`, `rd /s`, `del /s`, `Format-Volume`, `format X:`, a drive root or `$HOME` / `%USERPROFILE%`, `git clean -fdx` and `find -delete` outside a temp or build directory, `git push --force`, and a `curl` GraphQL `volumeDelete` are `high_stakes`. A temp directory or `build` / `dist` / `.next` delete stays `warning`. `bash -c`, `sh -c`, `powershell -Command`, `pwsh -c`, and `cmd /c` are classified by the inner command. Pass `{ sandboxEnforced: false }` to ask (`review`) before an opaque runner (`cargo test`, `npm test`, `npm run`, `pytest`, `go test`, `make`, `./script.sh`, `node scripts/x.mjs`, `npx`). Omit the option, or pass `true`, and those commands stay `safe`. Claude Code sets this from sandbox settings. Other hosts omit it. The runner's child processes are not in the tool call: a `cargo test` that runs `rm -rf ~` is the runner, not the `rm`.
 - `describe(toolName, toolInput, ctx?)` returns a one-line description.
 - `describeFields(toolName, toolInput, ctx?)` returns the card fields.
 

@@ -12,7 +12,7 @@ import { join } from "path";
 import { HOOK_TIMEOUT_SECONDS } from "@oked/hook-core";
 
 export const MCP_TOOL_MATCHER = "mcp__.*";
-export const DEFAULT_TOOL_MATCHER = `Bash|Write|Edit|Agent|${MCP_TOOL_MATCHER}`;
+export const DEFAULT_TOOL_MATCHER = `Bash|PowerShell|Write|Edit|Agent|Task|${MCP_TOOL_MATCHER}`;
 
 /**
  * Seconds Claude Code lets `oked-hook` run before killing it.
@@ -63,6 +63,34 @@ export function ensureMcpMatcher(matcher?: string): string | undefined {
 }
 
 /**
+ * Add shell tools an older matcher missed.
+ *
+ * `PowerShell` is Claude Code's shell on Windows when Git Bash is absent.
+ * A matcher that only lists `Bash` never fires there, so a `Remove-Item` or
+ * `rmdir /s` never reaches the classifier. `Task` is the older name of the
+ * subagent tool (current Claude Code sends `Agent`).
+ *
+ * A `*` matcher already covers both. A matcher that is not the shell/agent
+ * hook (no `Bash` and no `Agent`) is left alone.
+ */
+export function ensureShellMatcher(matcher?: string): string | undefined {
+  if (!matcher) return matcher;
+  // `*` already matches PowerShell, Task, and MCP tools.
+  if (matcher.split("|").map((part) => part.trim()).includes("*")) return matcher;
+  const withMcp = ensureMcpMatcher(matcher);
+  if (!withMcp) return withMcp;
+  const parts = withMcp.split("|").map((part) => part.trim()).filter(Boolean);
+  if (parts.includes("Bash") && !parts.includes("PowerShell")) {
+    parts.splice(parts.indexOf("Bash") + 1, 0, "PowerShell");
+  }
+  if (parts.includes("Agent") && !parts.includes("Task")) {
+    parts.splice(parts.indexOf("Agent") + 1, 0, "Task");
+  }
+  const next = parts.join("|");
+  return next === withMcp ? withMcp : next;
+}
+
+/**
  * Raise a stale hook timeout in place. Installs created before the 10-minute
  * approval window carry the old 300s, and `init()` never rewrites an entry it
  * already recognizes, so without this they would keep a limit that now sits
@@ -84,7 +112,7 @@ export function ensureHookTimeout(entry: { hooks?: unknown[] }): boolean {
 }
 
 /**
- * Apply the in-place upgrades (MCP matcher, timeout) to every `oked-hook`
+ * Apply the in-place upgrades (shell matcher, MCP matcher, timeout) to every `oked-hook`
  * entry of a settings object. Never adds a hook. Returns true when something
  * changed.
  */
@@ -94,7 +122,7 @@ export function upgradeOkedHooks(settings: { hooks?: Record<string, unknown> }):
   let updated = false;
   for (const entry of preToolUse as Array<{ matcher?: string; hooks?: unknown[] }>) {
     if (!entry || typeof entry !== "object" || !hasOkedCommandHook(entry)) continue;
-    const nextMatcher = ensureMcpMatcher(entry.matcher);
+    const nextMatcher = ensureShellMatcher(entry.matcher);
     if (nextMatcher !== entry.matcher) {
       entry.matcher = nextMatcher;
       updated = true;

@@ -17,7 +17,7 @@ import {
 import {
   HOOK_CONFIG,
   hasOkedCommandHook,
-  ensureMcpMatcher,
+  ensureShellMatcher,
   ensureHookTimeout,
   upgradeOkedHooks,
   upgradeSettingsFile,
@@ -153,7 +153,7 @@ async function init(): Promise<void> {
   let updatedOkedHook = false;
   const hasOked = preToolUse.some((entry) => {
     if (!hasOkedCommandHook(entry)) return false;
-    const nextMatcher = ensureMcpMatcher(entry.matcher);
+    const nextMatcher = ensureShellMatcher(entry.matcher);
     if (nextMatcher !== entry.matcher) {
       entry.matcher = nextMatcher;
       updatedOkedHook = true;

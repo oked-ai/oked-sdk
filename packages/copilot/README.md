@@ -58,7 +58,7 @@ Copilot sends runtime names on `preToolUse` (`toolName`, `toolArgs`). A PascalCa
 
 | Copilot tool | OKed sees | Notes |
 |---|---|---|
-| `bash`, `powershell`, `Bash` | `Bash` | `ls` is safe. `rm` of a real file, a force push, network writes, and a production deploy wait. |
+| `bash`, `powershell`, `Bash` | `Bash` | `ls` is safe. `rm` of a real file, `Remove-Item -Recurse`, `rmdir /s`, a force push, network writes, and a production deploy wait. |
 | `view`, `grep`, `glob`, `web_search` | `Read`, `Grep`, `Glob`, `WebSearch` | Safe. No prompt. |
 | `web_fetch` | `WebFetch` | Warning. Allowed and logged. |
 | `create` | `Write` | A project file is `warning`. A sensitive path is `review`. |

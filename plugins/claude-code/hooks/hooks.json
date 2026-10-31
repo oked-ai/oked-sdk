@@ -2,7 +2,7 @@
   "hooks": {
     "PreToolUse": [
       {
-        "matcher": "Bash|Write|Edit|Agent|mcp__.*",
+        "matcher": "Bash|PowerShell|Write|Edit|Agent|Task|mcp__.*",
         "hooks": [
           {
             "type": "command",
