@@ -54,7 +54,7 @@ The hook uses the same four-tier classifier as `@oked/claude-code`. The matcher 
 
 | Cursor tool | OKed sees | Notes |
 |---|---|---|
-| `Shell` | `Bash` | `ls` is safe. `rm` of a real file, a force push, network writes, and a production deploy wait. |
+| `Shell` | `Bash` | `ls` is safe. `rm` of a real file, `Remove-Item -Recurse`, `rmdir /s`, a force push, network writes, and a production deploy wait. |
 | `Read`, `Grep`, `Glob`, `WebSearch` | the same name | Safe. No prompt. |
 | `WebFetch` | `WebFetch` | Warning. Allowed and logged. |
 | `Write`, `Edit`, `StrReplace` | `Write` or `Edit` | A project file is `warning`. A sensitive path (`/etc`, `~/.ssh`, shell rc, OKed config) is `review`. |

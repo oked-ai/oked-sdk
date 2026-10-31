@@ -292,8 +292,11 @@ function summarizeBash(command: string, sizeBytes?: number, cwd?: string, sandbo
   // a trailing `cd … && git status`) wouldn't match and the card fell back to
   // the generic "Run command". Match the shell text, so `rmdir` in a commit
   // message or a `--reason "…"` value is not a delete.
-  const rmMatch = shellText(cmd).match(/\b(rm|trash|trash-put|rmdir)\s+(?:(-rf?|-fr|--recursive|-r)\s+)?([^\n]+)/);
-  if (rmMatch && rmMatch[1] === "rmdir") {
+  const rmMatch = shellText(cmd).match(/\b(rm|trash|trash-put|rmdir|rd|del|erase|Remove-Item|ri)\s+(?:(-rf?|-fr|--recursive|-r)\s+)?([^\n]+)/i);
+  const winRecursive = rmMatch
+    ? /(?:^|\s)\/s\b|(?:^|\s)-Recurse\b|(?:^|\s)-r\b/i.test(rmMatch[3])
+    : false;
+  if (rmMatch && /^(?:rmdir|rd)$/i.test(rmMatch[1]) && !winRecursive) {
     // rmdir removes empty folders only.
     const vars = literalAssignments(cmd);
     const targets = parseRmTargets(rmMatch[3]).map((t) => shortenPath(stripQuotes(expandVars(t, vars))));
@@ -304,7 +307,7 @@ function summarizeBash(command: string, sizeBytes?: number, cwd?: string, sandbo
   if (rmMatch) {
     // Recursive only with an r/R flag: `rm -f x` deletes one file.
     const flags = (rmMatch[2] ? `${rmMatch[2]} ` : "") + rmMatch[3];
-    const recursive = /(?:^|\s)(?:-[a-zA-Z]*[rR][a-zA-Z]*|--recursive)(?=\s|$)/.test(flags.split(/[;&|\n]/)[0]);
+    const recursive = winRecursive || /(?:^|\s)(?:-[a-zA-Z]*[rR][a-zA-Z]*|--recursive)(?=\s|$)/.test(flags.split(/[;&|\n]/)[0]);
     // `D=/some/dir; rm -f $D/x` shows the real path, not `$D/x`.
     const vars = literalAssignments(cmd);
     const targets = parseRmTargets(rmMatch[3]).map((t) => expandVars(t, vars));
@@ -375,7 +378,7 @@ function summarizeBash(command: string, sizeBytes?: number, cwd?: string, sandbo
   if (prisma) return prisma;
   const GIT_RESET_RE = /\bgit\s+(?:-C\s+\S+\s+)?reset\s+--hard\b/;
   if (GIT_RESET_RE.test(cmd)) return { title: `Hard reset${inRepo(GIT_RESET_RE)}, discard all local changes`, kind: "git_reset_hard" };
-  const GIT_CLEAN_RE = /\bgit\s+(?:-C\s+\S+\s+)?clean\s+-f/;
+  const GIT_CLEAN_RE = /\bgit\s+(?:-C\s+\S+\s+)?clean\s+(?:-\S+\s+)*(?:--force|-[^\s]*f)/;
   if (GIT_CLEAN_RE.test(cmd)) return { title: `Remove all untracked files${inRepo(GIT_CLEAN_RE)}`, kind: "git_clean" };
   const GIT_CHECKOUT_RE = /\bgit\s+(?:-C\s+\S+\s+)?checkout\s+--\s+\./;
   if (GIT_CHECKOUT_RE.test(cmd)) return { title: `Discard all unstaged changes${inRepo(GIT_CHECKOUT_RE)}`, kind: "git_checkout" };
@@ -1801,7 +1804,9 @@ function parseRmTargets(argsString: string): string[] {
       token = str.slice(start, i);
     }
 
-    if (token && !token.startsWith("-")) {
+    // cmd delete switches (`/s`, `/q`) are flags, not paths. A longer token
+    // (`/src`) is a path and stays.
+    if (token && !token.startsWith("-") && !/^\/[sqfa]$/i.test(token)) {
       targets.push(token);
     }
   }

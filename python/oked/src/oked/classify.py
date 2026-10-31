@@ -66,7 +66,6 @@ _WARNING_SESSION = frozenset({"EnterWorktree", "CronCreate", "CronDelete", "Send
 _HIGH_STAKES_COMMANDS = [
     re.compile(r"\bgit\s+push\b[^\n]*\s(?:--force(?:-with-lease)?|-f)\b"),
     re.compile(r"\bgit\s+reset\s+--hard\b"),
-    re.compile(r"\bgit\s+clean\s+-f"),
     re.compile(r"\bgit\s+checkout\s+--\s+\."),
     re.compile(r"\bgit\s+restore\s+--staged\s+\."),
     re.compile(r"\bdocker\s+(rm|rmi|system\s+prune)\b"),
@@ -88,7 +87,6 @@ _HIGH_STAKES_STAGE = [
     re.compile(r"^dd\b.*\bof=\/dev\/"),
     re.compile(r"^shred\b"),
     re.compile(r"^truncate\b"),
-    re.compile(r"^find\b.*\s-delete\b"),
     re.compile(r"^(shutdown|reboot|halt|poweroff)\b"),
     re.compile(r"^scp\b"),
     re.compile(r"^rsync\b.*(--delete|\s\S+:)"),
@@ -430,7 +428,202 @@ def _redirect_tier(stage: str) -> RiskTier | None:
     return "review" if is_sensitive_write_path(target) else "warning"
 
 
+_SHORT_HOME = re.compile(r"^[A-Za-z]:[/\\]Users[/\\][^/\\]+~\d+[/\\]?$", re.IGNORECASE)
+_WIN_TEMP = re.compile(
+    r"^(?:\$\{?env:(?:TMPDIR|TMP|TEMP)\}?|%(?:TMPDIR|TMP|TEMP)%)(?:[/\\]|$)",
+    re.IGNORECASE,
+)
+_ROOT_TARGET = re.compile(
+    r"^(?:/|\\+|~[/\\]?|\$\{?(?:home|env:home|env:userprofile)\}?[/\\]?|%(?:userprofile|home)%[/\\]?|[A-Za-z]:[/\\]?)$",
+    re.IGNORECASE,
+)
+_SHELL_NAMES = frozenset({"bash", "sh", "zsh", "ksh", "dash", "pwsh", "powershell", "cmd"})
+
+
+def _is_root_target(path: str) -> bool:
+    text = _unquote(path).strip()
+    text = re.sub(r"^\\\\\?\\", "", text)
+    return bool(_ROOT_TARGET.match(text) or _SHORT_HOME.match(text))
+
+
+def _is_cleanup_target(path: str) -> bool:
+    text = _unquote(path).strip()
+    if not text or _is_root_target(text):
+        return False
+    if _ephemeral(text) or _WIN_TEMP.match(text):
+        return True
+    parts = text.replace("\\", "/").removeprefix("./").split("/")
+    return bool(parts) and parts[0] in _BUILD_OUTPUT and ".." not in parts and ":" not in parts[0]
+
+
+def _collapsed_windows_delete(stage: str) -> bool:
+    if '\\"' not in stage:
+        return False
+    if not re.match(
+        r"^(?:sudo\s+)?(?:cmd|powershell|pwsh|bash|sh|Remove-Item|rmdir|rd|del|rm)\b",
+        stage,
+        re.IGNORECASE,
+    ):
+        return False
+    return bool(
+        re.search(r"\b(?:Remove-Item|rmdir|rd|del|rm)\b", stage, re.IGNORECASE)
+        and re.search(r"(?:-Recurse|(?:^|\s)/s\b|-[A-Za-z]*r)", stage)
+    )
+
+
+def _windows_delete_tier(stage: str) -> RiskTier | None:
+    if _collapsed_windows_delete(stage):
+        return "high_stakes"
+    found: RiskTier | None = None
+    for match in re.finditer(
+        r"(?:^|[\n`({;]|\$\()\s*(Remove-Item|ri|rd|del|erase|rmdir)\b([^\n;|&}]*)",
+        stage,
+        re.IGNORECASE,
+    ):
+        cmd = match.group(1).lower()
+        tail = match.group(2)
+        recursive = re.search(r"(?:^|\s)/s\b|(?:^|\s)-r(?:ecurse)?\b", tail, re.IGNORECASE) is not None
+        targets = [
+            _unquote(tok)
+            for tok in _split_args(tail)
+            if not re.match(r"^/[sqfa]$", tok, re.IGNORECASE)
+            and not re.match(r"^/s(?:/[qfa])*$", tok, re.IGNORECASE)
+            and not re.match(r"^-(?:r|re|rec|recu|recur|recurse|force|f|whatif|confirm)$", tok, re.IGNORECASE)
+            and not tok.startswith("-")
+        ]
+        tier: RiskTier | None
+        if any(_is_root_target(target) for target in targets):
+            tier = "high_stakes"
+        elif not recursive and cmd in {"rmdir", "rd"}:
+            tier = None
+        elif not targets:
+            tier = "high_stakes"
+        elif all(_is_cleanup_target(target) for target in targets):
+            tier = "warning"
+        else:
+            tier = "high_stakes"
+        if tier is not None:
+            found = tier if found is None else _max(found, tier)
+    return found
+
+
+def _git_clean_tier(stage: str) -> RiskTier | None:
+    match = re.match(r"^git\s+clean\b(.*)$", stage, re.DOTALL)
+    if not match:
+        return None
+    force = False
+    dry = False
+    paths: list[str] = []
+    args = _split_args(match.group(1))
+    index = 0
+    while index < len(args):
+        arg = args[index]
+        if arg == "--":
+            paths.extend(_unquote(item) for item in args[index + 1 :])
+            break
+        if arg == "--force":
+            force = True
+        elif arg in {"--dry-run", "--dryrun"}:
+            dry = True
+        elif arg in {"--exclude", "-e"}:
+            index += 1
+        elif arg.startswith("--"):
+            pass
+        elif arg.startswith("-") and len(arg) > 1:
+            if "n" in arg[1:]:
+                dry = True
+            if "f" in arg[1:]:
+                force = True
+            if "e" in arg[1:]:
+                index += 1
+        else:
+            paths.append(_unquote(arg))
+        index += 1
+    if not force or dry:
+        return "safe"
+    if paths and all(_is_cleanup_target(path) for path in paths):
+        return "warning"
+    return "high_stakes"
+
+
+def _find_delete_tier(stage: str) -> RiskTier | None:
+    if not re.match(r"^find\b", stage) or re.search(r"(?:^|\s)-delete\b", stage) is None:
+        return None
+    paths = []
+    for arg in _split_args(stage)[1:]:
+        if arg.startswith("-"):
+            break
+        paths.append(_unquote(arg))
+    targets = paths or ["."]
+    if all(_is_cleanup_target(target) for target in targets):
+        return "warning"
+    return "high_stakes"
+
+
+def _disk_format(stage: str) -> bool:
+    if re.match(r"^format-volume\b", stage, re.IGNORECASE):
+        return re.search(r"(?:^|\s)-wh", stage, re.IGNORECASE) is None
+    return re.match(r"^format(?:\.com)?\s+[A-Za-z]:", stage, re.IGNORECASE) is not None
+
+
+def _volume_delete_curl(stage: str) -> bool:
+    if not re.match(r"^(?:sudo\s+)*curl\b", stage):
+        return False
+    return (
+        re.search(r"volumeDelete", stage, re.IGNORECASE) is not None
+        and re.search(r"graphql|railway\.app|backboard\.", stage, re.IGNORECASE) is not None
+    )
+
+
+def _shell_name(token: str) -> str:
+    name = token.replace("\\", "/").rsplit("/", 1)[-1].lower()
+    if name.endswith(".exe"):
+        name = name[:-4]
+    return name
+
+
+def _unwrap_shell(stage: str) -> str | None:
+    match = re.match(r"^(?:sudo\s+)?(\S+)\s+([\s\S]+)$", stage)
+    if not match:
+        return None
+    name = _shell_name(match.group(1))
+    if name not in _SHELL_NAMES:
+        return None
+    rest = match.group(2).strip()
+    if name == "cmd":
+        flag = re.search(r"(?:^|\s)/[cd]\s+([\s\S]+)$", rest, re.IGNORECASE)
+        if not flag:
+            return None
+        body = flag.group(1).strip()
+    else:
+        flag = re.search(r"(?:^|\s)-(?:Command|c)\s+([\s\S]+)$", rest, re.IGNORECASE)
+        if not flag and name not in {"powershell", "pwsh"}:
+            flag = re.search(r"(?:^|\s)-[A-Za-z]*c\s+([\s\S]+)$", rest)
+        if not flag:
+            return None
+        body = flag.group(1).strip()
+    if len(body) >= 2 and body[0] == body[-1] and body[0] in {'"', "'"}:
+        body = body[1:-1]
+    body = body.strip()
+    if not body or body == stage.strip():
+        return None
+    return body
+
+
 def _classify_stage(stage: str) -> RiskTier:
+    windows = _windows_delete_tier(stage)
+    if windows is not None:
+        return windows
+    if _disk_format(stage):
+        return "high_stakes"
+    if _volume_delete_curl(stage):
+        return "high_stakes"
+    git_clean = _git_clean_tier(stage)
+    if git_clean is not None:
+        return git_clean
+    find_delete = _find_delete_tier(stage)
+    if find_delete is not None:
+        return find_delete
     stripped = _DELETE_LEAD.sub("", stage).strip()
     if _ephemeral_only_deletion(stripped) or _ephemeral_only_deletion(stage):
         return "warning"
@@ -469,6 +662,12 @@ def classify_shell(command: str) -> RiskTier:
     """Tier of one shell command. Empty is safe."""
     if not command or not command.strip():
         return "safe"
+    text = command.strip()
+    if _collapsed_windows_delete(text):
+        return "high_stakes"
+    inner = _unwrap_shell(text)
+    if inner is not None:
+        return classify_shell(inner)
     for pattern in _HIGH_STAKES_COMMANDS:
         if pattern.search(command):
             return "high_stakes"
@@ -500,9 +699,9 @@ def classify(tool_name: str, tool_input: Mapping[str, object] | None = None) -> 
         return "warning"
     if tool_name in {"Write", "Edit", "NotebookEdit"}:
         return "review" if is_sensitive_write_path(_string_field(payload, "file_path") or "") else "warning"
-    if tool_name == "Agent":
+    if tool_name in {"Agent", "Task", "Subagent"}:
         return "safe"
-    if tool_name == "Bash" or _string_field(payload, "command", "cmd") is not None:
+    if tool_name in {"Bash", "PowerShell"} or _string_field(payload, "command", "cmd") is not None:
         return classify_shell(_string_field(payload, "command", "cmd") or "")
     if tool_name.startswith("mcp__"):
         return "review"

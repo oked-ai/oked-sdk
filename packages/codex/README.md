@@ -55,7 +55,7 @@ Codex tool names are mapped onto that classifier before the decision:
 
 | Codex tool | OKed sees | Notes |
 |---|---|---|
-| `Bash`, `exec_command`, `shell_command`, `local_shell` | `Bash` | Shell, network, and deploy commands use the bash rules. `ls` and `git status` are safe. `rm` of a real file, a force push, and a production deploy wait. |
+| `Bash`, `exec_command`, `shell_command`, `local_shell` | `Bash` | Shell, network, and deploy commands use the bash rules. `ls` and `git status` are safe. `rm` of a real file, `Remove-Item -Recurse`, `rmdir /s`, `cmd /c` of those, a force push, and a production deploy wait. |
 | `apply_patch` | `Write` or `rm` | A delete in the patch is classified as `rm`. A write is `warning` unless the path is sensitive (`/etc`, `~/.ssh`, shell rc, OKed config), which is `review`. |
 | `mcp__server__tool` | the same name | `list_*` and `get_*` are safe. `create_*`, `send_*`, and `update_*` are `review`. `delete_*`, `drop_*`, and `remove_*` are `high_stakes`. |
 | `spawn_agent` | `Agent` | Starting a sub-agent is safe. Its own tool calls are gated on their own. |

@@ -14,20 +14,50 @@ Decisions are made in Telegram and on the [web dashboard](https://oked.ai/dashbo
 - The text report ends with how many commands would have paused, the two or three most common high-stakes kinds in plain words, the install command (`oked init`, and `oked-codex init` when Codex history is present), and https://oked.ai. If nothing would have paused, it says so and does not invent a count. `--verbose` prints the classification notes. The default text report leaves them out. Decisions happen in Telegram or on the web dashboard. The iPhone app is coming soon.
 - Not on npm yet. The first publish is by hand. See [RELEASING.md](./RELEASING.md).
 
+### @oked/openclaw
+
+- ClawHub publish from GitHub Actions uses trusted publishing. The `publish-clawhub` job in `publish.yml` has `id-token: write`. `clawhub@0.24.1` requests a GitHub OIDC token with audience `clawhub` and does not send `CLAWHUB_TOKEN`. ClawHub accepts that token only for `workflow_dispatch`, and only when the workflow file is `publish.yml`. A `v*` tag still publishes npm. After the tag is on `main`, publish this package to ClawHub with `gh workflow run publish.yml --ref main -f tag=vX.Y.Z -f clawhub_only=true`. `clawhub_only` skips npm. An npm version that is already on the registry logs that it is already on npm and skips `npm publish`, so a rerun does not fail the npm jobs. v0.6.25 is already on npm. Its ClawHub publish is that dispatch with `tag=v0.6.25`.
+- That trusted publish does not pass `--owner`. ClawHub rejects an owner override with `Trusted publishes must not override the package owner`. The manual first publish still passes `--owner oked`. The workflow sends `--source-commit` from `github.sha` and `--source-ref` from `github.ref`, because a source commit or ref that does not match the OIDC token is also rejected. `clawhub@0.24.1` does not send a package channel.
+
+## 0.6.25 - 2026-10-31
+
 ### Claude Code plugin
 
+- The Claude Code plugin icon, the OpenClaw package icon, and `assets/logo.png` are the OKed logo: black "ok" with a green dot on white, 512x512.
 - OKed can be installed as a Claude Code plugin. In Claude Code: `/plugin marketplace add oked-ai/oked-sdk`, then `/plugin install oked@oked`. The marketplace name is `oked` and the plugin name is `oked`. No global npm install is required.
-- The hook is `plugins/claude-code/scripts/oked-hook.mjs`, a readable bundle of the hook and the SDK, run with `node`. The matcher is `Bash|Write|Edit|Agent|mcp__.*` and the timeout is 690 seconds. `node scripts/build-claude-plugin.mjs` rebuilds it. CI fails if the committed file is stale or larger than 256 KiB. `npm run bump` sets the plugin version to the same number as the packages and rebuilds the bundle.
+- The hook is `plugins/claude-code/scripts/oked-hook.mjs`, a readable bundle of the hook and the SDK, run with `node`. The matcher is `Bash|PowerShell|Write|Edit|Agent|Task|mcp__.*` and the timeout is 690 seconds. `PowerShell` covers Windows when Git Bash is absent. `Task` is the older name of the subagent tool. `node scripts/build-claude-plugin.mjs` rebuilds it. CI fails if the committed file is stale or larger than 256 KiB. `npm run bump` sets the plugin version to the same number as the packages and rebuilds the bundle.
 - Pair with `/oked:pair`. The plugin API key is sensitive. The hook reads `CLAUDE_PLUGIN_OPTION_APIKEY`. Until a key is saved, a risky action returns `ask`.
 - If the plugin is enabled and `oked init` has also installed `oked-hook`, only the plugin calls OKed. The settings hook returns allow. `oked init` does not add a settings hook while the plugin is enabled. `oked uninstall` removes the project entry. If you disable the plugin, that entry gates again.
 
 ### @oked/openclaw
 
-- Install from ClawHub, which is what `openclaw plugins install` checks first: `openclaw plugins install @oked/openclaw`. Pairing still uses `@oked/openclaw-cli` (`npm install -g @oked/openclaw-cli`, then `oked-openclaw init`).
+- Requires OpenClaw 2026.5.4 or newer. Hosts before that ignored a denial and ran the tool. The floor is `>=2026.5.4` on `peerDependencies.openclaw`, `engines.openclaw`, `openclaw.compat.pluginApi`, and `openclaw.install.minHostVersion`. `openclaw.compat.minGatewayVersion` and `openclaw.build.openclawVersion` are `2026.5.4`.
+- A shell command that runs a local Python, Node, Ruby, Perl, Deno, or Bun script can include the first 4,096 bytes of that file on the approval request, so you can see what will run. Assignments named like a key, token, secret, or password, AWS access key ids, bearer tokens, and PEM private keys are replaced with `[REDACTED]` first. Set `sendScriptContent` to `false`, or `OKED_SEND_SCRIPT_CONTENT=0`, to omit the excerpt. The default is still to send it. `OKED_STRICT_FAIL_CLOSED=1` is the recommended setting so sensitive actions stay blocked when OKed cannot be reached.
+- The npm description and the plugin manifest description now say what pauses, where you approve, and that everything else runs.
+- Install from npm with `openclaw plugins install npm:@oked/openclaw`. Once the package is listed on ClawHub, `openclaw plugins install @oked/openclaw` installs it from there. Pairing still uses `@oked/openclaw-cli` (`npm install -g @oked/openclaw-cli`, then `oked-openclaw init`).
 - A `v*` tag publishes this package to ClawHub when the `CLAWHUB_TOKEN` secret is set. If the secret is missing, that step logs a skip line and the npm publish still succeeds. The one-time setup (`clawhub login`, the `oked` publisher handle, the first manual publish, the trusted publisher, and `CLAWHUB_TOKEN`) is in [RELEASING.md](./RELEASING.md).
 - The catalog category is `security`. The package ships `assets/icon.png` for the ClawHub listing.
 
+### @oked/openclaw-cli
+
+- `oked-openclaw init` tries `openclaw plugins install @oked/openclaw` when no local copy of the plugin is present. OpenClaw resolves that bare name from ClawHub only. If the ClawHub install fails, init retries `openclaw plugins install npm:@oked/openclaw`. The failure hint prints that npm command.
+
 ### @oked/claude-code and @oked/sdk
+
+- Windows recursive deletes now wait for a person. That is PowerShell `Remove-Item -Recurse` (including `-Force`), the aliases `ri`, `del`, `rmdir`, and `rd` with `-r`, and `rmdir /s`, `rd /s`, and `del /s`. `Format-Volume` and `format X:` wait too. A target that is a drive root (`C:\`, `D:\`), `/`, `~`, `$HOME`, `$home`, `$env:USERPROFILE`, or `%USERPROFILE%` waits even when the rest of the path looks narrow. An 8.3 profile path (`C:\Users\ALICE~1`) waits with them.
+- A broken `\"` on one of those deletes waits, including when the text names `node_modules`, a build directory, or a temp folder. That is the quoting shape from [openai/codex#57530](https://github.com/openai/codex/issues/57530) (`cmd /d /s /c "rmdir /s /q \"E:\...\node_modules\""`) and from Cursor reports where `Remove-Item -Recurse -Force` collapsed toward `C:\`. Antigravity's `rmdir /s /q d:\` is the same class of wipe.
+- `bash -c`, `sh -c`, `powershell -Command`, `pwsh -c`, and `cmd /c` are classified by the command inside, so a wipe wrapped in another shell still waits. `bash -c` and `sh -c` already did. The PowerShell and `cmd /c` forms did not.
+- `git clean` with a force flag (`-fdx`, `-xfd`, `--force`) waits, except a dry run (`-n`, `--dry-run`) and except when every path is a temp directory or a build output directory (`build`, `dist`, `.next`). `find -delete` follows the same temp and build exception. `find . -delete` still waits. `git push --force` still waits, including as the retry after `git push --force-with-lease` fails ([anthropics/claude-code#70378](https://github.com/anthropics/claude-code/issues/70378)).
+- A `curl` POST whose body is a GraphQL `volumeDelete` (the PocketOS call to Railway's `backboard.railway.app/graphql` API) is `high_stakes`. Other curl POSTs stay `review`.
+- Temp-directory cleanup and build-output cleanup stay `warning`. `rmdir` of an empty folder stays `warning`. `Format-Volume -WhatIf` and `git clean -n` stay `safe`.
+- Claude Code's `PowerShell` tool is on the hook matcher. On Windows without Git Bash, Claude Code does not register `Bash`, and a matcher that only lists `Bash` never runs. `oked init` adds `PowerShell` next to an existing `Bash` matcher, and `Task` next to `Agent`.
+
+### What the hook can see
+
+- Claude Code runs `PreToolUse` hooks from settings inside a subagent. The payload includes `agent_id` and `agent_type`. Current Claude Code names the subagent tool `Agent`. Older sessions and Cursor send `Task`. Starting the subagent stays `safe`, because each Bash, PowerShell, Write, and Edit call it makes is classified on its own. Subagent transcripts do not record hook results, which has been mistaken for the hook not running ([anthropics/claude-code#69260](https://github.com/anthropics/claude-code/issues/69260)).
+- OKed does not see a command that never arrives as a tool call. In [anthropics/claude-code#105342](https://github.com/anthropics/claude-code/issues/105342) a subagent's `cargo test` ran `rm -rf ~` inside the test process. The hook saw `cargo test`, not the `rm`. When the Bash sandbox is not containing child processes, that runner asks (`review`). When the sandbox is on, the runner stays `safe`, and the inner `rm` is still invisible. A script file (`powershell -File wipe.ps1`, `./wipe.ps1`, `cmd /c wipe.bat`) is the same: the file body is not read. An inline `-Command` or `-c` body is part of the tool call, so it is read.
+
+### Sandbox and opaque runners
 
 - Opaque code runners now ask for approval on Claude Code when the Bash sandbox is not containing child processes. The hook only sees the runner command. A test or script can run `rm` (or anything else) without a second tool call. That is what happened in [anthropics/claude-code#105342](https://github.com/anthropics/claude-code/issues/105342): `cargo test` ran `rm -rf ~` and the hook never saw the `rm`. The tier for these runners is `review`.
 - The runners are `cargo test`, `npm test` / `npm run <script>` (and `pnpm` / `yarn` / `bun` equivalents, including `yarn <script>` and `pnpm <script>`), `pytest` and `python -m pytest`, `go test`, `make` and `make <target>`, `./script.sh`, `bash script.sh` / `sh script.sh`, `node <script>` (for example `node scripts/x.mjs`), and `npx <tool>` (also `bunx`, `npm exec`, `pnpm dlx`). Env prefixes (`FOO=bar npm test`), `env`, and compound commands (`cd pkg && cargo test`) count. A higher tier still wins: `cargo test && rm -rf ~` stays `high_stakes`.

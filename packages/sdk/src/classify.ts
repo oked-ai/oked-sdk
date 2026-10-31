@@ -22,11 +22,15 @@ import { TIER_ORDER } from "./degraded.js";
 //                curl POST/PUT/PATCH with an inline body, other cloud CLI writes
 //                (create, update, upload, preview deploy, kubectl apply/exec).
 // Tier 4 - high_stakes: push + number matching. Destructive / irreversible /
-//                external: rm of non-temp data, DROP/TRUNCATE/DELETE FROM,
-//                git push --force / reset --hard / branch -D, mkfs / dd-to-device /
-//                shutdown, curl DELETE / file upload / pay-or-send API, ssh/scp,
-//                npm publish, kill, cloud and cluster deletes, terraform apply /
-//                pulumi up, production deploys, Stripe CLI writes.
+//                external: rm of non-temp data, Windows recursive deletes
+//                (Remove-Item -Recurse, rmdir /s, rd /s, del /s), a drive root
+//                or home directory, Format-Volume / format X:, DROP/TRUNCATE/
+//                DELETE FROM, git push --force / reset --hard / clean -fd /
+//                branch -D, find -delete, mkfs / dd-to-device / shutdown,
+//                curl DELETE / file upload / pay-or-send API / GraphQL
+//                volumeDelete, ssh/scp, npm publish, kill, cloud and cluster
+//                deletes, terraform apply / pulumi up, production deploys,
+//                Stripe CLI writes.
 
 // Tools that are always safe (read-only, no side effects)
 const SAFE_TOOLS = new Set([
@@ -198,7 +202,8 @@ const HIGH_STAKES_COMMANDS = [
   // to `warning` in WARNING_COMMANDS below. Mirrors describe.ts force detection.
   /\bgit\s+push\b[^\n]*\s(?:--force(?:-with-lease)?|-f)\b/,
   /\bgit\s+reset\s+--hard\b/,
-  /\bgit\s+clean\s+-f/,
+  // git clean -f is NOT here. It is per-stage (classifyGitCleanStage) so a
+  // dry run stays safe and a temp or build-output path stays a warning.
   /\bgit\s+checkout\s+--\s+\./,
   /\bgit\s+restore\s+--staged\s+\./,
   // NOTE: SQL severity (DROP/DELETE FROM/TRUNCATE/…) is intentionally NOT matched
@@ -248,7 +253,8 @@ const HIGH_STAKES_STAGE = [
   /^dd\b.*\bof=\/dev\//,
   /^shred\b/,
   /^truncate\b/,                       // `truncate -s 0 file` wipes contents
-  /^find\b.*\s-delete\b/,              // `find … -delete` removes matches
+  // `find … -delete` is per-stage (classifyFindDelete) so a temp or build
+  // path can stay a warning. A find of `.` or any other path stays high_stakes.
   // Power / system state.
   /^(shutdown|reboot|halt|poweroff)\b/,
   // Remote/outward file transfer (almost always a remote target).
@@ -648,10 +654,12 @@ const EPHEMERAL_PATH_RE = /^(?:\/tmp\/|\/var\/tmp\/|\/var\/folders\/|\/private\/
 // $TMP, $TEMP, ${TMPDIR}, and paths beneath them. Treated as ephemeral since
 // we can't resolve the value but the intent is unambiguous.
 const TEMP_VAR_RE = /^\$\{?(?:TMPDIR|TMP|TEMP)\}?(?:\/|$)/;
+// PowerShell `$env:TEMP\foo` and cmd `%TEMP%\foo`. Same idea as $TMPDIR.
+const WIN_TEMP_VAR_RE = /^(?:\$\{?env:(?:TMPDIR|TMP|TEMP)\}?|%(?:TMPDIR|TMP|TEMP)%)(?:[\\/]|$)/i;
 
 function isEphemeralPath(filePath: string): boolean {
   if (!filePath) return false;
-  return TEMP_VAR_RE.test(filePath) || EPHEMERAL_PATH_RE.test(filePath);
+  return TEMP_VAR_RE.test(filePath) || WIN_TEMP_VAR_RE.test(filePath) || EPHEMERAL_PATH_RE.test(filePath);
 }
 
 // A shell variable assigned from `mktemp` / `mktemp -d` (optionally `export`ed)
@@ -761,9 +769,13 @@ function collectMktempVars(stage: string, into: Set<string>): void {
 // qualify — that stays a real deletion.
 function isEphemeralVar(target: string, vars: Set<string>): boolean {
   if (vars.size === 0) return false;
-  const m = target.match(/^\$\{?(\w+)\}?(\/.*)?$/);
+  // `$home` / `$HOME` / `%USERPROFILE%` are the real profile. Windows PowerShell
+  // refuses `$home = <temp>` (HOME is constant) and the later Remove-Item still
+  // deletes the profile. Never treat those names as a temp binding.
+  if (isCatastrophicTarget(target)) return false;
+  const m = target.match(/^\$\{?(\w+)\}?([\\/].*)?$/);
   if (!m || !vars.has(m[1])) return false;
-  if (m[2] && m[2].split("/").includes("..")) return false;
+  if (m[2] && m[2].split(/[/\\]/).includes("..")) return false;
   return true;
 }
 
@@ -849,15 +861,18 @@ export function classify(
     return isSensitiveWritePath(filePath) ? "review" : "warning";
   }
 
-  // Agent tool - safe. Launching a sub-agent is not itself a side effect, and
-  // the sub-agent's own tool calls (Bash/Write/Edit/MCP) each fire their own
-  // PreToolUse hook and get classified independently. Gating the launch on top
-  // of that just double-prompts — once for the spawn, again for every real
-  // action the sub-agent takes — so the launch auto-allows.
-  if (toolName === "Agent") return "safe";
+  // Launching a sub-agent is not itself a side effect. Claude Code runs
+  // settings PreToolUse hooks for each tool call the sub-agent makes (the
+  // payload includes agent_id and agent_type). Current Claude Code names that
+  // tool Agent. Older sessions and Cursor call it Task. The launch stays safe
+  // so it is not a second prompt on top of the real action.
+  // A command that never arrives as a tool call is invisible. A test runner
+  // or a script file can run rm inside the child. See isOpaqueCodeRunner.
+  if (toolName === "Agent" || toolName === "Task" || toolName === "Subagent") return "safe";
 
-  // Bash commands need deeper analysis
-  if (toolName === "Bash") {
+  // Bash commands need deeper analysis. Claude Code's PowerShell tool uses
+  // the same `command` field. On Windows without Git Bash it replaces Bash.
+  if (toolName === "Bash" || toolName === "PowerShell") {
     return classifyBashCommand(toolInput.command as string, new Set(), sandboxEnforced);
   }
 
@@ -1023,15 +1038,19 @@ const BUILD_OUTPUT_DIRS = new Set(["build", "dist", ".build", "DerivedData", ".n
 // rm/trash whose every target is a relative path inside a build output folder
 // (`rm -rf build/OKed.xcarchive dist`). An absolute path, `..`, a variable or a
 // glob in the first segment can point anywhere, so it stays a real deletion.
+function isBuildOutputPath(target: string): boolean {
+  const parts = unquote(target).replace(/\\/g, "/").replace(/^(?:\.\/)+/, "").split("/");
+  // An absolute path, a drive letter, or `..` can point outside the build tree.
+  if (!parts[0] || parts[0].includes(":") || parts.includes("..")) return false;
+  return BUILD_OUTPUT_DIRS.has(parts[0]);
+}
+
 function isBuildOutputOnlyDeletion(command: string): boolean {
   const m = command.match(/^(?:rm|trash|trash-put)\b\s+(.+)$/s);
   if (!m) return false;
   const targets = splitArgs(m[1]).filter((a) => !a.startsWith("-") && !/^(?:\d|&)?>>?\S+$/.test(a));
   if (targets.length === 0) return false;
-  return targets.every((a) => {
-    const parts = unquote(a).replace(/^(?:\.\/)+/, "").split("/");
-    return BUILD_OUTPUT_DIRS.has(parts[0]) && !parts.includes("..");
-  });
+  return targets.every((a) => isBuildOutputPath(a));
 }
 
 /**
@@ -1159,6 +1178,9 @@ function classifyGitGlobalOptsStage(stage: string, ephemeralVars: Set<string>, s
     return i;
   };
   let floor: RiskTier = "safe";
+  // `git -C /tmp/repo clean -fdx` cleans a throwaway repo. Remember that for
+  // the subcommand without leaking TEMP_CWD into later stages of the caller.
+  let repoInTemp = false;
   let i = lead[0].length;
   while (i < stage.length) {
     while (i < stage.length && /\s/.test(stage[i])) i++;
@@ -1167,7 +1189,9 @@ function classifyGitGlobalOptsStage(stage: string, ephemeralVars: Set<string>, s
     i = readToken(i);
     const tok = stage.slice(start, i);
     if (!tok.startsWith("-")) {
-      const inner = classifyBashCommand(`git ${stage.slice(start).trim()}`, ephemeralVars, sandboxEnforced);
+      const vars = new Set(ephemeralVars);
+      if (repoInTemp) vars.add(TEMP_CWD);
+      const inner = classifyBashCommand(`git ${stage.slice(start).trim()}`, vars, sandboxEnforced);
       return maxTier(floor, inner);
     }
     let value = "";
@@ -1180,6 +1204,9 @@ function classifyGitGlobalOptsStage(stage: string, ephemeralVars: Set<string>, s
       value = unquote(tok.slice(2));                          // `-ckey=value`
     }
     if ((tok === "-c" || tok.startsWith("-c")) && /^alias\./i.test(value)) floor = "review";
+    if (tok === "-C" && (isEphemeralPath(value) || isEphemeralVar(value, ephemeralVars) || /^\$\(\s*mktemp\b/.test(value))) {
+      repoInTemp = true;
+    }
   }
   return floor; // `git -C dir` with no subcommand prints help
 }
@@ -1246,20 +1273,221 @@ function classifySshStage(stage: string, sandboxEnforced?: boolean): RiskTier | 
   return "review"; // only options / a bare host token → treat as remote access
 }
 
+const WRAPPED_SHELLS = new Set(["bash", "sh", "zsh", "ksh", "dash", "pwsh", "powershell", "cmd"]);
+
+function shellInvocationName(token: string): string {
+  return commandBase(unquote(token)).replace(/\.exe$/i, "").toLowerCase();
+}
+
 /**
- * `sh -c '<shell>'` / `bash -c "<shell>"` (also zsh/ksh/dash, and combined flags
- * like `-lc`) runs the quoted argument AS shell. Recurse on the body so its
- * effect is classified by the same rules — mirrors classifySshStage. Only fires
- * when the shell IS the stage's command; a `-c` flag on another tool (e.g.
- * `grep -c`) is unaffected because the stage doesn't start with a shell name.
- * Returns null if the stage isn't a `sh -c`-style invocation.
+ * `sh -c`, `bash -c` (also zsh/ksh/dash, and combined flags like `-lc`),
+ * `powershell -Command` / `pwsh -c`, and `cmd /c` run the following text as
+ * a command. Recurse so a wipe inside the wrapper is classified by the same
+ * rules. Only when the shell is the stage's command: `grep -c` is not a shell.
+ * Returns null when this is not that shape (a script file stays for the
+ * opaque-runner check). An encoded PowerShell command hides its body, so it
+ * asks (`review`) rather than being treated as safe.
  */
 function classifyShellCStage(stage: string, sandboxEnforced?: boolean): RiskTier | null {
-  const m = stage.match(
-    /^(?:bash|sh|zsh|ksh|dash)\b[^'"]*?\s-[A-Za-z]*c\s+(['"])([\s\S]*?)\1/,
-  );
-  if (!m) return null;
-  return classifyBashCommand(m[2], new Set(), sandboxEnforced);
+  const args = splitArgs(stage);
+  let i = args[0] === "sudo" ? 1 : 0;
+  if (i >= args.length) return null;
+  const name = shellInvocationName(args[i]);
+  if (!WRAPPED_SHELLS.has(name)) return null;
+  i++;
+  const run = (body: string): RiskTier | null => {
+    const inner = body.trim();
+    if (!inner || inner === stage.trim()) return null;
+    return classifyBashCommand(inner, new Set(), sandboxEnforced);
+  };
+  if (name === "cmd") {
+    while (i < args.length) {
+      const a = args[i];
+      const inline = /^\/[cd]:([\s\S]*)$/i.exec(a);
+      if (inline) return run(inline[1]);
+      if (/^\/[cd]$/i.test(a) || /^-[cd]$/i.test(a)) {
+        const rest = args.slice(i + 1);
+        if (rest.length === 0) return null;
+        return run(rest.join(" "));
+      }
+      i++;
+    }
+    return null;
+  }
+  const ps = name === "powershell" || name === "pwsh";
+  while (i < args.length) {
+    const a = args[i];
+    if (ps && /^-(?:encodedcommand|enc)$/i.test(a)) return "review";
+    if (/^-(?:command|c)$/i.test(a) || (!ps && /^-[A-Za-z]*c$/.test(a) && !a.startsWith("--"))) {
+      const rest = args.slice(i + 1);
+      if (rest.length === 0) return null;
+      // powershell -Command takes the rest of the line. bash -c takes one argument.
+      return run(ps ? rest.join(" ") : rest[0]);
+    }
+    if (/^-(?:file|inputformat|if|outputformat|of|executionpolicy|ep|version|workingdirectory|wd|configurationname)$/i.test(a)) {
+      i += 2;
+      continue;
+    }
+    if (a.startsWith("-")) { i++; continue; }
+    return null;
+  }
+  return null;
+}
+
+// A whole drive or the home directory. Deleting one of these is the failure
+// mode behind the public Windows wipes (Antigravity `rmdir /s /q d:\`, Codex
+// and Cursor quote bugs that collapsed a project path to `C:\` or `D:\`).
+function isCatastrophicTarget(raw: string): boolean {
+  let t = unquote(raw).trim().replace(/^\\\\\?\\/, "");
+  if (!t) return false;
+  if (t === "/" || t === "\\" || t === "~" || t === "~/" || t === "~\\") return true;
+  if (/^\$\{?(?:home|env:home|env:userprofile)\}?[\\/]?$/i.test(t)) return true;
+  if (/^%(?:userprofile|home)%[\\/]?$/i.test(t)) return true;
+  if (/^[A-Za-z]:[\\/]?$/.test(t)) return true;
+  // 8.3 short name of a profile (`C:\Users\ALICE~1`), the Claude Code home wipe.
+  if (/^[A-Za-z]:[\\/]Users[\\/][^\\/]+~\d+[\\/]?$/i.test(t)) return true;
+  return false;
+}
+
+function isCleanupTarget(target: string, vars: Set<string>): boolean {
+  const t = unquote(target);
+  if (!t || isCatastrophicTarget(t)) return false;
+  if (isEphemeralPath(t) || isEphemeralVar(t, vars) || vars.has(CREATED_PATH + t)) return true;
+  if (vars.has(TEMP_CWD) && /^[\w.-][\w./\\-]*$/.test(t) && !t.split(/[/\\]/).includes("..")) return true;
+  return isBuildOutputPath(t);
+}
+
+// `\"` between PowerShell and cmd. The backslash does not escape the quote,
+// and cmd then sees `\` (the current drive root) as its own argument. That is
+// openai/codex#57530 and the Cursor Remove-Item / rmdir reports. Do not treat
+// the visible folder (node_modules, build, Temp) as the real target.
+function isCollapsedWindowsDelete(stage: string): boolean {
+  if (!/\\"/.test(stage)) return false;
+  if (!/\b(?:Remove-Item|ri|rd|del|erase|rmdir|rm)\b/i.test(stage)) return false;
+  return /(?:-Recurse|\s\/s\b|\/s\/q\b|--recursive|-[A-Za-z]*[rR])/i.test(stage);
+}
+
+function isCmdRecurseFlag(arg: string): boolean {
+  return /^\/s(?:\/[qfa])*$/i.test(arg) || /^\/[qfa]*\/s(?:\/[qfa])*$/i.test(arg);
+}
+
+function isPsRecurseFlag(arg: string): boolean {
+  return /^-(?:r|re|rec|recu|recur|recurs|recurse)$/i.test(arg);
+}
+
+function windowsDeleteTargets(args: string[]): string[] {
+  const out: string[] = [];
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
+    if (isCmdRecurseFlag(a) || /^\/[qfa]$/i.test(a)) continue;
+    if (isPsRecurseFlag(a) || /^-(?:force|f|confirm|whatif|verbose|debug|ea)$/i.test(a)) continue;
+    const pathFlag = /^-(?:path|literalpath)$/i.exec(a);
+    if (pathFlag) {
+      if (args[i + 1]) out.push(unquote(args[++i]));
+      continue;
+    }
+    const inline = /^-(?:path|literalpath):(.+)$/i.exec(a);
+    if (inline) { out.push(unquote(inline[1])); continue; }
+    if (/^-(?:filter|include|exclude|erroraction|warningaction|informationaction|errorvariable|warningvariable|outvariable|outbuffer|pipelinevariable|credential|stream|confirm|informationvariable)$/i.test(a)) {
+      i++;
+      continue;
+    }
+    if (a.startsWith("-")) continue;
+    if (/^(?:\d|&)?>>?\S+$/.test(a)) continue;
+    out.push(unquote(a));
+  }
+  return out;
+}
+
+function tierOfWindowsDelete(invocation: string, ephemeralVars: Set<string>): RiskTier | null {
+  const args = splitArgs(invocation);
+  const cmd = (args[0] ?? "").replace(/\.exe$/i, "").toLowerCase();
+  if (!/^(?:remove-item|ri|rd|del|erase|rmdir)$/.test(cmd)) return null;
+  const rest = args.slice(1);
+  const recursive = rest.some((a) => isCmdRecurseFlag(a) || isPsRecurseFlag(a));
+  const targets = windowsDeleteTargets(rest);
+  if (targets.some((t) => isCatastrophicTarget(t))) return "high_stakes";
+  if (!recursive) {
+    // rmdir/rd without /s only remove empty directories. del, erase, and
+    // Remove-Item delete the named files even without -Recurse.
+    if (cmd === "rmdir" || cmd === "rd") return null;
+  }
+  if (targets.length === 0) return "high_stakes";
+  if (targets.every((t) => isCleanupTarget(t, ephemeralVars))) return "warning";
+  return "high_stakes";
+}
+
+// PowerShell and cmd deletes, including one nested after `{` (`if (…) { Remove-Item … }`).
+function classifyWindowsDestruction(stage: string, ephemeralVars: Set<string>): RiskTier | null {
+  const lead = stage.replace(DELETE_LEAD, "");
+  const re = /(?:^|[\n`({;]|\$\()\s*((?:Remove-Item|ri|rd|del|erase|rmdir)\b[\s\S]*?)(?=$|[;|&\n}])/gi;
+  let worst: RiskTier | null = null;
+  for (const match of lead.matchAll(re)) {
+    const tier = tierOfWindowsDelete(match[1], ephemeralVars);
+    if (tier) worst = worst ? maxTier(worst, tier) : tier;
+  }
+  return worst;
+}
+
+function classifyFindDelete(stage: string, ephemeralVars: Set<string>): RiskTier | null {
+  if (!/^find\b/.test(stage) || !/(?:^|\s)-delete\b/.test(stage)) return null;
+  const paths: string[] = [];
+  for (const arg of splitArgs(stage).slice(1)) {
+    if (arg.startsWith("-")) break;
+    paths.push(unquote(arg));
+  }
+  const targets = paths.length > 0 ? paths : ["."];
+  if (targets.every((t) => isCleanupTarget(t, ephemeralVars))) return "warning";
+  return "high_stakes";
+}
+
+function classifyGitCleanStage(stage: string, ephemeralVars: Set<string>): RiskTier | null {
+  const match = /^git\s+clean\b([\s\S]*)$/.exec(stage);
+  if (!match) return null;
+  const args = splitArgs(match[1]);
+  let force = false;
+  let dry = false;
+  const paths: string[] = [];
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (arg === "--") { paths.push(...args.slice(i + 1).map(unquote)); break; }
+    if (arg === "--force") { force = true; continue; }
+    if (arg === "--dry-run" || arg === "--dryrun") { dry = true; continue; }
+    if (arg === "--exclude" || arg === "-e") { i++; continue; }
+    if (arg.startsWith("--exclude=")) continue;
+    if (arg.startsWith("--")) continue;
+    if (arg.startsWith("-") && arg.length > 1) {
+      const flags = arg.slice(1);
+      if (flags.includes("n")) dry = true;
+      if (flags.includes("f")) force = true;
+      if (flags.includes("e")) i++;
+      continue;
+    }
+    paths.push(unquote(arg));
+  }
+  if (!force || dry) return "safe";
+  if (paths.length === 0) return ephemeralVars.has(TEMP_CWD) ? "warning" : "high_stakes";
+  if (paths.every((p) => isCleanupTarget(p, ephemeralVars))) return "warning";
+  return "high_stakes";
+}
+
+function isDiskFormat(stage: string): boolean {
+  if (/^format-volume\b/i.test(stage)) {
+    // -WhatIf prints the plan and does not format.
+    if (/(?:^|\s)-wh(?:a(?:t(?:i(?:f)?)?)?)?\b/i.test(stage)) return false;
+    return true;
+  }
+  // `format C:` / `format D: /q`. Not `npm run format`, `gofmt`, or `cargo fmt`.
+  return /^format(?:\.com)?\s+[A-Za-z]:/i.test(stage);
+}
+
+// PocketOS: curl POST of a Railway GraphQL `volumeDelete` mutation. The body
+// is data for every other curl rule, so this looks for that mutation only.
+function isInfraVolumeDeleteCurl(command: string): boolean {
+  const stage = command.trim();
+  if (!/^(?:(?:sudo|command)\s+)*(?:\w+=\S+\s+)*curl\b/.test(stage)) return false;
+  if (!/\bvolumeDelete\b/i.test(stage)) return false;
+  return /graphql|railway\.app|backboard\./i.test(stage);
 }
 
 // A curl/wget whose target host is loopback (localhost, 127.0.0.0/8, 0.0.0.0,
@@ -1363,6 +1591,10 @@ function classifyBashCommand(command: string, ephemeralVars: Set<string> = new S
   // shell pass short-circuits to `safe` (e.g. an assignment-prefixed node -e).
   const sql = findSqlInCommand(intact);
   const sqlTier: RiskTier = sql ? classifySqlSeverity(sql) : "safe";
+
+  // GraphQL volumeDelete lives in the curl body, which the shell scan blanks.
+  // Read it from the intact command. A normal POST stays review below.
+  if (isInfraVolumeDeleteCurl(intact)) return "high_stakes";
 
   return maxTier(maxTier(sqlTier, pipesToShell ? "review" : "safe"), classifyStageShellEffects(stripped, ephemeralVars, sandboxEnforced));
 }
@@ -1607,17 +1839,25 @@ function classifyStageEffects(stage: string, ephemeralVars: Set<string>, sandbox
   // → warning; any non-temp target (or the temp root itself) → high_stakes.
   // A delete word sitting in an argument (filename, branch name, echo text) is
   // NOT a deletion — that's the false positive DELETE_COMMAND_RE avoids.
+  // `\"` in a recursive delete is the PowerShell/cmd quoting collapse. The
+  // visible path is not the path cmd will delete. Ask before temp/build
+  // downgrades can hide it.
+  if (isCollapsedWindowsDelete(stage)) return "high_stakes";
   if (isEphemeralOnlyDeletion(stage, ephemeralVars)) return "warning";
   // `git -C repo …` / `git -c k=v …`: classify the subcommand without the
   // global options, so the git patterns below and in the full scan apply.
   const gitTier = classifyGitGlobalOptsStage(stage, ephemeralVars, sandboxEnforced);
   if (gitTier !== null) return gitTier;
+  const winTier = classifyWindowsDestruction(stage, ephemeralVars);
+  if (winTier) return winTier;
   if (isBuildOutputOnlyDeletion(stage.replace(DELETE_LEAD, ""))) return "warning";
   // rmdir removes only EMPTY folders (it fails on a folder with files), so no
   // data is lost and `mkdir` undoes it: a reversible local change.
+  // `rmdir /s` and `rmdir -Recurse` are recursive Windows deletes, handled above.
   const deleteStage = stage.replace(DELETE_LEAD, "");
   const rmdirArgs = deleteStage.match(/^(?:sudo\s+)?rmdir\b(.*)$/s)?.[1];
-  if (rmdirArgs !== undefined && !DELETE_COMMAND_RE.test(rmdirArgs)) return "warning";
+  if (rmdirArgs !== undefined && !DELETE_COMMAND_RE.test(rmdirArgs) &&
+      !/(?:^|\s)\/s\b|(?:^|\s)-r(?:ecurse)?\b/i.test(rmdirArgs)) return "warning";
   if (DELETE_COMMAND_RE.test(deleteStage)) return "high_stakes";
 
   // Destructive/irreversible single commands, matched at stage start with any
@@ -1636,6 +1876,11 @@ function classifyStageEffects(stage: string, ephemeralVars: Set<string>, sandbox
   // without Face ID.
   if (isRestartableKill(bareStage)) return "review";
   if (/^railway\s/.test(bareStage) && PREVIEW_FLAG_RE.test(bareStage)) return "safe";
+  const findTier = classifyFindDelete(bareStage, ephemeralVars);
+  if (findTier) return findTier;
+  const gitCleanTier = classifyGitCleanStage(bareStage, ephemeralVars);
+  if (gitCleanTier) return gitCleanTier;
+  if (isDiskFormat(bareStage)) return "high_stakes";
   for (const pattern of HIGH_STAKES_STAGE) {
     if (pattern.test(bareStage)) return "high_stakes";
   }
@@ -1680,11 +1925,10 @@ function classifyStageEffects(stage: string, ephemeralVars: Set<string>, sandbox
   const sshTier = classifySshStage(stage, sandboxEnforced);
   if (sshTier !== null) return sshTier;
 
-  // `sh -c '<shell>'` / `bash -c "<shell>"` runs the quoted argument AS shell —
-  // recurse so its effect is classified by the same rules (mirrors ssh). This
-  // is why the command-position delete scan above can ignore quoted text: a real
-  // shell-out like `bash -c 'rm -rf /important'` is caught HERE, by re-running
-  // the body as a command, while `echo 'rm …'` (data) is not.
+  // `sh -c` / `bash -c`, `powershell -Command` / `pwsh -c`, and `cmd /c` run
+  // the following text as a command. Recurse so its effect is classified by
+  // the same rules (mirrors ssh). A real shell-out like `bash -c 'rm -rf /important'`
+  // or `cmd /c rmdir /s /q d:\` is caught here. `echo 'rm …'` is data, not a shell-out.
   const shellCTier = classifyShellCStage(stage, sandboxEnforced);
   if (shellCTier !== null) return shellCTier;
 

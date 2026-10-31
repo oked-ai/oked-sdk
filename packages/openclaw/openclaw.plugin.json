@@ -1,7 +1,7 @@
 {
   "id": "oked",
   "name": "OKed",
-  "description": "Human approval layer for AI agents - freezes the agent before sensitive tool calls and asks for human approval via Telegram or the OKed dashboard.",
+  "description": "Pauses risky OpenClaw actions, like rm -rf, force-push, destructive SQL and prod deploys, until you approve them in Telegram or on the OKed web dashboard. Everything else just runs. Every decision gets a signed receipt.",
   "categories": ["security"],
   "activation": {
     "onStartup": true
@@ -36,6 +36,10 @@
         "type": "integer",
         "minimum": 1000,
         "maximum": 1800000
+      },
+      "sendScriptContent": {
+        "type": "boolean",
+        "default": true
       }
     }
   },
@@ -65,6 +69,10 @@
     "timeoutMs": {
       "label": "Approval Timeout (ms)",
       "help": "How long to wait for a human decision before the action is denied. Defaults to the SDK's value of 630000 (10.5 minutes, just above the backend's 10 minute expiry); max 1800000 (30 minutes)."
+    },
+    "sendScriptContent": {
+      "label": "Send script excerpt",
+      "help": "When a shell command runs a local Python, Node, Ruby, Perl, Deno, or Bun script, include the first 4096 bytes in the approval so you can see what will run. Set false to omit it. OKED_SEND_SCRIPT_CONTENT=0 does the same when this is unset."
     }
   }
 }

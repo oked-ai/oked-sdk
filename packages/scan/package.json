@@ -1,6 +1,6 @@
 {
   "name": "@oked/scan",
-  "version": "0.6.24",
+  "version": "0.6.25",
   "description": "Local audit of Claude Code and Codex command history against OKed's default approval rules",
   "type": "module",
   "main": "dist/index.js",
@@ -51,7 +51,7 @@
     "access": "public"
   },
   "dependencies": {
-    "@oked/sdk": "0.6.24"
+    "@oked/sdk": "0.6.25"
   },
   "devDependencies": {
     "@types/node": "^26.6.5",

@@ -1,7 +1,7 @@
 {
   "name": "oked",
   "displayName": "OKed",
-  "version": "0.6.24",
+  "version": "0.6.25",
   "description": "Ask a person before Claude Code runs a risky action. Decisions happen in Telegram or on the web dashboard.",
   "author": {
     "name": "OKed",

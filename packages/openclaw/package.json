@@ -1,7 +1,7 @@
 {
   "name": "@oked/openclaw",
-  "version": "0.6.24",
-  "description": "OKed plugin for OpenClaw. Gates skill and tool calls behind a human approval push to your phone.",
+  "version": "0.6.25",
+  "description": "Pauses risky OpenClaw actions, like rm -rf, force-push, destructive SQL and prod deploys, until you approve them in Telegram or on the OKed web dashboard. Everything else just runs. Every decision gets a signed receipt.",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -21,7 +21,7 @@
     "prebuild": "npm run build --workspace=@oked/sdk",
     "build": "tsc",
     "dev": "tsc --watch",
-    "test": "npm run build && node src/clawhub-metadata.test.mjs && node src/smoke.test.mjs",
+    "test": "npm run build && node src/clawhub-metadata.test.mjs && node src/script-excerpt.test.mjs && node src/smoke.test.mjs",
     "prepublishOnly": "npm run build"
   },
   "openclaw": {
@@ -29,20 +29,21 @@
       "./dist/index.js"
     ],
     "compat": {
-      "pluginApi": ">=2026.4.20"
+      "pluginApi": ">=2026.5.4",
+      "minGatewayVersion": "2026.5.4"
     },
     "build": {
-      "openclawVersion": "2026.4.20"
+      "openclawVersion": "2026.5.4"
     },
     "install": {
       "clawhubSpec": "@oked/openclaw",
       "npmSpec": "@oked/openclaw",
       "defaultChoice": "clawhub",
-      "minHostVersion": ">=2026.4.20"
+      "minHostVersion": ">=2026.5.4"
     }
   },
   "peerDependencies": {
-    "openclaw": ">=2026.4.20"
+    "openclaw": ">=2026.5.4"
   },
   "peerDependenciesMeta": {
     "openclaw": {
@@ -50,7 +51,7 @@
     }
   },
   "dependencies": {
-    "@oked/sdk": "0.6.24"
+    "@oked/sdk": "0.6.25"
   },
   "devDependencies": {
     "@types/node": "^26.6.5",
@@ -75,7 +76,8 @@
   "homepage": "https://github.com/oked-ai/oked-sdk/tree/main/packages/openclaw#readme",
   "license": "Apache-2.0",
   "engines": {
-    "node": ">=18"
+    "node": ">=18",
+    "openclaw": ">=2026.5.4"
   },
   "publishConfig": {
     "access": "public"

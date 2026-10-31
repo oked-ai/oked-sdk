@@ -1,6 +1,6 @@
 // ClawHub publish metadata. No test runner. Fails if the package would not
 // validate, if the public listing would label the internal service override,
-// or if the release workflow could fail an npm publish when the token is absent.
+// or if the release workflow publishes ClawHub with a manual token.
 
 import { execFileSync } from "node:child_process";
 import { strict as assert } from "node:assert";
@@ -13,13 +13,21 @@ const repoRoot = join(pkgDir, "..", "..");
 const pkg = JSON.parse(readFileSync(join(pkgDir, "package.json"), "utf8"));
 const manifest = JSON.parse(readFileSync(join(pkgDir, "openclaw.plugin.json"), "utf8"));
 
-assert.equal(pkg.openclaw.compat.pluginApi, ">=2026.4.20");
-assert.equal(pkg.openclaw.build.openclawVersion, "2026.4.20");
+assert.equal(pkg.openclaw.compat.pluginApi, ">=2026.5.4");
+assert.equal(pkg.openclaw.compat.minGatewayVersion, "2026.5.4");
+assert.equal(pkg.openclaw.build.openclawVersion, "2026.5.4");
 assert.equal(pkg.openclaw.install.clawhubSpec, "@oked/openclaw");
 assert.equal(pkg.openclaw.install.npmSpec, "@oked/openclaw");
 assert.equal(pkg.openclaw.install.defaultChoice, "clawhub");
-assert.equal(pkg.openclaw.install.minHostVersion, ">=2026.4.20");
-assert.equal(pkg.peerDependencies.openclaw, ">=2026.4.20");
+assert.equal(pkg.openclaw.install.minHostVersion, ">=2026.5.4");
+assert.equal(pkg.peerDependencies.openclaw, ">=2026.5.4");
+assert.equal(pkg.engines.openclaw, ">=2026.5.4");
+assert.equal(pkg.description.includes("phone"), false);
+assert.equal(manifest.description, pkg.description);
+assert.ok(pkg.description.length < 1024);
+assert.equal(typeof manifest.configSchema.properties.sendScriptContent, "object");
+const { default: plugin } = await import("../dist/index.js");
+assert.equal(plugin.description, pkg.description);
 assert.deepEqual(pkg.openclaw.extensions, ["./dist/index.js"]);
 assert.ok(pkg.files.includes("assets"), "assets/icon.png must ship in the npm pack");
 assert.ok(pkg.files.includes("openclaw.plugin.json"));
@@ -79,6 +87,13 @@ const openclawReadme = readFileSync(join(pkgDir, "README.md"), "utf8");
 assert.ok(openclawReadme.includes("openclaw plugins install @oked/openclaw"));
 assert.ok(openclawReadme.includes("npm install -g @oked/openclaw-cli"));
 assert.ok(openclawReadme.includes("The iPhone app is coming soon."));
+assert.ok(openclawReadme.includes("## What OKed sends"));
+assert.ok(openclawReadme.includes("OKED_SEND_SCRIPT_CONTENT=0"));
+assert.ok(openclawReadme.includes("OKED_STRICT_FAIL_CLOSED=1"));
+assert.ok(openclawReadme.includes("2026.5.4"));
+assert.equal(openclawReadme.includes("2026.4.20"), false);
+assert.equal(/push to your phone|from your phone/i.test(openclawReadme), false);
+assert.ok(openclawReadme.includes("free during beta"));
 
 const rootReadme = readFileSync(join(repoRoot, "README.md"), "utf8");
 assert.ok(rootReadme.includes("openclaw plugins install @oked/openclaw"));
@@ -102,17 +117,27 @@ const changelog = readFileSync(join(repoRoot, "CHANGELOG.md"), "utf8");
 const unreleased = changelog.split("## 0.6.22")[0];
 assert.ok(unreleased.includes("openclaw plugins install @oked/openclaw"));
 assert.ok(unreleased.includes("CLAWHUB_TOKEN"));
+const unreleasedOnly = changelog.split("## Unreleased")[1].split("## 0.6.25")[0];
+assert.ok(unreleasedOnly.includes("workflow_dispatch"));
+assert.ok(unreleasedOnly.includes("clawhub_only"));
+assert.ok(unreleasedOnly.includes("id-token: write"));
+assert.ok(unreleasedOnly.includes("tag=v0.6.25"));
 
 const workflow = readFileSync(join(repoRoot, ".github/workflows/publish.yml"), "utf8");
-assert.ok(
-  workflow.includes(
-    "CLAWHUB_TOKEN is not set. Skipping ClawHub publish for @oked/openclaw.",
-  ),
-);
-assert.ok(workflow.includes("matrix.package == 'openclaw'"));
+assert.ok(workflow.includes("publish-clawhub:"));
+assert.ok(workflow.includes("id-token: write"));
+assert.ok(workflow.includes("clawhub_only"));
+assert.ok(workflow.includes("is already on npm. Skipping npm publish."));
 assert.ok(workflow.includes("--family code-plugin"));
-assert.ok(workflow.includes("--owner oked"));
 assert.ok(workflow.includes("clawhub@0.24.1"));
+assert.equal(workflow.includes("secrets.CLAWHUB_TOKEN"), false);
+assert.equal(workflow.includes("--manual-override-reason"), false);
+assert.equal(workflow.includes("--owner"), false);
 assert.equal(workflow.includes("clawhub login"), false);
+const clawhubJob = workflow.split("publish-clawhub:")[1];
+assert.ok(clawhubJob.includes('--source-commit "${{ github.sha }}"'));
+assert.ok(clawhubJob.includes('--source-ref "${{ github.ref }}"'));
+assert.equal(clawhubJob.includes("git rev-parse HEAD"), false);
+assert.ok(releasing.includes("Trusted publishes must not override the package owner"));
 
 console.log("OK ClawHub metadata");

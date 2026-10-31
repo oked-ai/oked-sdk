@@ -57,7 +57,7 @@ Set `OKED_REQUIRE_RECEIPT=0` only for a backend that does not sign receipts. Rec
 
 ## Risk tiers
 
-`safe`, `warning`, `review`, and `high_stakes`. `classify(tool_name, tool_input)` returns a tier. Unknown tool names are `review`. A string `command` or `cmd` is classified as a shell command. A path plus a content string is a file write: `warning`, or `review` on a sensitive path.
+`safe`, `warning`, `review`, and `high_stakes`. `classify(tool_name, tool_input)` returns a tier. Unknown tool names are `review`. A string `command` or `cmd` is classified as a shell command. `rm` of non-temp data, PowerShell `Remove-Item -Recurse`, `rmdir /s`, `del /s`, `format X:`, a drive root or home directory, and a GraphQL `volumeDelete` are `high_stakes`. A temp or build-output delete is `warning`. `bash -c`, `powershell -Command`, and `cmd /c` are classified by the inner command. A path plus a content string is a file write: `warning`, or `review` on a sensitive path.
 
 `apply_rules` evaluates user rules. The first match wins. Rules match kind, title, target, body, and the working directory.
 
