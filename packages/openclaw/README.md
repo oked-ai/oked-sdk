@@ -9,20 +9,22 @@ Optional peer dependency: `openclaw` >= 2026.4.20. A denial returns `{ block: tr
 
 ## Install
 
+OpenClaw installs plugins from ClawHub first:
+
 ```bash
-npm install -g @oked/openclaw @oked/openclaw-cli
+openclaw plugins install @oked/openclaw
+```
+
+Pair this machine with [`@oked/openclaw-cli`](../openclaw-cli). The CLI needs the `openclaw` command on your PATH. It pairs this device (or reuses an existing API key), sets `minTier` (a terminal prompt when none is set), writes the entry into `~/.openclaw/openclaw.json`, and offers to restart the gateway.
+
+```bash
+npm install -g @oked/openclaw-cli
 oked-openclaw init
 ```
 
-The CLI ([`@oked/openclaw-cli`](../openclaw-cli)) needs the `openclaw` command on your PATH. It runs `openclaw plugins install --link` against this package, pairs this device (or reuses an existing API key), sets `minTier` (a terminal prompt when none is set), writes the entry into `~/.openclaw/openclaw.json`, and offers to restart the gateway.
+If this package is not already installed, and there is no local checkout, `oked-openclaw init` runs `openclaw plugins install @oked/openclaw`. A checkout or a global npm copy is still linked with `openclaw plugins install --link`.
 
-To wire it by hand:
-
-```bash
-openclaw plugins install --link <path-to-this-package>
-```
-
-Then in `~/.openclaw/openclaw.json`:
+To wire the config by hand after the ClawHub install, edit `~/.openclaw/openclaw.json`:
 
 ```json
 {
