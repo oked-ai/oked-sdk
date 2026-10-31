@@ -13,6 +13,7 @@ export {
   nextStep,
   ScanUsageError,
   type ScanOptions,
+  type FormatReportOptions,
   type ScanReport,
   type CommandRow,
   type RiskyGroup,

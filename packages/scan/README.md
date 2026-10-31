@@ -34,7 +34,7 @@ Tiers come from `classify()` in [`@oked/sdk`](../sdk), the same function the hoo
 
 `review` and `high_stakes` would have paused for a person. `warning` and `safe` would have run.
 
-Claude Code is classified with the Bash sandbox not containing child processes, which is the default unless you turn the sandbox on and set `allowUnsandboxedCommands` to false. Test runners and scripts (`npm test`, `cargo test`, `npx`, a script file) then count as `review`. Codex is classified the way [`@oked/codex`](../codex) classifies commands: that option is omitted, so the same runners stay allowed. One command can therefore differ by host. The report says so.
+Claude Code is classified with the Bash sandbox not containing child processes, which is the default unless you turn the sandbox on and set `allowUnsandboxedCommands` to false. Test runners and scripts (`npm test`, `cargo test`, `npx`, a script file) then count as `review`. Codex is classified the way [`@oked/codex`](../codex) classifies commands: that option is omitted, so the same runners stay allowed. One command can therefore differ by host. `oked-scan --verbose` prints these notes. The default text report leaves them out.
 
 Categories are the classifier's operation kinds (`file_delete`, `git_force_push`, `npm_test`, and the rest), from `describeFields()`.
 
@@ -42,7 +42,7 @@ Commands in the report are truncated. Values that look like tokens, passwords, o
 
 ## Next step
 
-There is no `@oked/cli` package. The last line of the report is the install command for the history that was found:
+There is no `@oked/cli` package. The report ends with how many commands would have paused, the two or three most common high-stakes kinds in plain words (force-push, rm -rf, destructive SQL, prod deploy, and so on), then the install command for the history that was found, then `https://oked.ai`. If nothing would have paused, it says so and does not invent a count. A short line says decisions happen in Telegram or on the web dashboard. The iPhone app is coming soon.
 
 | History found | Command |
 |---|---|
@@ -60,7 +60,8 @@ Claude Code can also be installed with no global package. In Claude Code: `/plug
 |---|---|
 | `--path <dir>` | Read this directory instead of your home directory. A home layout, `~/.claude/projects`, `~/.codex/sessions`, or a folder of transcript files. |
 | `--since <days>` | Only commands timestamped in the last `<days>` days. Commands with no timestamp are still included. |
-| `--json` | Print the report as JSON. |
+| `--verbose` | Print how commands are classified. The default text report leaves those notes out. |
+| `--json` | Print the report as JSON. This ignores `--verbose`. |
 | `--version` | Print the package version. |
 | `-h`, `--help` | Show the usage text. |
 
@@ -68,7 +69,7 @@ Exit code 0 when the report is printed, including when no transcripts were found
 
 ## Sample
 
-The counts below are the fixture transcripts in this package (`test/fixtures`), not a person's machine. `npm test` pauses for Claude Code and does not pause for Codex, because those are the two defaults. `vercel --prod` is `high_stakes` with kind `unknown_bash`: the describer has no tighter label, and the tier is what pauses the command. The Claude Code curl is past the top 8. In the JSON report it is `curl -X POST https://example.com/hook -H "Authorization: Bearer [redacted]" -d hi`.
+The counts below are the fixture transcripts in this package (`test/fixtures`), not a person's machine. `npm test` pauses for Claude Code and does not pause for Codex, because those are the two defaults. `vercel --prod` is `high_stakes` with kind `unknown_bash`: the describer has no tighter label, and the tier is what pauses the command. The closing line names kinds that have plain words, so it counts the `rm -rf` and force-push commands and does not call `unknown_bash` a prod deploy. The Claude Code curl is past the top 8. In the JSON report it is `curl -X POST https://example.com/hook -H "Authorization: Bearer [redacted]" -d hi`. An empty history ends with a different closing line, and it does not invent a count.
 
 <!-- fixture-report -->
 ```
@@ -106,13 +107,45 @@ Top risky commands
     1  codex        review       http_post          bash -lc 'curl -X POST https://example.com/hook -d hi'
   Showing 8 of 10. Re-run with --json for every paused command.
 
-Tiers come from @oked/sdk classify(), the same function the hooks call. Custom rules are not applied.
-A command would have paused when the tier is review or high_stakes. warning and safe would have run.
-Claude Code is classified with the Bash sandbox not containing child processes, which is the default. Test runners and scripts then count as review.
-Codex is classified the way the Codex hook classifies commands. Those runners stay allowed there.
 Decisions happen in Telegram or on the web dashboard (https://oked.ai/dashboard). The iPhone app is coming soon.
 
-Next: npm install -g @oked/claude-code @oked/codex && oked init && oked-codex init
+OKed would have paused 10 of these commands, including 3 rm -rf and 2 force-pushes.
+Get a yes/no in Telegram before your agent runs them:
+  npm install -g @oked/claude-code @oked/codex && oked init && oked-codex init
+https://oked.ai
+```
+
+An empty home, with no transcript directory, ends like this. The zero counts in the table are the real totals. The closing line does not invent a paused count.
+
+<!-- empty-report -->
+```
+OKed scan 0.6.24
+Local only. This scan does not use the network and does not send telemetry.
+
+Claude Code   no transcripts at ~/.claude/projects
+Codex CLI     no sessions at ~/.codex/sessions
+Window        all history
+
+Commands                0
+Would have paused       0
+  high_stakes           0
+  review                0
+Would have run          0
+  warning               0
+  safe                  0
+
+Paused by category
+  (none)
+
+Top risky commands
+  (none)
+
+Decisions happen in Telegram or on the web dashboard (https://oked.ai/dashboard). The iPhone app is coming soon.
+
+No risky commands found in this history, and OKed would pause things like rm -rf, force-push and prod deploys.
+Get a yes/no in Telegram before your agent runs them:
+  npm install -g @oked/claude-code && oked init
+https://oked.ai
 ```
 
 ## License

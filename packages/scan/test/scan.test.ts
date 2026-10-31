@@ -18,6 +18,8 @@ import {
   redactSecrets,
   scan,
   ScanUsageError,
+  type CommandRow,
+  type ScanReport,
 } from "../src/index.js";
 
 const require = createRequire(import.meta.url);
@@ -192,11 +194,31 @@ describe("fixture transcripts", () => {
     assert.match(text, /Local only\. This scan does not use the network and does not send telemetry\./);
     assert.match(text, /Would have paused/);
     assert.match(text, /high_stakes/);
-    assert.match(text, /Next: npm install -g @oked\/claude-code @oked\/codex && oked init && oked-codex init/);
+    assert.match(text, /OKed would have paused 10 of these commands, including 3 rm -rf and 2 force-pushes\./);
+    assert.match(text, /Get a yes\/no in Telegram before your agent runs them:\n {2}npm install -g @oked\/claude-code @oked\/codex && oked init && oked-codex init\nhttps:\/\/oked\.ai\n/);
+    assert.equal(text.includes("Next:"), false);
     assert.equal(text.includes(SECRET), false);
     assert.equal(text.includes("\u2014"), false);
+    assert.equal(text.includes("oked.ai?"), false);
+    assert.equal(text.includes("utm_"), false);
     assert.match(text, /The iPhone app is coming soon/);
     assert.match(text, /https:\/\/oked\.ai\/dashboard/);
+    assert.equal(text.includes("Tiers come from"), false);
+    assert.equal(text.includes("Bash sandbox"), false);
+    assert.equal(text.includes("Codex hook"), false);
+    assert.equal(report.notes.some((note) => note.startsWith("Tiers come from")), true);
+    assert.equal(report.notes.some((note) => note.includes("Bash sandbox")), true);
+    assert.equal(report.notes.some((note) => note.includes("Codex hook")), true);
+    assert.equal(report.notes.at(-1)?.includes("The iPhone app is coming soon"), true);
+
+    const verbose = formatReport(report, { verbose: true });
+    assert.match(verbose, /Tiers come from @oked\/sdk classify\(\), the same function the hooks call\. Custom rules are not applied\./);
+    assert.match(verbose, /A command would have paused when the tier is review or high_stakes\. warning and safe would have run\./);
+    assert.match(verbose, /Claude Code is classified with the Bash sandbox not containing child processes/);
+    assert.match(verbose, /Codex is classified the way the Codex hook classifies commands/);
+    assert.match(verbose, /OKed would have paused 10 of these commands, including 3 rm -rf and 2 force-pushes\./);
+    assert.equal(verbose.split("The iPhone app is coming soon").length - 1, 1);
+    assert.equal(verbose.split("Tiers come from").length - 1, 1);
   });
 
   it("accepts a projects directory or a sessions directory as --path", async () => {
@@ -206,10 +228,14 @@ describe("fixture transcripts", () => {
     assert.equal(claudeOnly.hosts["claude-code"].commands, 9);
     assert.equal(claudeOnly.hosts.codex.present, false);
     assert.equal(claudeOnly.next, "npm install -g @oked/claude-code && oked init");
+    assert.match(formatReport(claudeOnly), / {2}npm install -g @oked\/claude-code && oked init\nhttps:\/\/oked\.ai\n/);
+    assert.equal(formatReport(claudeOnly).includes("@oked/codex"), false);
     const codexOnly = await scan({ root: sessions, explicitRoot: true, home: fixtureHome, now: NOW });
     assert.equal(codexOnly.hosts.codex.commands, 7);
     assert.equal(codexOnly.hosts["claude-code"].present, false);
     assert.equal(codexOnly.next, "npm install -g @oked/codex && oked-codex init");
+    assert.match(formatReport(codexOnly), / {2}npm install -g @oked\/codex && oked-codex init\nhttps:\/\/oked\.ai\n/);
+    assert.equal(formatReport(codexOnly).includes("@oked/claude-code"), false);
   });
 
   it("matches the sample printed in the README", async () => {
@@ -222,6 +248,18 @@ describe("fixture transcripts", () => {
     const report = await scan({ root: fixtureHome, explicitRoot: true, home: fixtureHome, now: NOW });
     assert.equal(sample, formatReport(report));
   });
+
+  it("matches the empty sample printed in the README", async () => {
+    const readme = readFileSync(join(pkgRoot, "README.md"), "utf8");
+    const marker = readme.indexOf("<!-- empty-report -->");
+    assert.ok(marker > 0);
+    const open = readme.indexOf("```\n", marker);
+    const close = readme.indexOf("\n```", open + 4);
+    const sample = readme.slice(open + 4, close + 1);
+    const root = mkdtempSync(join(tmpdir(), "oked-scan-empty-readme-"));
+    const report = await scan({ root, explicitRoot: false, home: root, now: NOW });
+    assert.equal(sample, formatReport(report));
+  });
 });
 
 describe("missing directories", () => {
@@ -232,8 +270,18 @@ describe("missing directories", () => {
     assert.equal(report.hosts.codex.present, false);
     assert.equal(report.totals.commands, 0);
     assert.equal(report.next, "npm install -g @oked/claude-code && oked init");
-    assert.match(formatReport(report), /no transcripts at ~\/\.claude\/projects/);
-    assert.match(formatReport(report), /no sessions at ~\/\.codex\/sessions/);
+    const text = formatReport(report);
+    assert.match(text, /no transcripts at ~\/\.claude\/projects/);
+    assert.match(text, /no sessions at ~\/\.codex\/sessions/);
+    assert.match(text, /No risky commands found in this history, and OKed would pause things like rm -rf, force-push and prod deploys\./);
+    assert.match(text, /Get a yes\/no in Telegram before your agent runs them:\n {2}npm install -g @oked\/claude-code && oked init\nhttps:\/\/oked\.ai\n/);
+    assert.equal(text.includes("OKed would have paused"), false);
+    assert.equal(text.includes("including"), false);
+    assert.equal(text.includes("Tiers come from"), false);
+    assert.match(text, /The iPhone app is coming soon/);
+    const verbose = formatReport(report, { verbose: true });
+    assert.match(verbose, /Tiers come from @oked\/sdk classify\(\)/);
+    assert.match(verbose, /No risky commands found in this history/);
   });
 
   it("rejects a --path that does not exist", async () => {
@@ -314,7 +362,9 @@ describe("cli", () => {
     assert.match(result.stdout, /--since/);
     assert.match(result.stdout, /--path/);
     assert.match(result.stdout, /--json/);
+    assert.match(result.stdout, /--verbose/);
     assert.match(result.stdout, /does not use the network/);
+    assert.match(result.stdout, /https:\/\/oked\.ai/);
   });
 
   it("rejects a bad --since and a missing --path", () => {
@@ -334,8 +384,134 @@ describe("cli", () => {
     const quiet = run([], { HOME: empty });
     assert.equal(quiet.status, 0, quiet.stderr);
     assert.match(quiet.stdout, /no transcripts/);
-    assert.match(quiet.stdout, /Next: npm install -g @oked\/claude-code && oked init/);
+    assert.match(quiet.stdout, /No risky commands found in this history, and OKed would pause things like rm -rf, force-push and prod deploys\./);
+    assert.match(quiet.stdout, / {2}npm install -g @oked\/claude-code && oked init\nhttps:\/\/oked\.ai\n/);
+    assert.equal(quiet.stdout.includes("OKed would have paused"), false);
+    assert.equal(quiet.stdout.includes("Tiers come from"), false);
     assert.equal(quiet.stdout.includes("\u2014"), false);
+
+    const shown = run(["--path", fixtureHome, "--verbose"]);
+    assert.equal(shown.status, 0, shown.stderr);
+    assert.match(shown.stdout, /Tiers come from @oked\/sdk classify\(\)/);
+    assert.match(shown.stdout, /Bash sandbox/);
+    assert.match(shown.stdout, /Codex is classified the way the Codex hook/);
+    assert.match(shown.stdout, /OKed would have paused 10 of these commands, including 3 rm -rf and 2 force-pushes\./);
+    const plain = run(["--path", fixtureHome]);
+    assert.equal(plain.status, 0, plain.stderr);
+    assert.equal(plain.stdout.includes("Tiers come from"), false);
+    assert.equal(plain.stdout.includes("Bash sandbox"), false);
+    assert.match(plain.stdout, /OKed would have paused 10 of these commands/);
+
+    const jsonVerbose = run(["--path", fixtureHome, "--json", "--verbose"]);
+    assert.equal(jsonVerbose.status, 0, jsonVerbose.stderr);
+    const verboseReport = JSON.parse(jsonVerbose.stdout) as { notes: string[]; next: string };
+    assert.equal(verboseReport.notes.some((note) => note.startsWith("Tiers come from")), true);
+    assert.equal(verboseReport.next, report.next);
+    assert.equal(jsonVerbose.stdout.includes("Get a yes/no"), false);
+  });
+});
+
+describe("closing call to action", () => {
+  const decision = "Decisions happen in Telegram or on the web dashboard (https://oked.ai/dashboard). The iPhone app is coming soon.";
+  const classification = "Tiers come from @oked/sdk classify(), the same function the hooks call. Custom rules are not applied.";
+
+  function row(category: string, tier: CommandRow["tier"] = "high_stakes"): CommandRow {
+    return {
+      host: "claude-code",
+      tier,
+      category,
+      command: category,
+      paused: tier === "review" || tier === "high_stakes",
+      timestamp: null,
+    };
+  }
+
+  function reportFor(commands: CommandRow[], paused = commands.filter((command) => command.paused).length): ScanReport {
+    return {
+      version: "0.0.0",
+      classifier: "v3",
+      localOnly: true,
+      network: false,
+      telemetry: false,
+      generatedAt: NOW.toISOString(),
+      sinceDays: null,
+      hosts: {
+        "claude-code": { directory: "~/.claude/projects", present: true, files: 1, commands: commands.length },
+        codex: { directory: "~/.codex/sessions", present: false, files: 0, commands: 0 },
+      },
+      totals: {
+        commands: commands.length,
+        paused,
+        byTier: { safe: 0, warning: 0, review: 0, high_stakes: 0 },
+        byCategory: {},
+      },
+      pausedByCategory: {},
+      topRisky: [],
+      commands,
+      badLines: 0,
+      unreadableFiles: 0,
+      notes: [classification, decision],
+      next: "npm install -g @oked/claude-code && oked init",
+    };
+  }
+
+  function closing(commands: CommandRow[]): string {
+    const text = formatReport(reportFor(commands));
+    const line = text.split("\n").find((entry) => entry.startsWith("OKed would have paused") || entry.startsWith("No risky"));
+    assert.ok(line, text);
+    return line;
+  }
+
+  it("names the most common high-stakes kinds and stops at three", () => {
+    const commands = [
+      ...Array.from({ length: 4 }, () => row("file_delete")),
+      ...Array.from({ length: 3 }, () => row("git_force_push")),
+      ...Array.from({ length: 2 }, () => row("deploy")),
+      row("git_reset_hard"),
+      row("unknown_bash"),
+      row("npm_test", "review"),
+    ];
+    assert.equal(
+      closing(commands),
+      "OKed would have paused 12 of these commands, including 4 rm -rf, 3 force-pushes and 2 prod deploys.",
+    );
+  });
+
+  it("groups destructive SQL and uses the singular when there is one", () => {
+    assert.equal(
+      closing([row("sql_drop"), row("sql_truncate"), row("sql_delete_all_rows")]),
+      "OKed would have paused 3 of these commands, including 3 destructive SQL.",
+    );
+    assert.equal(
+      closing([row("git_force_push")]),
+      "OKed would have paused 1 of these commands, including 1 force-push.",
+    );
+  });
+
+  it("does not invent a category when only review commands paused", () => {
+    assert.equal(
+      closing([row("npm_test", "review"), row("http_post", "review")]),
+      "OKed would have paused 2 of these commands.",
+    );
+  });
+
+  it("breaks ties by the plain phrase", () => {
+    assert.equal(
+      closing([row("file_delete"), row("file_delete"), row("git_force_push"), row("git_force_push")]),
+      "OKed would have paused 4 of these commands, including 2 force-pushes and 2 rm -rf.",
+    );
+  });
+
+  it("hides classification notes unless verbose is set", () => {
+    const report = reportFor([row("file_delete")]);
+    const plain = formatReport(report);
+    const verbose = formatReport(report, { verbose: true });
+    assert.equal(plain.includes(classification), false);
+    assert.match(verbose, /Tiers come from @oked\/sdk classify\(\)/);
+    assert.equal(plain.split(decision).length - 1, 1);
+    assert.equal(verbose.split(decision).length - 1, 1);
+    assert.equal(verbose.includes("from your phone"), false);
+    assert.equal(verbose.includes("push to your phone"), false);
   });
 });
 

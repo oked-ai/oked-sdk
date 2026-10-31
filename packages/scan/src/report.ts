@@ -16,13 +16,54 @@ const TIER_RANK: Record<RiskTier, number> = {
   safe: 3,
 };
 
-const NOTES = [
+const CLASSIFICATION_NOTES = [
   "Tiers come from @oked/sdk classify(), the same function the hooks call. Custom rules are not applied.",
   "A command would have paused when the tier is review or high_stakes. warning and safe would have run.",
   "Claude Code is classified with the Bash sandbox not containing child processes, which is the default. Test runners and scripts then count as review.",
   "Codex is classified the way the Codex hook classifies commands. Those runners stay allowed there.",
-  "Decisions happen in Telegram or on the web dashboard (https://oked.ai/dashboard). The iPhone app is coming soon.",
 ];
+
+const DECISION_NOTE =
+  "Decisions happen in Telegram or on the web dashboard (https://oked.ai/dashboard). The iPhone app is coming soon.";
+
+const NOTES = [...CLASSIFICATION_NOTES, DECISION_NOTE];
+
+/** How many high-stakes kinds to name in the closing line. */
+const NAMED_CATEGORIES = 3;
+
+/**
+ * Plain words for high-stakes kinds. Kinds that share a phrase are counted
+ * together. Kinds with no entry (including unknown_bash) stay out of the
+ * sentence so the report does not invent a name.
+ */
+const PLAIN_HIGH_STAKES: Record<string, { one: string; many: string }> = {
+  file_delete: { one: "rm -rf", many: "rm -rf" },
+  git_force_push: { one: "force-push", many: "force-pushes" },
+  git_reset_hard: { one: "hard reset", many: "hard resets" },
+  git_clean: { one: "git clean", many: "git clean" },
+  git_checkout: { one: "discarded change", many: "discarded changes" },
+  git_branch_delete: { one: "branch delete", many: "branch deletes" },
+  sql_drop: { one: "destructive SQL", many: "destructive SQL" },
+  sql_truncate: { one: "destructive SQL", many: "destructive SQL" },
+  sql_delete_rows: { one: "destructive SQL", many: "destructive SQL" },
+  sql_delete_all_rows: { one: "destructive SQL", many: "destructive SQL" },
+  sql_update_every_row: { one: "destructive SQL", many: "destructive SQL" },
+  deploy: { one: "prod deploy", many: "prod deploys" },
+  npx_deploy: { one: "prod deploy", many: "prod deploys" },
+  docker_rm: { one: "docker rm", many: "docker rm" },
+  docker_rmi: { one: "docker image removal", many: "docker image removals" },
+  docker_prune: { one: "docker prune", many: "docker prune" },
+  docker_down: { one: "docker compose down", many: "docker compose down" },
+  npm_publish: { one: "npm publish", many: "npm publish" },
+  npm_unpublish: { one: "npm unpublish", many: "npm unpublish" },
+  chmod_777: { one: "chmod 777", many: "chmod 777" },
+  http_pipe_to_shell: { one: "pipe to a shell", many: "pipes to a shell" },
+  kill_process: { one: "process kill", many: "process kills" },
+  email_delete: { one: "email delete", many: "email deletes" },
+  email_purge: { one: "mailbox purge", many: "mailbox purges" },
+  payment_charge: { one: "payment", many: "payments" },
+  payment_create: { one: "payment", many: "payments" },
+};
 
 export class ScanUsageError extends Error {
   constructor(message: string) {
@@ -92,6 +133,11 @@ export interface ScanOptions {
   home?: string;
 }
 
+export interface FormatReportOptions {
+  /** Print the classification notes. The default text report leaves them out. */
+  verbose?: boolean;
+}
+
 function packageVersion(): string {
   const path = join(dirname(fileURLToPath(import.meta.url)), "..", "package.json");
   const json = JSON.parse(readFileSync(path, "utf8")) as { version?: string };
@@ -134,7 +180,40 @@ function hostLine(label: string, host: HostSummary, missing: string): string {
   return `${name}${host.commands} ${commands} in ${host.files} ${files}`;
 }
 
-export function formatReport(report: ScanReport): string {
+function englishList(parts: string[]): string {
+  if (parts.length <= 1) return parts[0] ?? "";
+  if (parts.length === 2) return `${parts[0]} and ${parts[1]}`;
+  return `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}`;
+}
+
+/** The two or three most common high-stakes kinds, in plain words. */
+function namedHighStakes(commands: CommandRow[]): string[] {
+  const buckets = new Map<string, { count: number; one: string; many: string }>();
+  for (const row of commands) {
+    if (row.tier !== "high_stakes") continue;
+    const plain = PLAIN_HIGH_STAKES[row.category];
+    if (!plain) continue;
+    const existing = buckets.get(plain.many);
+    if (existing) existing.count += 1;
+    else buckets.set(plain.many, { count: 1, one: plain.one, many: plain.many });
+  }
+  return [...buckets.values()]
+    .sort((a, b) => b.count - a.count || a.one.localeCompare(b.one))
+    .slice(0, NAMED_CATEGORIES)
+    .map((bucket) => `${bucket.count} ${bucket.count === 1 ? bucket.one : bucket.many}`);
+}
+
+function closingLine(report: ScanReport): string {
+  if (report.totals.paused === 0) {
+    return "No risky commands found in this history, and OKed would pause things like rm -rf, force-push and prod deploys.";
+  }
+  const named = namedHighStakes(report.commands);
+  const lead = `OKed would have paused ${report.totals.paused} of these commands`;
+  if (named.length === 0) return `${lead}.`;
+  return `${lead}, including ${englishList(named)}.`;
+}
+
+export function formatReport(report: ScanReport, options: FormatReportOptions = {}): string {
   const lines: string[] = [];
   lines.push(`OKed scan ${report.version}`);
   lines.push("Local only. This scan does not use the network and does not send telemetry.");
@@ -184,9 +263,19 @@ export function formatReport(report: ScanReport): string {
     }
   }
   lines.push("");
-  for (const note of report.notes) lines.push(note);
+  if (options.verbose) {
+    for (const note of report.notes) {
+      if (note === DECISION_NOTE) continue;
+      lines.push(note);
+    }
+    lines.push("");
+  }
+  lines.push(DECISION_NOTE);
   lines.push("");
-  lines.push(`Next: ${report.next}`);
+  lines.push(closingLine(report));
+  lines.push("Get a yes/no in Telegram before your agent runs them:");
+  lines.push(`  ${report.next}`);
+  lines.push("https://oked.ai");
   lines.push("");
   return lines.join("\n");
 }

@@ -67,7 +67,7 @@ The Claude Code plugin is the same gate without a global install. In Claude Code
 
 On Claude Code, test runners and scripts (`cargo test`, `npm test`, `npm run`, `pytest`, `go test`, `make`, `./script.sh`, `npx`) ask for approval unless the Bash sandbox is containing child processes. The hook cannot see commands those runners start. To allow them with no prompt, set `sandbox.enabled` to true and `allowUnsandboxedCommands` to false in `~/.claude/settings.json` or `.claude/settings.local.json`. `oked init` prints this when it is not already set. Other hosts do not read those files, so the same commands stay allowed there.
 
-To see what those default rules would have paused in history that is already on this machine, run `npx @oked/scan`. It reads Claude Code transcripts and Codex CLI sessions locally. It does not use the network and it does not send telemetry. The last line is the install command for the history it found (`oked init`, and `oked-codex init` when Codex sessions are present).
+To see what those default rules would have paused in history that is already on this machine, run `npx @oked/scan`. It reads Claude Code transcripts and Codex CLI sessions locally. It does not use the network and it does not send telemetry. The report ends with how many commands would have paused, the install command for the history it found (`oked init`, and `oked-codex init` when Codex sessions are present), and https://oked.ai. If nothing would have paused, it says so and does not invent a count.
 
 ```bash
 npx @oked/scan

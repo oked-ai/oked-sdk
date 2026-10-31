@@ -10,7 +10,8 @@ Decisions are made in Telegram and on the [web dashboard](https://oked.ai/dashbo
 
 - New package. `npx @oked/scan` reads Claude Code transcripts (`~/.claude/projects/**/*.jsonl`, Bash tool calls) and Codex CLI sessions (`~/.codex/sessions`, rollout files) on this machine. It reports which commands the default rules would have paused for approval: totals by tier and category, and the top risky commands with secrets-looking tokens redacted.
 - It uses `classify()` from `@oked/sdk`, the same function the hooks call. Custom rules are not applied. Claude Code is classified with the Bash sandbox not containing child processes, which is the default, so test runners and scripts count as `review`. Codex is classified the way the Codex hook classifies commands, so those runners stay allowed.
-- The command does not use the network and does not send telemetry. A missing transcript directory is skipped. The printed next step is `oked init` (and `oked-codex init` when Codex history is present). There is no `@oked/cli` package.
+- The command does not use the network and does not send telemetry. A missing transcript directory is skipped. There is no `@oked/cli` package.
+- The text report ends with how many commands would have paused, the two or three most common high-stakes kinds in plain words, the install command (`oked init`, and `oked-codex init` when Codex history is present), and https://oked.ai. If nothing would have paused, it says so and does not invent a count. `--verbose` prints the classification notes. The default text report leaves them out. Decisions happen in Telegram or on the web dashboard. The iPhone app is coming soon.
 - Not on npm yet. The first publish is by hand. See [RELEASING.md](./RELEASING.md).
 
 ### Claude Code plugin
