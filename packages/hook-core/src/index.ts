@@ -50,6 +50,14 @@ export {
 } from "./normalize.js";
 export { pairDevice, writeOkedConfig, maskKey, type PairOptions } from "./pair.js";
 export {
+  applyInstallMode,
+  chooseInstallMode,
+  modeBlurb,
+  modeFromArgv,
+  printWatchReport,
+  type InstallModeChoice,
+} from "./install-mode.js";
+export {
   claudeSandboxEnforced,
   readClaudeSandbox,
   exclusionCoversCommand,

@@ -24,6 +24,7 @@ import {
 } from "../dist/index.js";
 
 const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
+process.env.OKED_MODE = "enforce";
 
 function harness(approve, extras = {}) {
   const requests = [];
@@ -831,5 +832,43 @@ describe("real OKedClient", () => {
     assert.equal(ran, false);
     assert.equal(isOkedDenial(result), true);
     assert.match(result.reason, /receipt/);
+  });
+});
+
+describe("watch mode", () => {
+  it("allows a review tool and does not call approve", async () => {
+    const { requests, options } = harness(denied);
+    const status = await okedToolApproval({ ...options, mode: "watch" })(paymentCall());
+    assert.equal(status, undefined);
+    assert.equal(requests.length, 0);
+  });
+
+  it("enforce still asks", async () => {
+    const { requests, options } = harness(denied);
+    const status = await okedToolApproval({ ...options, mode: "enforce" })(paymentCall());
+    assert.equal(status.type, "denied");
+    assert.equal(requests.length, 1);
+  });
+
+  it("OKED_MODE=watch allows without an option, and the log omits the arguments", async () => {
+    const prev = process.env.OKED_MODE;
+    const prevLog = process.env.OKED_WATCH_LOG;
+    const dir = mkdtempSync(join(tmpdir(), "oked-ai-watch-"));
+    process.env.OKED_MODE = "watch";
+    process.env.OKED_WATCH_LOG = join(dir, "watch.log");
+    try {
+      const { requests, options } = harness(denied);
+      const status = await okedToolApproval(options)(paymentCall({ amount: 2, token: "SECRETTOKEN" }));
+      assert.equal(status, undefined);
+      assert.equal(requests.length, 0);
+      const text = readFileSync(process.env.OKED_WATCH_LOG, "utf8");
+      assert.match(text, /would have paused/);
+      assert.ok(!text.includes("SECRETTOKEN"));
+    } finally {
+      process.env.OKED_MODE = prev ?? "enforce";
+      if (prevLog === undefined) delete process.env.OKED_WATCH_LOG;
+      else process.env.OKED_WATCH_LOG = prevLog;
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

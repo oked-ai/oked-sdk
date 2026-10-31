@@ -124,6 +124,7 @@ A cached user rule can send a `safe` or `warning` call to the backend, which app
 | `timeout_ms` | Client wait, in milliseconds. Default 630000. |
 | `strict_fail_closed` | Deny every sensitive call when the backend is unreachable. |
 | `min_tier` | Lowest tier that waits. Default `review`. |
+| `mode` | `watch` lets a risky call run and records that it would have paused. Default `enforce`. `OKED_MODE` is the fallback. See [docs/watch.md](../../docs/watch.md). |
 | `always_approve` | Exact tool names that always wait, at `high_stakes`. |
 | `always_allow` | Exact tool names that never wait. |
 | `tier` | Use this tier instead of the classifier. `always_allow` and `always_approve` still win. |

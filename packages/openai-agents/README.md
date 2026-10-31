@@ -133,6 +133,7 @@ Pass a second argument to `okedTool()`, `withOkedTools()`, or `settleOkedInterru
 | `timeoutMs` | `630000` | How long to wait for a person, in milliseconds (10.5 minutes, so the backend's 10 minute expiry answers first). |
 | `strictFailClosed` | `false` | When true, an unreachable approval service denies every sensitive call. Env `OKED_STRICT_FAIL_CLOSED`. |
 | `minTier` | `"review"` | Lowest tier that asks. `warning` never blocks on its own. Env `OKED_MIN_TIER` is the fallback. |
+| `mode` | `"enforce"` | `watch` lets a risky call run and records that it would have paused. `OKED_MODE` is the fallback. See [docs/watch.md](../../docs/watch.md). |
 | `alwaysApprove` | `[]` | Tool names that are always `high_stakes`. |
 | `alwaysAllow` | `[]` | Tool names that are always safe. Skips rules and approval. |
 | `cwd` | `process.cwd()` | Recorded on the approval. |

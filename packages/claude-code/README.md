@@ -34,7 +34,9 @@ The approval window is 10 minutes. The hook process is allowed 690 seconds, and 
 | `oked init --key-only` | Create or show the API key in `~/.oked/config.json`. It does not add or change a hook. Use it for tools that only need the key, such as the [OpenShell](https://github.com/oked-ai/oked-openshell) middleware. The paired client type is `sdk`. |
 | `oked init --no-browser` | Print the pairing link. Do not open a browser, and do not touch the clipboard. Works with `--key-only`. |
 | `oked init --yes` (or `-y`) | Skip the "press Enter to open the browser" prompt. For a non-interactive shell. |
-| `oked status` | Show install state and ping `GET /health` on the backend. |
+| `oked init --mode watch` | Let risky actions run and record what would have paused. `--mode enforce` is the default. On a terminal, init asks when no mode is set. |
+| `oked report` | Summarize `~/.oked/watch.log`. |
+| `oked status` | Show install state, the mode, and ping `GET /health` on the backend. |
 | `oked receipts verify [file]` | Check this machine's receipts (default `~/.oked/receipts.jsonl`): every signature, and the chain links between neighbouring receipts. |
 | `oked uninstall` | Remove the project hook entry. Other hooks are kept. |
 
@@ -78,6 +80,8 @@ If this device is not paired, the hook returns `ask`, so Claude Code's own permi
 | Var | Required | Description |
 |---|---|---|
 | `OKED_API_KEY` | no, after pairing | Optional override. `oked init` stores the paired key in `~/.oked/config.json`. |
+| `OKED_MODE` | no | `watch` or `enforce`. Wins over `mode` in `~/.oked/config.json`. Default `enforce`. See [docs/watch.md](../../docs/watch.md). |
+| `OKED_WATCH_LOG` | no | Watch log path. Default `~/.oked/watch.log`. |
 | `OKED_STRICT_FAIL_CLOSED` | no | `1` or `true` denies every sensitive action when the backend is unreachable. |
 | `OKED_REQUIRE_RECEIPT` | no | `0` allows an approval with no receipt. On by default since 0.6.0. |
 | `OKED_HOOK_LOG` | no | Decision log path. Default `~/.oked/hook.log`. |

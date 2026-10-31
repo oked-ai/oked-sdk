@@ -152,9 +152,26 @@ try {
     assert.equal(approvePosts().at(-1).authorization, "Bearer plugin-key");
     passed++;
   }
+
+  {
+    const before = approvePosts().length;
+    const secret = "SECRETTOKEN";
+    const { out } = await runBundle([], { tool_name: "Bash", tool_input: { command: `rm -rf /var/data ${secret}` } }, {
+      CLAUDE_PLUGIN_OPTION_APIKEY: "plugin-key",
+      OKED_MODE: "watch",
+    });
+    const decision = JSON.parse(out).hookSpecificOutput;
+    assert.equal(decision.permissionDecision, "allow");
+    assert.match(decision.permissionDecisionReason, /would have paused/);
+    assert.equal(approvePosts().length, before, "watch mode does not send the action");
+    const text = readFileSync(join(home, ".oked", "watch.log"), "utf8");
+    assert.ok(!text.includes(secret));
+    assert.equal(JSON.parse(text.trim().split("\n").at(-1)).reason, "would have paused");
+    passed++;
+  }
 } finally {
   server.close();
   rmSync(root, { recursive: true, force: true });
 }
 
-console.log(`ok - claude code plugin bundle: ${passed}/5 passed`);
+console.log(`ok - claude code plugin bundle: ${passed}/6 passed`);

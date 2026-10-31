@@ -1,7 +1,7 @@
 // Runs the built hook the way Cursor does: JSON on stdin, JSON on stdout.
 import assert from "node:assert";
 import { spawn } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -14,9 +14,11 @@ const project = join(home, "proj");
 mkdirSync(project, { recursive: true });
 
 let reply = { status: 200, body: "{}" };
+const urls = [];
 const server = createServer((req, res) => {
   req.resume();
   req.on("end", () => {
+    urls.push(req.url);
     if (req.url === "/api/v1/rules") {
       res.writeHead(200, { "Content-Type": "application/json" }).end("[]");
       return;
@@ -144,9 +146,39 @@ try {
     assert.match(twice.stdout, /not installed/);
     passed++;
   }
+  {
+    urls.length = 0;
+    const secret = "SECRETTOKEN";
+    const { stdout } = await run(HOOK, [], payload("Delete", { path: `src/${secret}.ts` }), { OKED_MODE: "watch" });
+    const out = JSON.parse(stdout);
+    assert.equal(out.permission, "allow");
+    assert.match(out.user_message, /would have paused \(not paired\)/);
+    assert.ok(!urls.includes("/api/v1/approve"));
+    const text = readFileSync(join(home, ".oked", "watch.log"), "utf8");
+    assert.ok(!text.includes(secret));
+    passed++;
+  }
+  {
+    urls.length = 0;
+    reply = { status: 200, body: JSON.stringify({ approval_id: "appr-w", decision: "denied", status: "denied" }) };
+    const { stdout } = await run(HOOK, [], payload("MCP:github:create_issue", { title: "x" }), {
+      OKED_API_KEY: "test-key",
+      OKED_MODE: "enforce",
+    });
+    assert.equal(JSON.parse(stdout).permission, "deny");
+    assert.ok(urls.includes("/api/v1/approve"));
+    urls.length = 0;
+    const watched = await run(HOOK, [], payload("MCP:github:create_issue", { title: "x" }), {
+      OKED_API_KEY: "test-key",
+      OKED_MODE: "watch",
+    });
+    assert.equal(JSON.parse(watched.stdout).permission, "allow");
+    assert.ok(!urls.includes("/api/v1/approve"));
+    passed++;
+  }
 } finally {
   server.close();
   rmSync(home, { recursive: true, force: true });
 }
 
-console.log(`ok - @oked/cursor hook: ${passed}/10 passed`);
+console.log(`ok - @oked/cursor hook: ${passed}/12 passed`);

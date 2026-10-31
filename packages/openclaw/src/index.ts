@@ -16,7 +16,8 @@
  *   "apiKey": "ok_...",                  // OKed API key (or OKED_API_KEY env)
  *   "alwaysApprove": ["custom_tool"],    // additional names to require approval for
  *   "alwaysAllow":   ["safe_tool"],      // names to never gate
- *   "minTier": "review"                  // minimum tier to require approval (default: "review")
+ *   "minTier": "review",                 // minimum tier to require approval (default: "review")
+ *   "mode": "enforce"                    // "watch" records risky calls and lets them run
  * }
  */
 
@@ -32,6 +33,8 @@ import {
   OKedBackendUnreachableError,
   OKedReceiptError,
   TIER_ORDER,
+  recordWouldHavePaused,
+  type OkedMode,
   type RiskTier,
 } from "@oked/sdk";
 import { classifyOpenClawTool, type ClassifyOptions } from "./classify-openclaw.js";
@@ -77,6 +80,8 @@ interface OkedPluginConfig extends ClassifyOptions {
   apiKey?: string;
   backendUrl?: string;
   minTier?: RiskTier;
+  /** `watch` lets a risky call run and records it. `enforce` (default) pauses it. */
+  mode?: OkedMode;
   /** Approval timeout in ms; defaults to OKed backend default. */
   timeoutMs?: number;
   /**
@@ -185,6 +190,7 @@ const plugin = {
         : {}),
       client: CLIENT_ID,
       source: "openclaw",
+      ...(cfg.mode ? { mode: cfg.mode } : {}),
     });
 
     if (!oked.apiKey) {
@@ -250,6 +256,21 @@ const plugin = {
       // Warning is informational only; only review/high_stakes can block.
       if (TIER_ORDER[tier] < minTierLevel || !APPROVAL_TIERS.has(tier)) {
         return; // void = allow
+      }
+
+      // Watch lets the call run and records that enforce mode would have paused it.
+      // The approval API holds the request, so it is not called.
+      if (oked.mode === "watch") {
+        const reason = oked.apiKey ? "would have paused" : "would have paused (not paired)";
+        recordWouldHavePaused({
+          tool: toolName,
+          tier,
+          client: CLIENT_ID,
+          source: "openclaw",
+          reason,
+        });
+        log?.info?.(`[oked] watch: ${toolName} (${tier}) ${reason}. Allowed.`);
+        return;
       }
 
       // Sensitive. Ask the human.

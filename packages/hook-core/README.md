@@ -24,6 +24,7 @@ Decisions are made in Telegram or on the [web dashboard](https://oked.ai/dashboa
 3. For `review` and `high_stakes`, send the approval and wait. The SDK waits 630 seconds (`DEFAULT_APPROVAL_TIMEOUT_MS`), which is 30 seconds past the backend's 10 minute window.
 4. An approval counts only when the signed receipt verifies. The hook keeps a copy in `~/.oked/receipts.jsonl`.
 5. An explicit denial, a bad key, a bad receipt, HTTP 429, and any unexpected error deny. If the backend is unreachable, `high_stakes` denies and lower tiers allow, unless `OKED_STRICT_FAIL_CLOSED` is set. A backend `decision` of `timeout` denies.
+6. In watch mode (`OKED_MODE=watch`, or `"mode": "watch"` in `~/.oked/config.json`, or `mode: "watch"` on `decide`) steps 2 and 3 allow the call instead and append a line to `~/.oked/watch.log`. The approval request is not sent. Safe calls are unchanged. See [docs/watch.md](../../docs/watch.md).
 
 `HOOK_TIMEOUT_SECONDS` is 690. A host that can set a hook timeout must set it at least that high, so the SDK's deny is written before the host kills the process. A killed hook prints nothing, and most hosts then let the tool call continue. Cursor can also set `failClosed` so a killed hook denies. Codex and Copilot fail open on timeout, and their installers still set 690 so the SDK finishes first when the host honors it.
 

@@ -55,6 +55,10 @@ If the backend cannot be reached, `approve` raises `OkedBackendUnreachableError`
 
 Set `OKED_REQUIRE_RECEIPT=0` only for a backend that does not sign receipts. Receipts are checked by default.
 
+## Watch mode
+
+`OkedClient.approve()` still waits. The LangGraph helper in `oked-langgraph` honors `mode`: `watch` lets a risky tool run and writes `~/.oked/watch.log`. `enforce` is the default. `OKED_MODE` wins over `mode` in `~/.oked/config.json`. See [docs/watch.md](../../docs/watch.md).
+
 ## Risk tiers
 
 `safe`, `warning`, `review`, and `high_stakes`. `classify(tool_name, tool_input)` returns a tier. Unknown tool names are `review`. A string `command` or `cmd` is classified as a shell command. A path plus a content string is a file write: `warning`, or `review` on a sensitive path.

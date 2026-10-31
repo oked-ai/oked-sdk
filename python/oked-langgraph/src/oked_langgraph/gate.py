@@ -29,6 +29,7 @@ from oked import (
     lookup_pr_title,
 )
 from oked.types import RiskTier, is_tier
+from oked.watch import effective_mode, record_would_have_paused
 
 __version__ = "0.6.21"
 _APPROVAL_TIERS = frozenset({"review", "high_stakes"})
@@ -129,6 +130,7 @@ def create_oked_client(
     api_key: str | None = None,
     timeout_ms: int | None = None,
     strict_fail_closed: bool | None = None,
+    mode: str | None = None,
 ) -> OkedClient:
     """Client used when the caller did not pass one.
 
@@ -142,6 +144,8 @@ def create_oked_client(
         kwargs["timeout"] = timeout_ms
     if strict_fail_closed is not None:
         kwargs["strict_fail_closed"] = strict_fail_closed
+    if mode is not None:
+        kwargs["mode"] = mode
     return OkedClient(**kwargs)
 
 
@@ -179,6 +183,7 @@ def gate_tool_call(tool_name: str, tool_input: Mapping[str, Any] | None = None, 
             api_key=options.get("api_key"),
             timeout_ms=options.get("timeout_ms"),
             strict_fail_closed=options.get("strict_fail_closed"),
+            mode=options.get("mode") if isinstance(options.get("mode"), str) else None,
         )
     cwd = options.get("cwd") or os.getcwd()
     if getattr(client, "api_key", ""):
@@ -198,11 +203,29 @@ def gate_tool_call(tool_name: str, tool_input: Mapping[str, Any] | None = None, 
     min_tier = _resolve_min_tier(options)
     needs_approval = tier in _APPROVAL_TIERS and TIER_ORDER[tier] >= TIER_ORDER[min_tier]
     fields = describe_fields(tool_name, payload, cwd=cwd)
+    from_rule = False
     if not needs_approval:
         if not _rules_want_backend(client, tier, fields, cwd):
             if tier == "warning":
                 log(f"WARNING {tool_name} {_summary(tool_name, payload)} - allowed (inside project)")
             return {"run": True, "tier": tier}
+        from_rule = True
+    if effective_mode(options.get("mode"), getattr(client, "mode", None)) == "watch":
+        if not getattr(client, "api_key", ""):
+            reason = "would have paused (not paired)"
+        elif from_rule:
+            reason = "would have paused (saved rule)"
+        else:
+            reason = "would have paused"
+        record_would_have_paused(
+            tool=tool_name,
+            tier=tier,
+            client=CLIENT_ID,
+            source="langgraph",
+            reason=reason,
+        )
+        log(f"watch: {tool_name} ({tier}) {reason}. Allowed.")
+        return {"run": True, "tier": tier}
     if not getattr(client, "api_key", ""):
         log(f"no API key - denying {tool_name}")
         return {
@@ -340,6 +363,7 @@ def _ensure_client(options: MutableMapping[str, Any]) -> dict[str, Any]:
             api_key=copied.get("api_key"),
             timeout_ms=copied.get("timeout_ms"),
             strict_fail_closed=copied.get("strict_fail_closed"),
+            mode=copied.get("mode") if isinstance(copied.get("mode"), str) else None,
         )
     return copied
 

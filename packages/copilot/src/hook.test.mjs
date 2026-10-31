@@ -14,9 +14,11 @@ const project = join(home, "proj");
 mkdirSync(project, { recursive: true });
 
 let reply = { status: 200, body: "{}" };
+const urls = [];
 const server = createServer((req, res) => {
   req.resume();
   req.on("end", () => {
+    urls.push(req.url);
     if (req.url === "/api/v1/rules") {
       res.writeHead(200, { "Content-Type": "application/json" }).end("[]");
       return;
@@ -170,9 +172,49 @@ try {
     assert.match(twice.stdout, /not installed/);
     passed++;
   }
+  {
+    urls.length = 0;
+    const secret = "SECRETTOKEN";
+    const unpaired = await run(
+      HOOK,
+      [],
+      { toolName: "mystery_tool", toolArgs: { note: secret } },
+      { OKED_MODE: "watch" },
+    );
+    const out = JSON.parse(unpaired.stdout);
+    assert.equal(out.permissionDecision, "allow");
+    assert.match(out.permissionDecisionReason, /would have paused \(not paired\)/);
+    assert.ok(!urls.includes("/api/v1/approve"));
+    const text = readFileSync(join(home, ".oked", "watch.log"), "utf8");
+    assert.ok(!text.includes(secret));
+    passed++;
+  }
+  {
+    urls.length = 0;
+    reply = { status: 200, body: JSON.stringify({ approval_id: "appr-w", decision: "denied", status: "denied" }) };
+    const enforced = await run(
+      HOOK,
+      [],
+      { toolName: "mystery_tool", toolArgs: { note: "x" } },
+      { OKED_API_KEY: "test-key", OKED_MODE: "enforce" },
+    );
+    assert.equal(JSON.parse(enforced.stdout).permissionDecision, "deny");
+    assert.ok(urls.includes("/api/v1/approve"));
+    urls.length = 0;
+    const watched = await run(
+      HOOK,
+      [],
+      { toolName: "mystery_tool", toolArgs: { note: "x" } },
+      { OKED_API_KEY: "test-key", OKED_MODE: "watch" },
+    );
+    assert.equal(JSON.parse(watched.stdout).permissionDecision, "allow");
+    assert.match(JSON.parse(watched.stdout).permissionDecisionReason, /would have paused/);
+    assert.ok(!urls.includes("/api/v1/approve"));
+    passed++;
+  }
 } finally {
   server.close();
   rmSync(home, { recursive: true, force: true });
 }
 
-console.log(`ok - @oked/copilot hook: ${passed}/9 passed`);
+console.log(`ok - @oked/copilot hook: ${passed}/11 passed`);

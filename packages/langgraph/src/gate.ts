@@ -19,6 +19,8 @@ import {
   describeFields,
   lookupPrTitle,
   TIER_ORDER,
+  effectiveMode,
+  recordWouldHavePaused,
   OKedAuthError,
   OKedBackendUnreachableError,
   OKedHttpError,
@@ -26,8 +28,10 @@ import {
   OKedTooManyPendingError,
   type ApprovalRequest,
   type ApprovalResponse,
+  type OkedMode,
   type RiskTier,
   type Rule,
+  type WatchReason,
 } from "@oked/sdk";
 
 const CLIENT_ID = (() => {
@@ -54,6 +58,7 @@ function isTier(value: unknown): value is RiskTier {
 export interface OkedApprovalClient {
   readonly apiKey: string;
   readonly strictFailClosed: boolean;
+  readonly mode?: OkedMode;
   approve(request: ApprovalRequest): Promise<ApprovalResponse>;
   heartbeat(): Promise<void>;
   getRules(): Promise<Rule[]>;
@@ -90,6 +95,11 @@ export interface OkedLangGraphOptions {
    * `review` and `high_stakes` ever wait; `warning` is logged and runs.
    */
   minTier?: RiskTier;
+  /**
+   * `watch` lets a risky call run and records that it would have paused.
+   * `enforce` (default) waits. `OKED_MODE`, then `~/.oked/config.json`.
+   */
+  mode?: OkedMode;
   /** Tool names that always wait, at tier `high_stakes`. Exact match. */
   alwaysApprove?: readonly string[];
   /** Tool names that never wait. Exact match. The tool runs. */
@@ -215,6 +225,7 @@ export function createOkedClient(options?: OkedLangGraphOptions): OKedClient {
     ...(options?.strictFailClosed !== undefined ? { strictFailClosed: options.strictFailClosed } : {}),
     client: CLIENT_ID,
     source: "langgraph",
+    ...(options?.mode ? { mode: options.mode } : {}),
   });
 }
 
@@ -275,6 +286,7 @@ export async function gateToolCall(
   const needsApproval = APPROVAL_TIERS.has(tier) && TIER_ORDER[tier] >= TIER_ORDER[minTier];
   let fields = describeFields(toolName, toolInput, { cwd }) ?? undefined;
 
+  let fromRule = false;
   if (!needsApproval) {
     const escalated = await rulesWantBackend(client, tier, fields, cwd);
     if (!escalated) {
@@ -283,6 +295,24 @@ export async function gateToolCall(
       }
       return { run: true, tier };
     }
+    fromRule = true;
+  }
+
+  if (effectiveMode(options?.mode, client.mode) === "watch") {
+    const reason: WatchReason = !client.apiKey
+      ? "would have paused (not paired)"
+      : fromRule
+        ? "would have paused (saved rule)"
+        : "would have paused";
+    recordWouldHavePaused({
+      tool: toolName,
+      tier,
+      client: CLIENT_ID,
+      source: "langgraph",
+      reason,
+    });
+    log(`watch: ${toolName} (${tier}) ${reason}. Allowed.`);
+    return { run: true, tier };
   }
 
   if (!client.apiKey) {

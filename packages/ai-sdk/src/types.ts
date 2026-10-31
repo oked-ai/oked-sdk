@@ -1,4 +1,4 @@
-import type { ApprovalRequest, ApprovalResponse, RiskTier, Rule } from "@oked/sdk";
+import type { ApprovalRequest, ApprovalResponse, OkedMode, RiskTier, Rule } from "@oked/sdk";
 
 /**
  * Enough of `OKedClient` for the gate. Pass `new OKedClient()` or a test double.
@@ -7,6 +7,8 @@ import type { ApprovalRequest, ApprovalResponse, RiskTier, Rule } from "@oked/sd
 export interface OkedGateClient {
   readonly apiKey: string;
   readonly strictFailClosed?: boolean;
+  /** Resolved mode, when the client is an `OKedClient`. */
+  readonly mode?: OkedMode;
   approve(request: ApprovalRequest): Promise<ApprovalResponse>;
   getRules?(): Promise<Rule[]>;
   heartbeat?(): Promise<void>;
@@ -37,6 +39,11 @@ export interface OkedAiOptions {
    * tool or a saved rule matches.
    */
   minTier?: RiskTier;
+  /**
+   * `watch` lets a risky call run and records that it would have paused.
+   * `enforce` (default) waits. `OKED_MODE`, then `~/.oked/config.json`.
+   */
+  mode?: OkedMode;
   /** Tool names that always wait for a person, whatever the classifier says. */
   alwaysApprove?: readonly string[];
   /** Tool names that always run, with no approval request. Wins over `alwaysApprove`. */

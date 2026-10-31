@@ -136,6 +136,7 @@ Same ideas as the other integrations. Omit these to use the defaults.
 | `apiKey` | `OKED_API_KEY`, then `~/.oked/config.json` | Used when you do not pass `client`. |
 | `timeoutMs` | `630000` | How long to wait. A timeout denies. Used when you do not pass `client`. |
 | `minTier` | `"review"` (`OKED_MIN_TIER`) | Lowest tier that waits. `high_stakes` asks only for that tier. |
+| `mode` | `"enforce"` (`OKED_MODE`) | `watch` lets a risky call run and records that it would have paused. See [docs/watch.md](../../docs/watch.md). |
 | `alwaysApprove` | none | Tool names that always wait, including names the classifier calls safe. |
 | `alwaysAllow` | none | Tool names that always run. Wins over `alwaysApprove`. Exact, case-sensitive. |
 | `strictFailClosed` | `false` (`OKED_STRICT_FAIL_CLOSED=1`) | When true, an unreachable backend denies every sensitive tool. When false, it denies `high_stakes` only. |

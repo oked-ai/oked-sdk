@@ -17,6 +17,7 @@ from dataclasses import asdict, dataclass
 from typing import Any, Mapping
 
 from oked.config import PersistedConfig, heartbeat_path, load_oked_config, rules_cache_path
+from oked.watch import resolve_mode
 from oked.errors import (
     OkedAuthError,
     OkedBackendUnreachableError,
@@ -157,6 +158,7 @@ class _Settings:
     rules_cache_ttl_ms: int
     heartbeat_interval_ms: int
     require_receipt: bool
+    mode: str
     receipt_keys_url: str
     receipt_keys: list[dict[str, Any]] | None
     client: str | None
@@ -184,6 +186,7 @@ class OkedClient:
         receipt_keys: list[dict[str, Any]] | None = None,
         client: str | None = None,
         source: str | None = None,
+        mode: str | None = None,
     ) -> None:
         persisted: PersistedConfig = load_oked_config()
         self._settings = _Settings(
@@ -214,6 +217,7 @@ class OkedClient:
                 persisted.require_receipt,
                 True,
             ),
+            mode=resolve_mode(mode, persisted.mode),
             receipt_keys_url=(
                 receipt_keys_url
                 or os.environ.get("OKED_RECEIPT_KEYS_URL")
@@ -240,6 +244,11 @@ class OkedClient:
     @property
     def require_receipt(self) -> bool:
         return self._settings.require_receipt
+
+    @property
+    def mode(self) -> str:
+        """`watch` or `enforce`. `approve()` still waits either way."""
+        return self._settings.mode
 
     def approve(self, request: ApprovalRequest | Mapping[str, Any]) -> ApprovalResponse:
         """Wait for a decision. A timeout is a denial, returned, not raised."""

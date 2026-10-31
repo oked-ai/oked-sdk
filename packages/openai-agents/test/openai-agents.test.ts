@@ -29,6 +29,7 @@ delete process.env.OKED_API_KEY;
 delete process.env.OKED_STRICT_FAIL_CLOSED;
 delete process.env.OKED_MIN_TIER;
 delete process.env.OKED_REQUIRE_RECEIPT;
+process.env.OKED_MODE = "enforce";
 
 const quiet = { log() {} };
 
@@ -574,6 +575,42 @@ test("settleOkedInterruptions approves, rejects a timeout, and rejects an error"
   assert.match(rejected[1].message ?? "", /receipt/i);
   assert.equal(rejected[0].item, slowItem);
   assert.equal(rejected[1].item, badItem);
+});
+
+test("watch mode runs a risky tool and enforce mode does not", async () => {
+  let ran = false;
+  const calls: string[] = [];
+  const watched = okedTool(refundOptions(async () => {
+    ran = true;
+    return "ran";
+  }), {
+    ...quiet,
+    mode: "watch",
+    approve: async () => {
+      calls.push("approve");
+      return stopped("denied");
+    },
+  });
+  assert.equal(await watched.invoke({} as never, JSON.stringify({ chargeId: "ch_1", amount: 4 })), "ran");
+  assert.equal(ran, true);
+  assert.deepEqual(calls, []);
+
+  ran = false;
+  const enforced = okedTool(refundOptions(async () => {
+    ran = true;
+    return "ran";
+  }), {
+    ...quiet,
+    mode: "enforce",
+    approve: async () => {
+      calls.push("approve");
+      return stopped("denied");
+    },
+  });
+  const deniedOut = await enforced.invoke({} as never, JSON.stringify({ chargeId: "ch_1", amount: 4 }));
+  assert.equal(ran, false);
+  assert.match(String(deniedOut), /denied/i);
+  assert.deepEqual(calls, ["approve"]);
 });
 
 function approvedResponse(): ApprovalResponse {

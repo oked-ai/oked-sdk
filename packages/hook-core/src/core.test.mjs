@@ -7,9 +7,11 @@ import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { classify, DEFAULT_APPROVAL_TIMEOUT_MS } from "@oked/sdk";
+import { mkdirSync, readFileSync } from "node:fs";
 import {
   HOOK_TIMEOUT_SECONDS,
   SANDBOX_INIT_HINT,
+  chooseInstallMode,
   claudeSandboxEnforced,
   decide,
   exclusionCoversCommand,
@@ -23,6 +25,8 @@ import {
   mapFileDelete,
   mapPatch,
 } from "../dist/index.js";
+
+process.env.OKED_MODE = "enforce";
 
 let passed = 0;
 
@@ -449,4 +453,84 @@ let passed = 0;
   }
 }
 
-console.log(`ok - @oked/hook-core: ${passed}/8 passed`);
+{
+  const home = mkdtempSync(join(tmpdir(), "oked-watch-"));
+  const prevHome = process.env.HOME;
+  const prevKey = process.env.OKED_API_KEY;
+  const prevLog = process.env.OKED_WATCH_LOG;
+  process.env.HOME = home;
+  process.env.OKED_API_KEY = "";
+  const watchLog = join(home, "watch.log");
+  process.env.OKED_WATCH_LOG = watchLog;
+  const base = {
+    clientId: "@oked/hook-core@test",
+    source: "test",
+    unpaired: "deny",
+    unpairedReason: "OKed: this device is not paired. Pair first: run oked init",
+    unpairedLog: "not paired",
+    log() {},
+  };
+  try {
+    const enforced = await decide(
+      { toolName: "Bash", toolInput: { command: "rm -rf /var/data SECRET" } },
+      { ...base, mode: "enforce" },
+    );
+    assert.equal(enforced.decision, "deny");
+    assert.match(enforced.reason, /Pair first/);
+
+    const watched = await decide(
+      { toolName: "Bash", toolInput: { command: "rm -rf /var/data SECRET" } },
+      { ...base, mode: "watch" },
+    );
+    assert.equal(watched.decision, "allow");
+    assert.match(watched.reason, /OKed watch: would have paused \(not paired\)/);
+    const text = readFileSync(watchLog, "utf8");
+    assert.ok(!text.includes("SECRET"));
+    assert.ok(!text.includes("rm -rf"));
+    const line = JSON.parse(text.trim());
+    assert.equal(line.outcome, "would_have_paused");
+    assert.equal(line.tool, "Bash");
+    assert.equal(line.tier, "high_stakes");
+    assert.equal(line.reason, "would have paused (not paired)");
+
+    const safe = await decide(
+      { toolName: "Read", toolInput: { file_path: "README.md" } },
+      { ...base, mode: "watch" },
+    );
+    assert.equal(safe.decision, "allow");
+    assert.equal(safe.reason, undefined);
+    assert.equal(readFileSync(watchLog, "utf8"), text, "a safe call is not a would-have-paused line");
+
+    delete process.env.OKED_MODE;
+    mkdirSync(join(home, ".oked"), { recursive: true });
+    writeFileSync(join(home, ".oked", "config.json"), JSON.stringify({ mode: "watch" }));
+    const fromFile = await chooseInstallMode({ argv: ["node", "oked", "init"], isTTY: false });
+    assert.equal(fromFile.mode, "watch");
+    assert.equal(fromFile.persist, false);
+    assert.equal(fromFile.source, "config");
+    const flagged = await chooseInstallMode({ argv: ["node", "oked", "init", "--mode", "enforce"], isTTY: true });
+    assert.equal(flagged.mode, "enforce");
+    assert.equal(flagged.source, "flag");
+    writeFileSync(join(home, ".oked", "config.json"), "{}");
+    const prompted = await chooseInstallMode({
+      argv: ["node", "oked", "init"],
+      isTTY: true,
+      prompt: async () => "watch",
+    });
+    assert.equal(prompted.mode, "watch");
+    assert.equal(prompted.source, "prompt");
+    assert.equal(prompted.persist, true);
+    passed++;
+  } finally {
+    if (prevHome === undefined) delete process.env.HOME;
+    else process.env.HOME = prevHome;
+    if (prevKey === undefined) delete process.env.OKED_API_KEY;
+    else process.env.OKED_API_KEY = prevKey;
+    if (prevLog === undefined) delete process.env.OKED_WATCH_LOG;
+    else process.env.OKED_WATCH_LOG = prevLog;
+    process.env.OKED_MODE = "enforce";
+    rmSync(home, { recursive: true, force: true });
+  }
+}
+
+console.log(`ok - @oked/hook-core: ${passed}/9 passed`);

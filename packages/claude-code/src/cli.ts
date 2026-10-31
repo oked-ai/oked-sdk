@@ -3,6 +3,7 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync } from "fs";
 import { join } from "path";
 import { OKedClient, OKED_CONFIG_PATH } from "@oked/sdk";
 import {
+  applyInstallMode,
   claudeSandboxEnforced,
   findClaudeOkedHooks,
   maskKey,
@@ -10,6 +11,7 @@ import {
   okedPluginBundleOnDisk,
   okedPluginIsEnabled,
   pairDevice,
+  printWatchReport,
   SANDBOX_INIT_HINT,
   verifyReceiptsFile,
   writeOkedConfig,
@@ -123,6 +125,7 @@ function reportPluginInsteadOfHook(settings: Record<string, unknown>): void {
 }
 
 async function init(): Promise<void> {
+  await applyInstallMode();
   if (KEY_ONLY) return initKeyOnly();
   const settingsPath = getSettingsPath();
   const settings = readSettings(settingsPath);
@@ -254,6 +257,7 @@ async function status(): Promise<void> {
   console.log(`  Plugin: ${pluginOn ? "enabled" : "not enabled"}`);
   console.log(`  Project config: ${existsSync(settingsPath) ? settingsPath : "not found"}`);
   console.log(`  API key: ${client.apiKey ? client.apiKey.slice(0, 8) + "..." : "not paired"}`);
+  console.log(`  Mode: ${client.mode}`);
   console.log(`  User config: ${existsSync(OKED_CONFIG_PATH) ? OKED_CONFIG_PATH : "not found"}`);
 
   if (client.apiKey) {
@@ -326,6 +330,9 @@ switch (command) {
   case "uninstall":
     uninstall();
     break;
+  case "report":
+    printWatchReport();
+    break;
   case "receipts":
     receipts().catch((err) => {
       console.error(err instanceof Error ? err.message : err);
@@ -340,7 +347,10 @@ switch (command) {
     console.log("              If the OKed Claude Code plugin is enabled, init does not add a hook.");
     console.log("    --key-only    Only create or show the API key. Add no hook.");
     console.log("    --no-browser  Print the pairing link. Open no browser, use no clipboard.");
+    console.log("    --mode watch|enforce");
+    console.log("                  watch records risky actions and lets them run. enforce pauses them.");
     console.log("  status      Show current config and connection status");
+    console.log("  report      Summarize actions watch mode would have paused");
     console.log("  uninstall   Remove OKed hooks from current project");
     console.log("  receipts verify [file]  Check this machine's approval receipts");
     break;

@@ -20,15 +20,17 @@ oked-openclaw init
 1. If a local checkout or a global npm copy of `@oked/openclaw` is present, runs `openclaw plugins install --link <path>`. If the plugin is already installed and no local copy is present, skips install. Otherwise runs `openclaw plugins install @oked/openclaw`.
 2. Reuses `OKED_API_KEY` or an existing `plugins.entries.oked.apiKey`. Otherwise it pairs this device in the browser and saves the key to `~/.oked/config.json`. It does not ask you to paste a key.
 3. Keeps `OKED_MIN_TIER` or an existing `minTier` when one is set. Otherwise a terminal asks (default `review`), and a non-interactive run uses `review`. Accepted values are `safe`, `warning`, `review`, and `high_stakes`.
-4. Adds `"oked"` to `plugins.allow` and writes `plugins.entries.oked` with `enabled`, `apiKey`, and `minTier`. Existing keys on that entry are kept.
-5. Looks for a running gateway (systemd user or system, pm2, launchd, or a bare process) and asks before restarting it.
+4. Sets `mode` the same way: `--mode watch` or `--mode enforce`, then `OKED_MODE`, then a saved mode, then a terminal prompt (default `enforce`). A non-interactive run with no choice leaves enforce. `oked-openclaw report` summarizes `~/.oked/watch.log`. See [docs/watch.md](../../docs/watch.md).
+5. Adds `"oked"` to `plugins.allow` and writes `plugins.entries.oked` with `enabled`, `apiKey`, `minTier`, and `mode`. Existing keys on that entry are kept.
+6. Looks for a running gateway (systemd user or system, pm2, launchd, or a bare process) and asks before restarting it.
 
 ## Subcommands
 
 | Command | Description |
 |---|---|
 | `oked-openclaw init` | Install the plugin if needed, pair this device, and update `openclaw.json` |
-| `oked-openclaw status` | Show install state, config, and whether `GET /health` on the backend succeeds |
+| `oked-openclaw status` | Show install state, config, mode, and whether `GET /health` on the backend succeeds |
+| `oked-openclaw report` | Summarize actions watch mode would have paused |
 | `oked-openclaw test` | Send one `high_stakes` approval. Decide it in Telegram or on the dashboard. |
 | `oked-openclaw uninstall` | Remove the OKed entry and run `openclaw plugins uninstall oked` |
 

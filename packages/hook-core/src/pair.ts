@@ -3,7 +3,7 @@ import { hostname } from "os";
 import { dirname } from "path";
 import { spawn } from "child_process";
 import { createInterface } from "readline";
-import { loadOKedConfig, OKED_CONFIG_PATH } from "@oked/sdk";
+import { loadOKedConfig, okedConfigPath } from "@oked/sdk";
 import { renderQR } from "./qr.js";
 
 /** The first 8 characters, never the whole key. */
@@ -12,13 +12,14 @@ export function maskKey(key: string): string {
 }
 
 export function writeOkedConfig(apiKey: string, backendUrl: string): void {
-  const dir = dirname(OKED_CONFIG_PATH);
+  const path = okedConfigPath();
+  const dir = dirname(path);
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
   const existing = loadOKedConfig();
   const payload = { ...existing, apiKey, backendUrl };
-  writeFileSync(OKED_CONFIG_PATH, JSON.stringify(payload, null, 2) + "\n");
+  writeFileSync(path, JSON.stringify(payload, null, 2) + "\n");
   try {
-    chmodSync(OKED_CONFIG_PATH, 0o600);
+    chmodSync(path, 0o600);
   } catch {
     // Windows doesn't honor chmod; the file lives in the user profile anyway.
   }

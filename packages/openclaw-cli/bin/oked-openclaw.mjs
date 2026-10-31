@@ -20,7 +20,7 @@ import readline from 'node:readline/promises';
 import { stdin as input, stdout as output } from 'node:process';
 import { spawn, spawnSync } from 'node:child_process';
 
-import { OKedClient } from '@oked/sdk';
+import { OKedClient, formatWatchReport, parseOkedMode, resolveOkedMode, saveOkedMode } from '@oked/sdk';
 
 const OPENCLAW_DIR = path.join(homedir(), '.openclaw');
 const OPENCLAW_CONFIG = path.join(OPENCLAW_DIR, 'openclaw.json');
@@ -373,6 +373,12 @@ async function cmdInit() {
     minTier = 'review';
   }
 
+  const modeChoice = await chooseMode(existingEntry.mode);
+  if (modeChoice.persist) saveOkedMode(modeChoice.mode);
+  console.log(modeChoice.mode === 'watch'
+    ? '   Mode: watch (risky actions run, and OKed records what it would have paused)'
+    : '   Mode: enforce (risky actions pause until you approve)');
+
   // 4. Update openclaw.json - apiKey/minTier are now declared in the plugin's
   //    configSchema, so OpenClaw 2026.5+ will accept them under entries.oked.
   process.stdout.write('4. Updating ~/.openclaw/openclaw.json... ');
@@ -388,6 +394,7 @@ async function cmdInit() {
     apiKey,
     backendUrl: DEFAULT_BACKEND_URL,
     minTier,
+    mode: modeChoice.mode,
   };
   await writeConfig(cfg);
   console.log('done');
@@ -452,6 +459,7 @@ async function cmdStatus() {
   console.log(`Plugin enabled: ${entry.enabled ? 'yes' : 'no'}`);
   console.log(`API key       : ${maskKey(apiKey)}`);
   console.log(`minTier       : ${entry.minTier || '(default review)'}`);
+  console.log(`mode          : ${resolveOkedMode(entry.mode)}`);
 
   if (commandExists('openclaw')) {
     const r = run('openclaw', ['plugins', 'list']);
@@ -550,12 +558,49 @@ async function cmdUninstall() {
   console.log('  Restart the OpenClaw daemon to fully unload the plugin.');
 }
 
+async function chooseMode(savedEntryMode) {
+  const flagged = modeFlag(process.argv);
+  if (flagged) return { mode: flagged, persist: true };
+  if (process.argv.includes('--mode')) {
+    const index = process.argv.indexOf('--mode');
+    console.error(`Ignoring --mode ${process.argv[index + 1] ?? ''}. Use watch or enforce.`);
+  }
+  const fromEnv = parseOkedMode(process.env.OKED_MODE);
+  if (fromEnv) return { mode: fromEnv, persist: true };
+  const fromEntry = parseOkedMode(savedEntryMode);
+  if (fromEntry) return { mode: fromEntry, persist: false };
+  const fromFile = parseOkedMode(await readOkedMode());
+  if (fromFile) return { mode: fromFile, persist: false };
+  if (process.stdin.isTTY && process.stdout.isTTY) {
+    const answer = (await prompt('   mode (watch|enforce) [enforce]: ')).trim().toLowerCase();
+    return { mode: parseOkedMode(answer) || 'enforce', persist: true };
+  }
+  return { mode: 'enforce', persist: false };
+}
+
+function modeFlag(argv) {
+  const index = argv.indexOf('--mode');
+  if (index === -1) return undefined;
+  return parseOkedMode(argv[index + 1]);
+}
+
+async function readOkedMode() {
+  try {
+    const parsed = JSON.parse(await readFile(OKED_CONFIG, 'utf8'));
+    return parsed && typeof parsed === 'object' ? parsed.mode : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 function usage() {
   console.log(`oked-openclaw - pairing CLI for the @oked/openclaw plugin
 
 Usage:
   oked-openclaw init        Install the plugin if needed, then configure openclaw.json
-  oked-openclaw status      Show install state + backend reachability
+    --mode watch|enforce    watch records risky actions and lets them run. enforce pauses them.
+  oked-openclaw status      Show install state and whether OKed can be reached
+  oked-openclaw report      Summarize actions watch mode would have paused
   oked-openclaw uninstall   Remove the OKed entry and uninstall the plugin
   oked-openclaw test        Send a test approval request via the OKed SDK
   oked-openclaw help        Show this message
@@ -570,6 +615,9 @@ async function main() {
       break;
     case 'status':
       await cmdStatus();
+      break;
+    case 'report':
+      process.stdout.write(`${formatWatchReport()}\n`);
       break;
     case 'uninstall':
       await cmdUninstall();

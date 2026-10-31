@@ -8,7 +8,7 @@
 // approval decisions.
 
 import { strict as assert } from "node:assert";
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -17,6 +17,7 @@ import { join } from "node:path";
 process.env.HOME = mkdtempSync(join(tmpdir(), "oked-smoke-"));
 process.env.USERPROFILE = process.env.HOME;
 delete process.env.OKED_API_KEY;
+delete process.env.OKED_MODE;
 const { classifyOpenClawTool } = await import("../dist/classify-openclaw.js");
 const { default: plugin } = await import("../dist/index.js");
 
@@ -318,6 +319,41 @@ const UNREACHABLE = "http://127.0.0.1:1";
     delete process.env.OKED_REQUIRE_RECEIPT;
     server.close();
   }
+}
+
+// Watch mode lets a high-stakes call run and does not ask the backend.
+{
+  const { api, handlers } = makeStubApi({
+    apiKey: "ok_test",
+    mode: "watch",
+    backendUrl: "http://127.0.0.1:1",
+    timeoutMs: 1500,
+  });
+  plugin.register(api);
+  const handler = handlers.get("before_tool_call");
+  const secret = "SECRETTOKEN";
+  const result = await handler(
+    { toolName: "deploy_site", params: { note: secret } },
+    { toolName: "deploy_site" },
+  );
+  assert.equal(result, undefined, "watch mode allows deploy_site");
+  const text = readFileSync(join(process.env.HOME, ".oked", "watch.log"), "utf8");
+  assert.match(text, /would have paused/);
+  assert.ok(!text.includes(secret));
+  console.log("OK plugin: watch mode allows a high_stakes tool and records it locally");
+}
+
+// Enforce mode (the default) still blocks when no key is set.
+{
+  delete process.env.OKED_MODE;
+  const { api, handlers } = makeStubApi({ apiKey: "", backendUrl: "http://127.0.0.1:1", timeoutMs: 1500 });
+  plugin.register(api);
+  await assertDenied(
+    handlers.get("before_tool_call"),
+    { toolName: "deploy_site", params: {} },
+    { toolName: "deploy_site" },
+  );
+  console.log("OK plugin: enforce mode still denies a sensitive tool with no key");
 }
 
 console.log("\nAll smoke tests passed.");

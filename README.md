@@ -99,6 +99,12 @@ On Claude Code, a device that is not paired returns `ask`, so Claude's own permi
 
 A rule can always allow, always deny, or change the tier. Rules match kind, title, target, body, and the working directory, and the first match wins. On Telegram, use Rule on the card. On the dashboard, use the gear on a card, or open Rules. A rule's decision gets a receipt marked as a rule. See [Rules](https://oked.ai/docs#rules).
 
+## Watch mode
+
+A new install can record risky actions instead of pausing them. Set `"mode": "watch"` in `~/.oked/config.json`, or run `oked init --mode watch`. The default is `enforce`, so an existing install still pauses until you approve.
+
+In watch mode the action runs. OKed appends a line to `~/.oked/watch.log` when it would have paused. `oked report` summarizes that file. The line stores the tool name and the tier. It does not store the command or the tool arguments, and the action is not sent for approval. Details, including what a presence ping still sends, are in [docs/watch.md](./docs/watch.md).
+
 ## Packages
 
 All `@oked/*` packages share one version and are published together. Node.js 18 or newer.

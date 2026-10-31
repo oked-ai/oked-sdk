@@ -34,7 +34,8 @@ To wire the config by hand after the ClawHub install, edit `~/.openclaw/openclaw
       "oked": {
         "enabled": true,
         "apiKey": "ok_...",
-        "minTier": "review"
+        "minTier": "review",
+        "mode": "enforce"
       }
     }
   }
@@ -51,6 +52,7 @@ Keys live under `plugins.entries.oked`. The plugin manifest sets `additionalProp
 |---|---|---|---|
 | `apiKey` | `string` | `OKED_API_KEY` env | OKed API key. Required. With no key, sensitive calls are denied. |
 | `minTier` | `"safe" \| "warning" \| "review" \| "high_stakes"` | `"review"` | Lowest tier that can ask for approval. `warning` never blocks: only `review` and `high_stakes` do. Env `OKED_MIN_TIER` is the fallback when the config value is absent. |
+| `mode` | `"watch" \| "enforce"` | `"enforce"` | `watch` lets a risky call run and records that it would have paused. `OKED_MODE` wins over this key, which wins over `~/.oked/config.json`. See [docs/watch.md](../../docs/watch.md). |
 | `alwaysApprove` | `string[]` | `[]` | Tool names that are always `high_stakes`, whatever the classifier says. |
 | `alwaysAllow` | `string[]` | `[]` | Tool names that are always `safe`. Use sparingly. |
 | `timeoutMs` | `number` | `630000` | Per-approval wait, in milliseconds (10.5 minutes, so the backend's 10 minute expiry answers first). Minimum `1000`, maximum `1800000`. |

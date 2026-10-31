@@ -11,7 +11,11 @@ import {
   OKedHttpError,
   OKedReceiptError,
   OKedTooManyPendingError,
+  effectiveMode,
+  recordWouldHavePaused,
   shortReceiptId,
+  type OkedMode,
+  type WatchReason,
 } from "@oked/sdk";
 import { appendReceipt } from "./receipts.js";
 import { errorInfo, logDecision, type DecisionLogEntry } from "./log.js";
@@ -67,6 +71,11 @@ export interface DecideOptions {
    * it and keep the previous behaviour.
    */
   sandboxEnforced?: boolean;
+  /**
+   * `watch` allows a call that would have paused and records it.
+   * `enforce` is the default. When omitted, OKED_MODE and ~/.oked/config.json apply.
+   */
+  mode?: OkedMode;
 }
 
 type Context = Omit<DecisionLogEntry, "ts" | "decision" | "reason" | "client">;
@@ -91,6 +100,9 @@ function commandOf(toolInput: Record<string, unknown>): string | undefined {
  * cached user rule matches. Receipts are checked by the SDK before an approval
  * counts. Explicit denials, auth failures, bad receipts, and unexpected errors
  * deny. An unreachable backend follows `degradedDecision`.
+ *
+ * In watch mode the same call is allowed and a line is appended to the watch
+ * log. `approve()` is not called, so the action is not held and is not sent.
  *
  * This function does not write host output. The caller maps `decision` onto
  * the host's protocol. It does write the shared decision log and the local
@@ -176,6 +188,27 @@ export async function decide(call: ToolCallInput, options: DecideOptions): Promi
   }
 
   const ctx: Context = { tool: toolName, tier };
+
+  // Watch replaces the pause. Safe and warning calls already returned above,
+  // unless a saved rule would have sent them on. A classifier throw still
+  // denies in the caller's fail-safe handler: this branch is only a classified
+  // action that enforce mode would have paused or blocked.
+  if (effectiveMode(options.mode, client.mode) === "watch") {
+    const reason: WatchReason = !client.apiKey
+      ? "would have paused (not paired)"
+      : tier === "safe" || tier === "warning"
+        ? "would have paused (saved rule)"
+        : "would have paused";
+    recordWouldHavePaused({
+      tool: toolName,
+      tier,
+      client: options.clientId,
+      source: options.source,
+      reason,
+    });
+    log(`watch: ${toolName} (${tier}) ${reason}. Allowed.`);
+    return { decision: "allow", reason: `OKed watch: ${reason}` };
+  }
 
   if (!client.apiKey) {
     log(options.unpairedLog);

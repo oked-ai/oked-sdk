@@ -57,6 +57,7 @@ Pass any of these to `new OKedClient(config)`. Constructor values win over envir
 | `heartbeatIntervalMs` | `number` | `86400000` | Minimum gap between presence pings. Env `OKED_HEARTBEAT_INTERVAL` is in seconds. |
 | `client` | `string` | | Your integration's name and version, for example `my-agent@1.2.0`. Recorded on the receipt. |
 | `source` | `string` | `"sdk"` | Where the request came from. Part of the receipt subject. |
+| `mode` | `"watch" \| "enforce"` | `enforce` | `enforce` pauses risky actions in the automatic gates. `watch` lets them run and records what would have paused. `OKED_MODE`, then `mode` in `~/.oked/config.json`. `approve()` still waits in both modes. See [docs/watch.md](../../docs/watch.md). |
 
 ## API
 

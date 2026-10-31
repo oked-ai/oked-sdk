@@ -16,6 +16,8 @@ def isolate_home(tmp_path, monkeypatch):
         "OKED_STRICT_FAIL_CLOSED",
         "OKED_REQUIRE_RECEIPT",
         "OKED_MIN_TIER",
+        "OKED_MODE",
+        "OKED_WATCH_LOG",
         "OKED_BACKEND_URL",
         "OKED_RECEIPT_KEYS_URL",
         "OKED_RULES_CACHE_TTL",

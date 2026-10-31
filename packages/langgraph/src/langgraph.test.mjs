@@ -18,6 +18,7 @@ delete process.env.OKED_API_KEY;
 delete process.env.OKED_MIN_TIER;
 delete process.env.OKED_STRICT_FAIL_CLOSED;
 delete process.env.OKED_REQUIRE_RECEIPT;
+process.env.OKED_MODE = "enforce";
 
 const { createOkedClient, gateToolCall, withOkedApproval, withOkedApprovals } = await import("../dist/index.js");
 const {
@@ -675,6 +676,23 @@ check("ToolNode runs only the approved tool and preserves its arguments", async 
   const byAction = Object.fromEntries(client.calls.map((call) => [call.action, call]));
   assert.deepEqual(byAction.send_email.tool_input, { to: "a@example.com", body: "hi" });
   assert.deepEqual(byAction.create_invoice.tool_input, { amount: 10 });
+});
+
+check("watch mode runs a sensitive tool and enforce mode does not", async () => {
+  const secret = "SECRETTOKEN";
+  const client = fakeClient({ approveResult: DENIED });
+  const watched = recordingTool("send_invoice");
+  const wrapped = withOkedApproval(watched.tool, { client, mode: "watch" });
+  assert.equal(await wrapped.invoke(toolCall("send_invoice", { note: secret })), "ran");
+  assert.equal(watched.seen.length, 1);
+  assert.equal(client.calls.length, 0);
+
+  const enforced = recordingTool("send_invoice");
+  const blocked = withOkedApproval(enforced.tool, { client, mode: "enforce" });
+  const denied = await blocked.invoke(toolCall("send_invoice", { note: secret }));
+  assert.equal(enforced.seen.length, 0);
+  assert.match(String(denied.content), /DENIED/);
+  assert.equal(client.calls.length, 1);
 });
 
 let passed = 0;

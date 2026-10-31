@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { existsSync } from "fs";
-import { maskKey, pairDevice, writeOkedConfig } from "@oked/hook-core";
+import { applyInstallMode, maskKey, pairDevice, printWatchReport, writeOkedConfig } from "@oked/hook-core";
 import { OKedClient, OKED_CONFIG_PATH } from "@oked/sdk";
 import { codexHookInstalled, hooksPath, installCodexHook, uninstallCodexHook } from "./install.js";
 import { CLIENT_VERSION, PAIR_COMMAND } from "./version.js";
@@ -13,6 +13,7 @@ function footer(uri: string): [string, string] {
 }
 
 async function init(): Promise<void> {
+  await applyInstallMode();
   const cwd = process.cwd();
   const result = installCodexHook(cwd);
   if (result.action === "unreadable") {
@@ -66,6 +67,7 @@ async function status(): Promise<void> {
   console.log(`  Hook: ${codexHookInstalled(process.cwd()) ? "installed" : "not installed"}`);
   console.log(`  Project config: ${existsSync(path) ? path : "not found"}`);
   console.log(`  API key: ${client.apiKey ? maskKey(client.apiKey) : "not paired"}`);
+  console.log(`  Mode: ${client.mode}`);
   console.log(`  User config: ${existsSync(OKED_CONFIG_PATH) ? OKED_CONFIG_PATH : "not found"}`);
   if (client.apiKey) {
     const ok = await client.ping();
@@ -98,13 +100,19 @@ switch (command) {
   case "uninstall":
     uninstall();
     break;
+  case "report":
+    printWatchReport();
+    break;
   default:
     console.log("Usage: oked-codex <command>");
     console.log("");
     console.log("Commands:");
     console.log("  init        Install the Codex PreToolUse hook and pair this device");
     console.log("    --no-browser  Print the pairing link. Open no browser, use no clipboard.");
+    console.log("    --mode watch|enforce");
+    console.log("                  watch records risky actions and lets them run. enforce pauses them.");
     console.log("  status      Show the hook and the connection");
+    console.log("  report      Summarize actions watch mode would have paused");
     console.log("  uninstall   Remove the OKed hook from this project");
     break;
 }

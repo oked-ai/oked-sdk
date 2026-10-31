@@ -3,6 +3,7 @@ import { dirname } from "path";
 import type { ApprovalRequest, ApprovalResponse, OKedConfig } from "./types.js";
 import type { Rule } from "./rules.js";
 import { loadOKedConfig, OKED_RULES_CACHE_PATH, OKED_HEARTBEAT_PATH } from "./config.js";
+import { resolveOkedMode } from "./watch.js";
 import { OKedAuthError, OKedBackendUnreachableError, OKedHttpError, OKedTooManyPendingError } from "./errors.js";
 import { randomUUID } from "crypto";
 import { checkReceipt, OKED_RECEIPT_KEYS_URL } from "./receipt.js";
@@ -123,6 +124,8 @@ export class OKedClient {
         envStrictFailClosed() ??
         persisted.strictFailClosed ??
         false,
+      // Constructor, then OKED_MODE, then the config file, then enforce.
+      mode: resolveOkedMode(config?.mode, persisted.mode),
       rulesCacheTtlMs:
         config?.rulesCacheTtlMs ??
         envRulesCacheTtlMs() ??
@@ -158,6 +161,11 @@ export class OKedClient {
 
   get strictFailClosed(): boolean {
     return this.config.strictFailClosed;
+  }
+
+  /** `watch` or `enforce`. Resolved when this client was constructed. */
+  get mode(): OKedConfig["mode"] {
+    return this.config.mode;
   }
 
   get apiKey(): string {
@@ -465,8 +473,20 @@ export type {
 export type { Rendered } from "./describe.js";
 export { CLASSIFIER_VERSION } from "./kinds.js";
 export type { OperationKind } from "./kinds.js";
-export { loadOKedConfig, OKED_CONFIG_PATH, OKED_RECEIPT_KEYS_PATH } from "./config.js";
+export { loadOKedConfig, okedConfigPath, saveOkedMode, OKED_CONFIG_PATH, OKED_RECEIPT_KEYS_PATH } from "./config.js";
 export type { PersistedConfig } from "./config.js";
+export {
+  effectiveMode,
+  formatWatchReport,
+  isWatchReason,
+  parseOkedMode,
+  readWatchLog,
+  recordWouldHavePaused,
+  resolveOkedMode,
+  watchLogPath,
+  WATCH_REASONS,
+} from "./watch.js";
+export type { OkedMode, WatchLogEntry, WatchReason } from "./watch.js";
 export type {
   RiskTier,
   ApprovalRequest,

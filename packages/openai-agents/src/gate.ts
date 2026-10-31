@@ -21,6 +21,8 @@ import {
   lookupPrTitle,
   TIER_ORDER,
   DEFAULT_APPROVAL_TIMEOUT_MS,
+  effectiveMode,
+  recordWouldHavePaused,
   OKedAuthError,
   OKedBackendUnreachableError,
   OKedHttpError,
@@ -28,8 +30,10 @@ import {
   OKedTooManyPendingError,
   type ApprovalRequest,
   type ApprovalResponse,
+  type OkedMode,
   type RiskTier,
   type Rule,
+  type WatchReason,
 } from "@oked/sdk";
 import {
   authMessage,
@@ -77,6 +81,11 @@ export interface OkedAgentsConfig {
    * warning never blocks on its own. Env OKED_MIN_TIER is the fallback.
    */
   minTier?: RiskTier;
+  /**
+   * `watch` lets a risky call run and records that it would have paused.
+   * `enforce` (default) waits. Env OKED_MODE, then ~/.oked/config.json.
+   */
+  mode?: OkedMode;
   /** Tool names that are always high_stakes, whatever the classifier says. */
   alwaysApprove?: readonly string[];
   /** Tool names that are always safe. Use sparingly. Skips rules and approval. */
@@ -150,6 +159,7 @@ export function createDeps(config: OkedAgentsConfig = {}): GateDeps {
     ...(config.strictFailClosed !== undefined ? { strictFailClosed: config.strictFailClosed } : {}),
     client: CLIENT_ID,
     source: SOURCE,
+    ...(config.mode ? { mode: config.mode } : {}),
   });
   return {
     apiKey: client.apiKey,
@@ -267,6 +277,7 @@ export async function decideToolCall(
     );
   }
 
+  let fromRule = false;
   if (tier === "safe" || tier === "warning") {
     const escalated = await ruleMatches(toolName, args, tier, config, deps);
     if (!escalated) {
@@ -276,7 +287,25 @@ export async function decideToolCall(
       }
       return { proceed: true, tier };
     }
+    fromRule = true;
   } else if (!tierNeedsPerson(tier, config)) {
+    return { proceed: true, tier };
+  }
+
+  if (effectiveMode(config.mode) === "watch") {
+    const reason: WatchReason = !deps.apiKey
+      ? "would have paused (not paired)"
+      : fromRule
+        ? "would have paused (saved rule)"
+        : "would have paused";
+    recordWouldHavePaused({
+      tool: toolName,
+      tier,
+      client: CLIENT_ID,
+      source: SOURCE,
+      reason,
+    });
+    log(`watch: ${toolName} (${tier}) ${reason}. Allowed.`);
     return { proceed: true, tier };
   }
 

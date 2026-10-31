@@ -22,6 +22,8 @@ import {
   describeFields,
   lookupPrTitle,
   degradedDecision,
+  effectiveMode,
+  recordWouldHavePaused,
   OKedAuthError,
   OKedBackendUnreachableError,
   OKedReceiptError,
@@ -95,6 +97,19 @@ export const okedPreToolUseHook: HookCallback = async (rawInput) => {
   if (tier === "warning") {
     const summary = (toolInput.file_path ?? toolInput.command ?? toolName) as string;
     log(`WARNING ${toolName} ${summary} - allowed (inside project)`);
+    return ALLOW;
+  }
+
+  if (effectiveMode(undefined, client.mode) === "watch") {
+    const reason = client.apiKey ? "would have paused" : "would have paused (not paired)";
+    recordWouldHavePaused({
+      tool: toolName,
+      tier,
+      client: CLIENT_ID,
+      source: "claude-agent-sdk",
+      reason,
+    });
+    log(`watch: ${toolName} (${tier}) ${reason}. Allowed.`);
     return ALLOW;
   }
 

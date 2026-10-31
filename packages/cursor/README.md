@@ -45,7 +45,9 @@ The approval window is 10 minutes. The hook is configured for 690 seconds, and t
 | `oked-cursor init --native` | Install the Cursor hook even when a Claude Code `oked-hook` is present. You will get two prompts unless you turn third-party imports off. |
 | `oked-cursor init --no-browser` | Print the pairing link. Do not open a browser, and do not touch the clipboard. |
 | `oked-cursor init --yes` (or `-y`) | Skip the "press Enter to open the browser" prompt. For a non-interactive shell. |
-| `oked-cursor status` | Show install state and ping `GET /health` on the backend. |
+| `oked-cursor init --mode watch` | Let risky actions run and record what would have paused. `--mode enforce` is the default. |
+| `oked-cursor report` | Summarize `~/.oked/watch.log`. See [docs/watch.md](../../docs/watch.md). |
+| `oked-cursor status` | Show install state, the mode, and ping `GET /health` on the backend. |
 | `oked-cursor uninstall` | Remove the Cursor hook entry. Other hooks in `.cursor/hooks.json` are kept. A Claude Code hook is not removed. |
 
 ## What gets intercepted

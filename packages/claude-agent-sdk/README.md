@@ -66,7 +66,7 @@ Same tiers and fail-safe rules as the other integrations:
 |---|---|
 | `safe` | Allow immediately, no approval request |
 | `warning` | Allow, log to stderr, no approval request |
-| `review` / `high_stakes` | Ask for approval. Approve and the tool runs. Otherwise it is denied, with a reason. |
+| `review` / `high_stakes` | Ask for approval. Approve and the tool runs. Otherwise it is denied, with a reason. In watch mode (`OKED_MODE=watch`, or `"mode": "watch"` in `~/.oked/config.json`) the tool runs and the call is recorded locally. See [docs/watch.md](../../docs/watch.md). |
 
 Failure handling: no API key defers to the agent's own permission flow (`ask`). An invalid key denies. A receipt that does not verify denies. An unreachable backend uses the shared degraded rule: `high_stakes` denies, and lower tiers may proceed unless `OKED_STRICT_FAIL_CLOSED=1`, which denies every sensitive action during an outage. Any other unexpected error denies.
 

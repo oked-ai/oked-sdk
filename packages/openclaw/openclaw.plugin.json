@@ -24,6 +24,11 @@
         "enum": ["safe", "warning", "review", "high_stakes"],
         "default": "review"
       },
+      "mode": {
+        "type": "string",
+        "enum": ["watch", "enforce"],
+        "default": "enforce"
+      },
       "alwaysApprove": {
         "type": "array",
         "items": { "type": "string" }
@@ -49,6 +54,10 @@
       "placeholder": "ok_...",
       "help": "Your OKed API key from https://app.oked.ai/dashboard.",
       "sensitive": true
+    },
+    "mode": {
+      "label": "Mode",
+      "help": "enforce pauses risky actions until you approve. watch lets them run and records, on this machine, what OKed would have paused."
     },
     "minTier": {
       "label": "Minimum Approval Tier",

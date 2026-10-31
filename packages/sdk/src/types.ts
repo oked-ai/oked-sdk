@@ -1,6 +1,8 @@
 import type { ReceiptKey, SignedReceipt } from "@oked/receipt-core";
+import type { OkedMode } from "./mode.js";
 
 export type RiskTier = "safe" | "warning" | "review" | "high_stakes";
+export type { OkedMode };
 
 export interface ApprovalRequest {
   action: string;
@@ -49,6 +51,13 @@ export interface OKedConfig {
    * outage regardless of this flag. See degradedDecision().
    */
   strictFailClosed: boolean;
+  /**
+   * `enforce` (default) pauses review and high_stakes actions until a person
+   * decides. `watch` lets those actions run and records that they would have
+   * paused. Constructor, then OKED_MODE, then ~/.oked/config.json, then enforce.
+   * `approve()` itself still waits: automatic gates read this field.
+   */
+  mode: OkedMode;
   /**
    * TTL (ms) for the on-disk cache of user rules used by the hook's local
    * escalation check. The Claude Code hook is a fresh process per tool call,

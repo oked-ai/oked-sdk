@@ -1,7 +1,7 @@
 // Runs the built hook the way Codex does: JSON on stdin, JSON or nothing on stdout.
 import assert from "node:assert";
 import { spawn } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -15,9 +15,11 @@ const { mkdirSync } = await import("node:fs");
 mkdirSync(project, { recursive: true });
 
 let reply = { status: 200, body: "{}" };
+const urls = [];
 const server = createServer((req, res) => {
   req.resume();
   req.on("end", () => {
+    urls.push(req.url);
     if (req.url === "/api/v1/rules") {
       res.writeHead(200, { "Content-Type": "application/json" }).end("[]");
       return;
@@ -129,9 +131,34 @@ try {
     assert.match(again.stdout, /not installed/);
     passed++;
   }
+  {
+    urls.length = 0;
+    const secret = "SECRETTOKEN";
+    const { stdout, stderr } = await run(HOOK, [], payload("Bash", { command: `rm -rf /var/data ${secret}` }), {
+      OKED_MODE: "watch",
+    });
+    assert.equal(stdout, "", "watch mode still prints nothing on allow");
+    assert.match(stderr, /would have paused \(not paired\)/);
+    assert.ok(!urls.includes("/api/v1/approve"));
+    const text = readFileSync(join(home, ".oked", "watch.log"), "utf8");
+    assert.ok(!text.includes(secret));
+    assert.equal(JSON.parse(text.trim().split("\n").at(-1)).tool, "Bash");
+    passed++;
+  }
+  {
+    urls.length = 0;
+    reply = { status: 200, body: JSON.stringify({ approval_id: "appr-w", decision: "denied", status: "denied" }) };
+    const { stdout } = await run(HOOK, [], payload("mcp__github__create_issue", { title: "x" }), {
+      OKED_API_KEY: "test-key",
+      OKED_MODE: "watch",
+    });
+    assert.equal(stdout, "");
+    assert.ok(!urls.includes("/api/v1/approve"), "watch mode does not call approve");
+    passed++;
+  }
 } finally {
   server.close();
   rmSync(home, { recursive: true, force: true });
 }
 
-console.log(`ok - @oked/codex hook: ${passed}/8 passed`);
+console.log(`ok - @oked/codex hook: ${passed}/10 passed`);

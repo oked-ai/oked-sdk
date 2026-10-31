@@ -10,25 +10,39 @@ var __name = (target, value) => __defProp(target, "name", { value, configurable:
 import { spawn as spawn2 } from "child_process";
 
 // packages/sdk/src/index.ts
-import { readFileSync as readFileSync4, writeFileSync as writeFileSync2, mkdirSync as mkdirSync2 } from "fs";
-import { dirname as dirname3 } from "path";
+import { readFileSync as readFileSync5, writeFileSync as writeFileSync3, mkdirSync as mkdirSync4 } from "fs";
+import { dirname as dirname5 } from "path";
 
 // packages/sdk/src/config.ts
-import { readFileSync } from "fs";
+import { chmodSync, mkdirSync, readFileSync, writeFileSync } from "fs";
 import { homedir } from "os";
-import { join } from "path";
-var OKED_CONFIG_PATH = join(homedir(), ".oked", "config.json");
+import { dirname, join } from "path";
+
+// packages/sdk/src/mode.ts
+function parseOkedMode(value) {
+  return value === "watch" || value === "enforce" ? value : void 0;
+}
+__name(parseOkedMode, "parseOkedMode");
+
+// packages/sdk/src/config.ts
+function okedConfigPath() {
+  return join(homedir(), ".oked", "config.json");
+}
+__name(okedConfigPath, "okedConfigPath");
+var OKED_CONFIG_PATH = okedConfigPath();
 var OKED_RULES_CACHE_PATH = join(homedir(), ".oked", "rules-cache.json");
 var OKED_HEARTBEAT_PATH = join(homedir(), ".oked", "heartbeat.json");
 var OKED_RECEIPT_KEYS_PATH = join(homedir(), ".oked", "receipt-keys.json");
 function loadOKedConfig() {
   try {
-    const raw = readFileSync(OKED_CONFIG_PATH, "utf-8");
+    const raw = readFileSync(okedConfigPath(), "utf-8");
     const parsed = JSON.parse(raw);
     if (!parsed || typeof parsed !== "object") return {};
     const out = {};
     if (typeof parsed.apiKey === "string" && parsed.apiKey) out.apiKey = parsed.apiKey;
     if (typeof parsed.backendUrl === "string" && parsed.backendUrl) out.backendUrl = parsed.backendUrl;
+    const mode = parseOkedMode(parsed.mode);
+    if (mode) out.mode = mode;
     if (typeof parsed.strictFailClosed === "boolean") out.strictFailClosed = parsed.strictFailClosed;
     if (typeof parsed.rulesCacheTtlSeconds === "number" && parsed.rulesCacheTtlSeconds >= 0) {
       out.rulesCacheTtlSeconds = parsed.rulesCacheTtlSeconds;
@@ -44,6 +58,78 @@ function loadOKedConfig() {
   }
 }
 __name(loadOKedConfig, "loadOKedConfig");
+
+// packages/sdk/src/watch.ts
+import { appendFileSync, mkdirSync as mkdirSync2, readFileSync as readFileSync2, renameSync, statSync } from "fs";
+import { homedir as homedir2 } from "os";
+import { dirname as dirname2, join as join2 } from "path";
+function resolveOkedMode(explicit, persisted) {
+  const fromExplicit = parseOkedMode(explicit);
+  if (fromExplicit) return fromExplicit;
+  const fromEnv = parseOkedMode(process.env.OKED_MODE);
+  if (fromEnv) return fromEnv;
+  const fromArg = parseOkedMode(persisted);
+  if (fromArg) return fromArg;
+  if (persisted === void 0) {
+    const fromFile = parseOkedMode(loadOKedConfig().mode);
+    if (fromFile) return fromFile;
+  }
+  return "enforce";
+}
+__name(resolveOkedMode, "resolveOkedMode");
+function effectiveMode(explicit, clientMode) {
+  const chosen = parseOkedMode(explicit);
+  if (chosen) return chosen;
+  const fromClient = parseOkedMode(clientMode);
+  if (fromClient) return fromClient;
+  return resolveOkedMode();
+}
+__name(effectiveMode, "effectiveMode");
+var WATCH_REASONS = [
+  "would have paused",
+  "would have paused (not paired)",
+  "would have paused (saved rule)"
+];
+function isWatchReason(value) {
+  return typeof value === "string" && WATCH_REASONS.includes(value);
+}
+__name(isWatchReason, "isWatchReason");
+var TIERS = /* @__PURE__ */ new Set(["safe", "warning", "review", "high_stakes"]);
+var MAX_BYTES = 1e6;
+function watchLogPath() {
+  const override = process.env.OKED_WATCH_LOG;
+  if (typeof override === "string" && override) return override;
+  return join2(homedir2(), ".oked", "watch.log");
+}
+__name(watchLogPath, "watchLogPath");
+function oneLine(value, max, fallback) {
+  const raw = typeof value === "string" ? value : "";
+  const line = raw.replace(/\s+/g, " ").trim();
+  if (!line) return fallback;
+  return line.length > max ? line.slice(0, max) : line;
+}
+__name(oneLine, "oneLine");
+function recordWouldHavePaused(entry, path2 = watchLogPath()) {
+  const row = {
+    ts: (/* @__PURE__ */ new Date()).toISOString(),
+    outcome: "would_have_paused",
+    tool: oneLine(entry.tool, 120, "unknown"),
+    tier: TIERS.has(entry.tier) ? entry.tier : "unknown",
+    client: oneLine(entry.client, 80, "unknown"),
+    source: oneLine(entry.source, 40, "unknown"),
+    reason: isWatchReason(entry.reason) ? entry.reason : "would have paused"
+  };
+  try {
+    mkdirSync2(dirname2(path2), { recursive: true, mode: 448 });
+    try {
+      if (statSync(path2).size > MAX_BYTES) renameSync(path2, `${path2}.1`);
+    } catch {
+    }
+    appendFileSync(path2, JSON.stringify(row) + "\n", { mode: 384 });
+  } catch {
+  }
+}
+__name(recordWouldHavePaused, "recordWouldHavePaused");
 
 // packages/sdk/src/errors.ts
 var OKedAuthError = class extends Error {
@@ -114,8 +200,8 @@ var OKedReceiptError = class extends Error {
 import { randomUUID } from "crypto";
 
 // packages/sdk/src/receipt.ts
-import { mkdirSync, readFileSync as readFileSync2, writeFileSync } from "fs";
-import { dirname } from "path";
+import { mkdirSync as mkdirSync3, readFileSync as readFileSync3, writeFileSync as writeFileSync2 } from "fs";
+import { dirname as dirname3 } from "path";
 
 // packages/receipt-core/src/jcs.ts
 function canonicalize(value) {
@@ -264,7 +350,7 @@ var PINNED_RECEIPT_KEYS = [
 // packages/sdk/src/receipt.ts
 function readCachedKeys() {
   try {
-    const parsed = JSON.parse(readFileSync2(OKED_RECEIPT_KEYS_PATH, "utf-8"));
+    const parsed = JSON.parse(readFileSync3(OKED_RECEIPT_KEYS_PATH, "utf-8"));
     return Array.isArray(parsed?.keys) ? parsed.keys : [];
   } catch {
     return [];
@@ -273,8 +359,8 @@ function readCachedKeys() {
 __name(readCachedKeys, "readCachedKeys");
 function writeCachedKeys(keys) {
   try {
-    mkdirSync(dirname(OKED_RECEIPT_KEYS_PATH), { recursive: true });
-    writeFileSync(OKED_RECEIPT_KEYS_PATH, JSON.stringify({ keys }));
+    mkdirSync3(dirname3(OKED_RECEIPT_KEYS_PATH), { recursive: true });
+    writeFileSync2(OKED_RECEIPT_KEYS_PATH, JSON.stringify({ keys }));
   } catch {
   }
 }
@@ -361,9 +447,9 @@ import path from "path";
 import os from "os";
 
 // packages/sdk/src/describe.ts
-import { existsSync, readFileSync as readFileSync3, readdirSync, statSync } from "node:fs";
-import { homedir as homedir2 } from "node:os";
-import { basename, dirname as dirname2, isAbsolute, join as join2, resolve } from "node:path";
+import { existsSync, readFileSync as readFileSync4, readdirSync, statSync as statSync2 } from "node:fs";
+import { homedir as homedir3 } from "node:os";
+import { basename, dirname as dirname4, isAbsolute, join as join3, resolve } from "node:path";
 var BODY_PREVIEW_MAX = 200;
 var COMMAND_INLINE_MAX = 50;
 var DIFF_HUNK_MAX_LINES = 10;
@@ -848,7 +934,7 @@ function summarizeNpmPublish(cmd, cwd) {
 __name(summarizeNpmPublish, "summarizeNpmPublish");
 function readPackageJson(dir) {
   try {
-    return JSON.parse(readFileSync3(join2(dir, "package.json"), "utf8"));
+    return JSON.parse(readFileSync4(join3(dir, "package.json"), "utf8"));
   } catch {
     return null;
   }
@@ -871,7 +957,7 @@ function listWorkspaceDirs(root) {
       const parent = resolve(root, pattern.slice(0, -2));
       try {
         for (const e of readdirSync(parent, { withFileTypes: true })) {
-          if (e.isDirectory() && existsSync(join2(parent, e.name, "package.json"))) dirs.push(join2(parent, e.name));
+          if (e.isDirectory() && existsSync(join3(parent, e.name, "package.json"))) dirs.push(join3(parent, e.name));
         }
       } catch {
       }
@@ -1479,16 +1565,16 @@ function identifyTarget(input) {
 }
 __name(identifyTarget, "identifyTarget");
 function summarizeEmail(input) {
-  const join8 = /* @__PURE__ */ __name((v) => {
+  const join9 = /* @__PURE__ */ __name((v) => {
     if (Array.isArray(v)) return v.filter((x) => x != null && x !== "").map(String).join(", ") || null;
     if (typeof v === "string" && v.trim()) return v.trim();
     return null;
   }, "join");
   const subject = typeof input.subject === "string" && input.subject.trim() ? input.subject.trim() : null;
-  const to = join8(input.to ?? input.recipient ?? input.recipients);
-  const cc = join8(input.cc);
-  const bcc = join8(input.bcc);
-  const from = join8(input.from ?? input.sender);
+  const to = join9(input.to ?? input.recipient ?? input.recipients);
+  const cc = join9(input.cc);
+  const bcc = join9(input.bcc);
+  const from = join9(input.from ?? input.sender);
   const senderDomain = from && from.includes("@") ? from.split("@")[1].toLowerCase() : null;
   const body = input.body ?? input.text ?? input.html ?? input.message;
   const attachments = input.attachments;
@@ -1803,7 +1889,7 @@ function cwdAfterCds(steps, vars, cwd) {
 }
 __name(cwdAfterCds, "cwdAfterCds");
 function resolveDir(dir, base) {
-  const d = dir.replace(/^~(?=\/|$)/, homedir2());
+  const d = dir.replace(/^~(?=\/|$)/, homedir3());
   if (d.includes("$")) return void 0;
   return isAbsolute(d) ? d : base ? resolve(base, d) : void 0;
 }
@@ -1820,17 +1906,17 @@ function gitRepoFor(cmd, re, cwd) {
 __name(gitRepoFor, "gitRepoFor");
 function readGitRepo(start) {
   try {
-    for (let top = resolve(start); ; top = dirname2(top)) {
-      const dotGit = join2(top, ".git");
+    for (let top = resolve(start); ; top = dirname4(top)) {
+      const dotGit = join3(top, ".git");
       if (existsSync(dotGit)) {
         let gitDir = dotGit;
-        const pointer = statSync(dotGit).isFile() ? readFileSync3(dotGit, "utf8").match(/^gitdir:\s*(.+)$/m) : null;
+        const pointer = statSync2(dotGit).isFile() ? readFileSync4(dotGit, "utf8").match(/^gitdir:\s*(.+)$/m) : null;
         if (pointer) gitDir = resolve(top, pointer[1].trim());
-        const commonFile = join2(gitDir, "commondir");
-        const commonDir = existsSync(commonFile) ? resolve(gitDir, readFileSync3(commonFile, "utf8").trim()) : gitDir;
+        const commonFile = join3(gitDir, "commondir");
+        const commonDir = existsSync(commonFile) ? resolve(gitDir, readFileSync4(commonFile, "utf8").trim()) : gitDir;
         const remotes = /* @__PURE__ */ new Map();
         let section;
-        for (const line of readFileSync3(join2(commonDir, "config"), "utf8").split("\n")) {
+        for (const line of readFileSync4(join3(commonDir, "config"), "utf8").split("\n")) {
           const head2 = line.match(/^\s*\[\s*remote\s+"([^"]+)"\s*\]/);
           if (head2) section = head2[1];
           else if (/^\s*\[/.test(line)) section = void 0;
@@ -1839,8 +1925,8 @@ function readGitRepo(start) {
             if (url) remotes.set(section, url);
           }
         }
-        const head = existsSync(join2(gitDir, "HEAD")) ? readFileSync3(join2(gitDir, "HEAD"), "utf8") : "";
-        const mainTop = basename(commonDir) === ".git" ? dirname2(commonDir) : top;
+        const head = existsSync(join3(gitDir, "HEAD")) ? readFileSync4(join3(gitDir, "HEAD"), "utf8") : "";
+        const mainTop = basename(commonDir) === ".git" ? dirname4(commonDir) : top;
         return {
           name: repoSlug(remotes.get("origin")) ?? basename(mainTop),
           github: /^(?:https?:\/\/(?:[^@/]+@)?|ssh:\/\/[^@/]+@|[^@\s/]+@)github\.com[:/]/i.test(remotes.get("origin") ?? "") ? repoSlug(remotes.get("origin")) : void 0,
@@ -1848,7 +1934,7 @@ function readGitRepo(start) {
           branch: head.match(/^ref:\s*refs\/heads\/(.+?)\s*$/m)?.[1]
         };
       }
-      if (dirname2(top) === top) return null;
+      if (dirname4(top) === top) return null;
     }
   } catch {
     return null;
@@ -4064,7 +4150,7 @@ function rulesCacheKey(backendUrl, apiKey) {
 __name(rulesCacheKey, "rulesCacheKey");
 function readRulesCache() {
   try {
-    const parsed = JSON.parse(readFileSync4(OKED_RULES_CACHE_PATH, "utf-8"));
+    const parsed = JSON.parse(readFileSync5(OKED_RULES_CACHE_PATH, "utf-8"));
     return parsed && typeof parsed === "object" ? parsed : {};
   } catch {
     return {};
@@ -4073,15 +4159,15 @@ function readRulesCache() {
 __name(readRulesCache, "readRulesCache");
 function writeRulesCache(cache) {
   try {
-    mkdirSync2(dirname3(OKED_RULES_CACHE_PATH), { recursive: true });
-    writeFileSync2(OKED_RULES_CACHE_PATH, JSON.stringify(cache));
+    mkdirSync4(dirname5(OKED_RULES_CACHE_PATH), { recursive: true });
+    writeFileSync3(OKED_RULES_CACHE_PATH, JSON.stringify(cache));
   } catch {
   }
 }
 __name(writeRulesCache, "writeRulesCache");
 function readHeartbeatStamps() {
   try {
-    const parsed = JSON.parse(readFileSync4(OKED_HEARTBEAT_PATH, "utf-8"));
+    const parsed = JSON.parse(readFileSync5(OKED_HEARTBEAT_PATH, "utf-8"));
     return parsed && typeof parsed === "object" ? parsed : {};
   } catch {
     return {};
@@ -4090,8 +4176,8 @@ function readHeartbeatStamps() {
 __name(readHeartbeatStamps, "readHeartbeatStamps");
 function writeHeartbeatStamps(stamps) {
   try {
-    mkdirSync2(dirname3(OKED_HEARTBEAT_PATH), { recursive: true });
-    writeFileSync2(OKED_HEARTBEAT_PATH, JSON.stringify(stamps));
+    mkdirSync4(dirname5(OKED_HEARTBEAT_PATH), { recursive: true });
+    writeFileSync3(OKED_HEARTBEAT_PATH, JSON.stringify(stamps));
   } catch {
   }
 }
@@ -4109,6 +4195,8 @@ var OKedClient = class {
       timeout: config?.timeout || DEFAULT_APPROVAL_TIMEOUT_MS,
       // Precedence: constructor > env > ~/.oked/config.json > default false.
       strictFailClosed: config?.strictFailClosed ?? envStrictFailClosed() ?? persisted.strictFailClosed ?? false,
+      // Constructor, then OKED_MODE, then the config file, then enforce.
+      mode: resolveOkedMode(config?.mode, persisted.mode),
       rulesCacheTtlMs: config?.rulesCacheTtlMs ?? envRulesCacheTtlMs() ?? (typeof persisted.rulesCacheTtlSeconds === "number" ? persisted.rulesCacheTtlSeconds * 1e3 : void 0) ?? 3e5,
       heartbeatIntervalMs: config?.heartbeatIntervalMs ?? envHeartbeatIntervalMs() ?? (typeof persisted.heartbeatIntervalSeconds === "number" ? persisted.heartbeatIntervalSeconds * 1e3 : void 0) ?? 864e5,
       // On by default from 0.6.0: an approval only counts with a valid receipt.
@@ -4126,6 +4214,10 @@ var OKedClient = class {
   }
   get strictFailClosed() {
     return this.config.strictFailClosed;
+  }
+  /** `watch` or `enforce`. Resolved when this client was constructed. */
+  get mode() {
+    return this.config.mode;
   }
   get apiKey() {
     return this.config.apiKey;
@@ -4352,25 +4444,25 @@ function isRetriableConnectError(err) {
 __name(isRetriableConnectError, "isRetriableConnectError");
 
 // packages/hook-core/src/receipts.ts
-import { appendFileSync, mkdirSync as mkdirSync3, readFileSync as readFileSync5 } from "fs";
-import { homedir as homedir3 } from "os";
-import { dirname as dirname4, join as join3 } from "path";
-var OKED_RECEIPTS_LOG = join3(homedir3(), ".oked", "receipts.jsonl");
+import { appendFileSync as appendFileSync2, mkdirSync as mkdirSync5, readFileSync as readFileSync6 } from "fs";
+import { homedir as homedir4 } from "os";
+import { dirname as dirname6, join as join4 } from "path";
+var OKED_RECEIPTS_LOG = join4(homedir4(), ".oked", "receipts.jsonl");
 function appendReceipt(receipt, path2 = OKED_RECEIPTS_LOG) {
   try {
-    mkdirSync3(dirname4(path2), { recursive: true, mode: 448 });
-    appendFileSync(path2, JSON.stringify(receipt) + "\n", { mode: 384 });
+    mkdirSync5(dirname6(path2), { recursive: true, mode: 448 });
+    appendFileSync2(path2, JSON.stringify(receipt) + "\n", { mode: 384 });
   } catch {
   }
 }
 __name(appendReceipt, "appendReceipt");
 
 // packages/hook-core/src/log.ts
-import { appendFileSync as appendFileSync2, mkdirSync as mkdirSync4, renameSync, statSync as statSync2 } from "fs";
-import { homedir as homedir4 } from "os";
-import { dirname as dirname5, join as join4 } from "path";
-var OKED_HOOK_LOG = join4(homedir4(), ".oked", "hook.log");
-var MAX_BYTES = 1e6;
+import { appendFileSync as appendFileSync3, mkdirSync as mkdirSync6, renameSync as renameSync2, statSync as statSync3 } from "fs";
+import { homedir as homedir5 } from "os";
+import { dirname as dirname7, join as join5 } from "path";
+var OKED_HOOK_LOG = join5(homedir5(), ".oked", "hook.log");
+var MAX_BYTES2 = 1e6;
 function errorInfo(err) {
   const e = err;
   const name = typeof e?.name === "string" ? e.name : typeof err;
@@ -4382,27 +4474,27 @@ function errorInfo(err) {
 __name(errorInfo, "errorInfo");
 function logDecision(entry, path2 = process.env.OKED_HOOK_LOG || OKED_HOOK_LOG) {
   try {
-    mkdirSync4(dirname5(path2), { recursive: true, mode: 448 });
+    mkdirSync6(dirname7(path2), { recursive: true, mode: 448 });
     try {
-      if (statSync2(path2).size > MAX_BYTES) renameSync(path2, `${path2}.1`);
+      if (statSync3(path2).size > MAX_BYTES2) renameSync2(path2, `${path2}.1`);
     } catch {
     }
-    appendFileSync2(path2, JSON.stringify({ ts: (/* @__PURE__ */ new Date()).toISOString(), ...entry }) + "\n", { mode: 384 });
+    appendFileSync3(path2, JSON.stringify({ ts: (/* @__PURE__ */ new Date()).toISOString(), ...entry }) + "\n", { mode: 384 });
   } catch {
   }
 }
 __name(logDecision, "logDecision");
 
 // packages/hook-core/src/sandbox.ts
-import { existsSync as existsSync3, readFileSync as readFileSync7 } from "fs";
-import { join as join6 } from "path";
+import { existsSync as existsSync3, readFileSync as readFileSync8 } from "fs";
+import { join as join7 } from "path";
 
 // packages/hook-core/src/claude-hooks.ts
-import { existsSync as existsSync2, readFileSync as readFileSync6 } from "fs";
-import { homedir as homedir5 } from "os";
-import { delimiter, join as join5 } from "path";
+import { existsSync as existsSync2, readFileSync as readFileSync7 } from "fs";
+import { homedir as homedir6 } from "os";
+import { delimiter, join as join6 } from "path";
 function claudeUserSettingsPath() {
-  return join5(process.env.CLAUDE_CONFIG_DIR || join5(homedir5(), ".claude"), "settings.json");
+  return join6(process.env.CLAUDE_CONFIG_DIR || join6(homedir6(), ".claude"), "settings.json");
 }
 __name(claudeUserSettingsPath, "claudeUserSettingsPath");
 function commandIsOkedHook(command2) {
@@ -4413,8 +4505,8 @@ function commandIsOkedHook(command2) {
 __name(commandIsOkedHook, "commandIsOkedHook");
 function settingsCandidates(cwd, includeUser) {
   const candidates = [
-    { scope: "project-local", path: join5(cwd, ".claude", "settings.local.json") },
-    { scope: "project", path: join5(cwd, ".claude", "settings.json") }
+    { scope: "project-local", path: join6(cwd, ".claude", "settings.local.json") },
+    { scope: "project", path: join6(cwd, ".claude", "settings.json") }
   ];
   if (includeUser) candidates.push({ scope: "user", path: claudeUserSettingsPath() });
   return candidates;
@@ -4422,7 +4514,7 @@ function settingsCandidates(cwd, includeUser) {
 __name(settingsCandidates, "settingsCandidates");
 function readJson(path2) {
   try {
-    return JSON.parse(readFileSync6(path2, "utf-8"));
+    return JSON.parse(readFileSync7(path2, "utf-8"));
   } catch {
     return void 0;
   }
@@ -4474,7 +4566,7 @@ function commandIsResolvable(command2, pathEnv = process.env.PATH ?? "") {
   for (const dir of pathEnv.split(delimiter)) {
     if (!dir) continue;
     for (const name of names) {
-      if (existsSync2(join5(dir, name))) return true;
+      if (existsSync2(join6(dir, name))) return true;
     }
   }
   return false;
@@ -4497,8 +4589,8 @@ function claudeSandboxEnforced(cwd, command2) {
 }
 __name(claudeSandboxEnforced, "claudeSandboxEnforced");
 function readClaudeSandbox(cwd) {
-  const local = readSandboxFile(join6(cwd, ".claude", "settings.local.json"));
-  const project = readSandboxFile(join6(cwd, ".claude", "settings.json"));
+  const local = readSandboxFile(join7(cwd, ".claude", "settings.local.json"));
+  const project = readSandboxFile(join7(cwd, ".claude", "settings.json"));
   const user = readSandboxFile(claudeUserSettingsPath());
   const excludedCommands = [
     ...local?.excludedCommands ?? [],
@@ -4542,7 +4634,7 @@ function readSandboxFile(path2) {
   if (!existsSync3(path2)) return void 0;
   let parsed;
   try {
-    parsed = JSON.parse(readFileSync7(path2, "utf-8"));
+    parsed = JSON.parse(readFileSync8(path2, "utf-8"));
   } catch {
     return void 0;
   }
@@ -4654,6 +4746,18 @@ async function decide(call, options) {
     }
   }
   const ctx = { tool: toolName, tier };
+  if (effectiveMode(options.mode, client.mode) === "watch") {
+    const reason = !client.apiKey ? "would have paused (not paired)" : tier === "safe" || tier === "warning" ? "would have paused (saved rule)" : "would have paused";
+    recordWouldHavePaused({
+      tool: toolName,
+      tier,
+      client: options.clientId,
+      source: options.source,
+      reason
+    });
+    log(`watch: ${toolName} (${tier}) ${reason}. Allowed.`);
+    return { decision: "allow", reason: `OKed watch: ${reason}` };
+  }
   if (!client.apiKey) {
     log(options.unpairedLog);
     return finish(unpaired, options.unpairedReason, ctx);
@@ -4744,18 +4848,18 @@ __name(decide, "decide");
 var HOOK_TIMEOUT_SECONDS = DEFAULT_APPROVAL_TIMEOUT_MS / 1e3 + 60;
 
 // packages/hook-core/src/claude-plugin.ts
-import { existsSync as existsSync4, readFileSync as readFileSync8 } from "fs";
-import { homedir as homedir6 } from "os";
-import { join as join7 } from "path";
+import { existsSync as existsSync4, readFileSync as readFileSync9 } from "fs";
+import { homedir as homedir7 } from "os";
+import { join as join8 } from "path";
 var OKED_PLUGIN_NAME = "oked";
-var OKED_PLUGIN_HOOK_FILE = join7("scripts", "oked-hook.mjs");
+var OKED_PLUGIN_HOOK_FILE = join8("scripts", "oked-hook.mjs");
 function isOkedPluginId(id) {
   return id === OKED_PLUGIN_NAME || id.startsWith(`${OKED_PLUGIN_NAME}@`);
 }
 __name(isOkedPluginId, "isOkedPluginId");
 function readJson2(path2) {
   try {
-    return JSON.parse(readFileSync8(path2, "utf-8"));
+    return JSON.parse(readFileSync9(path2, "utf-8"));
   } catch {
     return void 0;
   }
@@ -4767,9 +4871,9 @@ function claudePluginsDirs(env = process.env) {
     if (!dirs.includes(dir)) dirs.push(dir);
   }, "add");
   if (env.CLAUDE_CODE_PLUGIN_CACHE_DIR) add(env.CLAUDE_CODE_PLUGIN_CACHE_DIR);
-  const config = env.CLAUDE_CONFIG_DIR || join7(env.HOME || homedir6(), ".claude");
-  add(join7(config, "plugins"));
-  add(join7(env.HOME || homedir6(), ".claude", "plugins"));
+  const config = env.CLAUDE_CONFIG_DIR || join8(env.HOME || homedir7(), ".claude");
+  add(join8(config, "plugins"));
+  add(join8(env.HOME || homedir7(), ".claude", "plugins"));
   return dirs;
 }
 __name(claudePluginsDirs, "claudePluginsDirs");
@@ -4842,7 +4946,7 @@ __name(enabledMap, "enabledMap");
 function loadInstalledOkedRecords(env = process.env) {
   const records = [];
   for (const dir of claudePluginsDirs(env)) {
-    const file = join7(dir, "installed_plugins.json");
+    const file = join8(dir, "installed_plugins.json");
     if (!existsSync4(file)) continue;
     records.push(...installedOkedRecords(readJson2(file)));
   }
@@ -4852,8 +4956,8 @@ __name(loadInstalledOkedRecords, "loadInstalledOkedRecords");
 function settingsLayers(cwd) {
   return [
     readJson2(claudeUserSettingsPath()),
-    readJson2(join7(cwd, ".claude", "settings.json")),
-    readJson2(join7(cwd, ".claude", "settings.local.json"))
+    readJson2(join8(cwd, ".claude", "settings.json")),
+    readJson2(join8(cwd, ".claude", "settings.local.json"))
   ];
 }
 __name(settingsLayers, "settingsLayers");
@@ -4871,7 +4975,7 @@ function okedPluginBundleOnDisk(env = process.env) {
 __name(okedPluginBundleOnDisk, "okedPluginBundleOnDisk");
 function bundleExistsAt(installPath) {
   if (installPath.endsWith("oked-hook.mjs")) return existsSync4(installPath);
-  return existsSync4(join7(installPath, OKED_PLUGIN_HOOK_FILE));
+  return existsSync4(join8(installPath, OKED_PLUGIN_HOOK_FILE));
 }
 __name(bundleExistsAt, "bundleExistsAt");
 function settingsHookYieldsToPlugin(cwd, env = process.env) {
@@ -4887,9 +4991,9 @@ function pluginHookYieldsToSettingsHook(toolName, cwd, env = process.env) {
 __name(pluginHookYieldsToSettingsHook, "pluginHookYieldsToSettingsHook");
 
 // packages/hook-core/src/pair.ts
-import { writeFileSync as writeFileSync3, existsSync as existsSync5, mkdirSync as mkdirSync5, chmodSync } from "fs";
+import { writeFileSync as writeFileSync4, existsSync as existsSync5, mkdirSync as mkdirSync7, chmodSync as chmodSync2 } from "fs";
 import { hostname as hostname2 } from "os";
-import { dirname as dirname6 } from "path";
+import { dirname as dirname8 } from "path";
 import { spawn } from "child_process";
 import { createInterface } from "readline";
 
@@ -5216,13 +5320,14 @@ function maskKey(key) {
 }
 __name(maskKey, "maskKey");
 function writeOkedConfig(apiKey, backendUrl) {
-  const dir = dirname6(OKED_CONFIG_PATH);
-  if (!existsSync5(dir)) mkdirSync5(dir, { recursive: true });
+  const path2 = okedConfigPath();
+  const dir = dirname8(path2);
+  if (!existsSync5(dir)) mkdirSync7(dir, { recursive: true });
   const existing = loadOKedConfig();
   const payload = { ...existing, apiKey, backendUrl };
-  writeFileSync3(OKED_CONFIG_PATH, JSON.stringify(payload, null, 2) + "\n");
+  writeFileSync4(path2, JSON.stringify(payload, null, 2) + "\n");
   try {
-    chmodSync(OKED_CONFIG_PATH, 384);
+    chmodSync2(path2, 384);
   } catch {
   }
 }

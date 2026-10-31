@@ -21,7 +21,9 @@ The API key field is marked sensitive. Claude Code stores it outside `settings.j
 
 ## What is sent
 
-When a risky tool call needs a person, this plugin sends the tool name, the command text or other tool input, the working directory, and a short description of the action to the OKed service at api.oked.ai so a person can approve or deny it. That text is what you see on the approval card in Telegram and on the web dashboard. Safe actions are classified on this machine and are not sent. The API key saved in the plugin configuration is sent only as the credential on that request. A copy of each signed decision receipt stays on this machine in `~/.oked/receipts.jsonl`. If the plugin API key field is empty, the hook uses the key `oked init` already saved for this machine.
+When a risky tool call needs a person, and mode is enforce (the default), this plugin sends the tool name, the command text or other tool input, the working directory, and a short description of the action to the OKed service at api.oked.ai so a person can approve or deny it. That text is what you see on the approval card in Telegram and on the web dashboard. Safe actions are classified on this machine and are not sent. The API key saved in the plugin configuration is sent only as the credential on that request. A copy of each signed decision receipt stays on this machine in `~/.oked/receipts.jsonl`. If the plugin API key field is empty, the hook uses the key `oked init` already saved for this machine.
+
+Watch mode lets the same risky call run and does not send it. Set `OKED_MODE=watch`, or `"mode": "watch"` in `~/.oked/config.json`. A line in `~/.oked/watch.log` stores the tool name and the tier. It does not store the command text or other tool input. `oked report` summarizes that file.
 
 ## One gate
 

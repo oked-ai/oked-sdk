@@ -14,9 +14,12 @@ import {
   degradedDecision,
   describe,
   describeFields,
+  effectiveMode,
   lookupPrTitle,
+  recordWouldHavePaused,
   type ApprovalResponse,
   type RiskTier,
+  type WatchReason,
 } from "@oked/sdk";
 import {
   approvedMessage,
@@ -94,6 +97,7 @@ function resolveClient(options: OkedAiOptions): OkedGateClient {
       : {}),
     client: CLIENT_ID,
     source: options.source ?? "ai-sdk",
+    ...(options.mode ? { mode: options.mode } : {}),
   });
 }
 
@@ -215,6 +219,7 @@ export function createGate(options: OkedAiOptions = {}): (call: GateCall) => Pro
     }
 
     let forceAsk = false;
+    let fromRule = false;
     if (options.alwaysApprove?.includes(toolName)) {
       if (TIER_ORDER[tier] < TIER_ORDER.review) tier = "review";
       forceAsk = true;
@@ -228,11 +233,29 @@ export function createGate(options: OkedAiOptions = {}): (call: GateCall) => Pro
         }
         return localAllow();
       }
+      fromRule = true;
       forceAsk = true;
     }
 
     const minTier = resolveMinTier(options);
     if (!forceAsk && (TIER_ORDER[tier] < TIER_ORDER[minTier] || !APPROVAL_TIERS.has(tier))) {
+      return localAllow();
+    }
+
+    if (effectiveMode(options.mode, client.mode) === "watch") {
+      const reason: WatchReason = !client.apiKey
+        ? "would have paused (not paired)"
+        : fromRule
+          ? "would have paused (saved rule)"
+          : "would have paused";
+      recordWouldHavePaused({
+        tool: toolName,
+        tier,
+        client: CLIENT_ID,
+        source: options.source ?? "ai-sdk",
+        reason,
+      });
+      log(`watch: ${toolName} (${tier}) ${reason}. Allowed.`);
       return localAllow();
     }
 

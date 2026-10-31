@@ -176,9 +176,43 @@ try {
     assert.ok(!existsSync(join(project, ".claude", "settings.json")), "no project hook while the plugin is enabled");
     passed++;
   }
+
+  // 7. --mode watch is saved and does not drop the key. report reads the local log.
+  {
+    const { code, out } = await runCli(["init", "--mode", "watch"]);
+    assert.equal(code, 0);
+    assert.match(out, /Mode: watch/);
+    const saved = JSON.parse(readFileSync(config, "utf8"));
+    assert.equal(saved.mode, "watch");
+    assert.equal(saved.apiKey, NEW_KEY);
+    const { out: empty } = await runCli(["report"]);
+    assert.match(empty, /Would have paused: 0/);
+    assert.match(empty, /Not sent: the action/);
+    assert.doesNotMatch(empty, /OKED_BACKEND_URL|backendUrl/);
+    writeFileSync(
+      join(home, ".oked", "watch.log"),
+      JSON.stringify({
+        ts: "2026-01-01T00:00:00.000Z",
+        outcome: "would_have_paused",
+        tool: "Bash",
+        tier: "high_stakes",
+        client: "@oked/claude-code@test",
+        source: "claude-code",
+        reason: "would have paused",
+      }) + "\n",
+    );
+    const { out: report } = await runCli(["report"]);
+    assert.match(report, /Would have paused: 1/);
+    assert.match(report, /Bash/);
+    const back = await runCli(["init", "--mode", "enforce"]);
+    assert.match(back.out, /Mode: enforce/);
+    assert.equal(JSON.parse(readFileSync(config, "utf8")).mode, "enforce");
+    assert.equal(JSON.parse(readFileSync(config, "utf8")).apiKey, NEW_KEY);
+    passed++;
+  }
 } finally {
   server.close();
   rmSync(root, { recursive: true, force: true });
 }
 
-console.log(`ok - @oked/claude-code cli: ${passed}/6 passed`);
+console.log(`ok - @oked/claude-code cli: ${passed}/7 passed`);

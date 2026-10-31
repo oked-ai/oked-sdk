@@ -28,6 +28,7 @@ from oked.receipt import (
 )
 from oked.rules import Rule, RuleDecision, apply_rules
 from oked.types import ApprovalRequest, ApprovalResponse, RiskTier
+from oked.watch import effective_mode, parse_mode, resolve_mode
 
 __version__ = "0.6.21"
 
@@ -58,6 +59,9 @@ __all__ = [
     "degraded_decision",
     "describe",
     "describe_fields",
+    "effective_mode",
+    "parse_mode",
+    "resolve_mode",
     "is_sensitive_write_path",
     "json_value",
     "keys_url_allowed",

@@ -2,6 +2,8 @@
 
 OKed stops a risky tool call until a person decides in Telegram or on the [web dashboard](https://oked.ai/dashboard). The iPhone app is coming soon. Contact is [contact@oked.ai](mailto:contact@oked.ai).
 
+Watch mode lets those calls run and records what would have paused. The default is enforce, so an existing install still pauses. See [watch.md](./watch.md).
+
 | Host | Package | Install |
 |---|---|---|
 | Claude Code | [`@oked/claude-code`](../packages/claude-code) | `npm install -g @oked/claude-code`, then `oked init`. Writes `.claude/settings.json`. Or, with no global install, `/plugin marketplace add oked-ai/oked-sdk`, `/plugin install oked@oked`, then `/oked:pair`. See [plugins/claude-code](../plugins/claude-code). Unpaired devices return `ask`. The gate is `@oked/hook-core`. If the plugin and the settings hook are both installed, only the plugin calls OKed. Test runners and script files ask for approval unless the Bash sandbox is on with `allowUnsandboxedCommands` set to false. |

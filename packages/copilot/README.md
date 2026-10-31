@@ -47,7 +47,9 @@ The approval window is 10 minutes. The hook is configured for 690 seconds, and t
 | `oked-copilot init --native` | Install the Copilot hook even when a project Claude Code `oked-hook` is present. You will get two prompts until you remove that entry. |
 | `oked-copilot init --no-browser` | Print the pairing link. Do not open a browser, and do not touch the clipboard. |
 | `oked-copilot init --yes` (or `-y`) | Skip the "press Enter to open the browser" prompt. For a non-interactive shell. |
-| `oked-copilot status` | Show install state and ping `GET /health` on the backend. |
+| `oked-copilot init --mode watch` | Let risky actions run and record what would have paused. `--mode enforce` is the default. |
+| `oked-copilot report` | Summarize `~/.oked/watch.log`. See [docs/watch.md](../../docs/watch.md). |
+| `oked-copilot status` | Show install state, the mode, and ping `GET /health` on the backend. |
 | `oked-copilot uninstall` | Remove the Copilot hook entry. Other hooks in the file are kept. A Claude Code hook is not removed. |
 
 ## What gets intercepted

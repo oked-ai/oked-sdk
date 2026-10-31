@@ -11,6 +11,7 @@ import { join } from "node:path";
 process.env.HOME = mkdtempSync(join(tmpdir(), "oked-smoke-"));
 process.env.USERPROFILE = process.env.HOME;
 delete process.env.OKED_API_KEY;
+delete process.env.OKED_MODE;
 const { okedPreToolUseHook, okedHooks } = await import("../dist/index.js");
 
 function mkInput(tool_name, tool_input) {
@@ -54,4 +55,23 @@ let passed = 0;
   passed++;
 }
 
-console.log(`ok - @oked/claude-agent-sdk smoke: ${passed}/3 passed`);
+// Watch mode allows a force push and does not ask. Enforce still asks.
+{
+  process.env.OKED_MODE = "watch";
+  const watched = await okedPreToolUseHook(mkInput("Bash", { command: "git push --force origin main SECRET" }), undefined, {
+    signal: new AbortController().signal,
+  });
+  assert.deepEqual(watched, {}, "watch mode allows a high_stakes command");
+  const { readFileSync } = await import("node:fs");
+  const text = readFileSync(join(process.env.HOME, ".oked", "watch.log"), "utf8");
+  assert.match(text, /would have paused \(not paired\)/);
+  assert.ok(!text.includes("SECRET"));
+  delete process.env.OKED_MODE;
+  const enforced = await okedPreToolUseHook(mkInput("Bash", { command: "git push --force origin main" }), undefined, {
+    signal: new AbortController().signal,
+  });
+  assert.equal(enforced?.hookSpecificOutput?.permissionDecision, "ask");
+  passed++;
+}
+
+console.log(`ok - @oked/claude-agent-sdk smoke: ${passed}/4 passed`);

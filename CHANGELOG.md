@@ -6,6 +6,16 @@ Decisions are made in Telegram and on the [web dashboard](https://oked.ai/dashbo
 
 ## Unreleased
 
+### Watch mode
+
+- `mode` is `watch` or `enforce`. The default is `enforce`, so an existing install still pauses risky actions until you approve.
+- Set it in `~/.oked/config.json`, with `OKED_MODE` (that wins over the file), or with `oked init --mode watch`. On a terminal, `oked init` asks when no mode is set. A non-interactive run with no choice stays on enforce and does not change the file. `oked-codex init`, `oked-cursor init`, `oked-copilot init`, and `oked-openclaw init` offer the same choice.
+- In watch mode the Claude Code, Codex, Cursor, and Copilot hooks, the OpenClaw plugin, the Claude Agent SDK hook, and the AI SDK, OpenAI Agents, and LangGraph adapters (JavaScript and Python) allow a call they would have paused. They append one line to `~/.oked/watch.log`. `oked report` summarizes it. The other host CLIs have the same `report` command. The Claude Code plugin hook uses the same gate.
+- The line stores the time, tool name, tier, client, source, and `would have paused` (or `would have paused (not paired)` or `would have paused (saved rule)`). It does not store the command, tool arguments, description, working directory, session id, or API key.
+- Watch mode does not send the action. There is no endpoint that records a would-have-paused event without holding the action for a decision, so nothing is posted for approval. A presence ping may still be sent when a key is set. That ping is the machine hostname only. A rules fetch for a safe or warning action may still run and does not include the action.
+- A classifier failure, an unreadable hook payload, and an internal error still deny. `approve()` on the client still waits. Watch mode applies to the automatic gates.
+- See [docs/watch.md](./docs/watch.md).
+
 ### Claude Code plugin
 
 - OKed can be installed as a Claude Code plugin. In Claude Code: `/plugin marketplace add oked-ai/oked-sdk`, then `/plugin install oked@oked`. The marketplace name is `oked` and the plugin name is `oked`. No global npm install is required.

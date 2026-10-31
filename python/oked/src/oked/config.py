@@ -28,6 +28,7 @@ def heartbeat_path() -> str:
 class PersistedConfig:
     api_key: str | None = None
     backend_url: str | None = None
+    mode: str | None = None
     strict_fail_closed: bool | None = None
     rules_cache_ttl_seconds: float | None = None
     heartbeat_interval_seconds: float | None = None
@@ -51,6 +52,9 @@ def load_oked_config() -> PersistedConfig:
     backend = parsed.get("backendUrl")
     if isinstance(backend, str) and backend:
         out.backend_url = backend
+    mode = parsed.get("mode")
+    if mode in ("watch", "enforce"):
+        out.mode = mode
     strict = parsed.get("strictFailClosed")
     if isinstance(strict, bool):
         out.strict_fail_closed = strict

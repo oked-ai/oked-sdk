@@ -44,7 +44,9 @@ The approval window is 10 minutes. The hook process is allowed 690 seconds, and 
 | `oked-codex init` | Install or update the project hook and pair this device. Run it again after you update the package. |
 | `oked-codex init --no-browser` | Print the pairing link. Do not open a browser, and do not touch the clipboard. |
 | `oked-codex init --yes` (or `-y`) | Skip the "press Enter to open the browser" prompt. For a non-interactive shell. |
-| `oked-codex status` | Show install state and ping `GET /health` on the backend. |
+| `oked-codex init --mode watch` | Let risky actions run and record what would have paused. `--mode enforce` is the default. |
+| `oked-codex report` | Summarize `~/.oked/watch.log`. See [docs/watch.md](../../docs/watch.md). |
+| `oked-codex status` | Show install state, the mode, and ping `GET /health` on the backend. |
 | `oked-codex uninstall` | Remove the project hook entry. Other hooks in `.codex/hooks.json` are kept. |
 
 ## What gets intercepted

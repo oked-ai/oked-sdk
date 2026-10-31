@@ -213,6 +213,26 @@ def test_missing_key_does_not_call_approve() -> None:
     assert "was not run" in result
 
 
+def test_watch_mode_runs_and_enforce_does_not(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    log_path = tmp_path / "watch.log"
+    monkeypatch.setenv("OKED_WATCH_LOG", str(log_path))
+    secret = "SECRETTOKEN"
+    client = FakeClient(approve_result=DENIED)
+    watched = RecordingTool("send_invoice")
+    assert with_oked_approval(watched, client=client, mode="watch").invoke({"note": secret}) == "ran"
+    assert watched.seen
+    assert client.calls == []
+    text = log_path.read_text(encoding="utf-8")
+    assert "would have paused" in text
+    assert secret not in text
+
+    enforced = RecordingTool("send_invoice")
+    blocked = with_oked_approval(enforced, client=client, mode="enforce").invoke({"note": secret})
+    assert enforced.seen == []
+    assert "was not run" in blocked
+    assert len(client.calls) == 1
+
+
 def test_env_min_tier(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("OKED_MIN_TIER", "high_stakes")
     client = FakeClient(approve_result=DENIED)

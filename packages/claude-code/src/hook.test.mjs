@@ -318,10 +318,55 @@ try {
     passed++;
   }
 
-  assert.equal(passed, 20);
+  // The plugin test above leaves the plugin enabled. Turn it off so these
+  // cases exercise the settings hook again.
+  writeFileSync(
+    join(home, ".claude", "settings.json"),
+    JSON.stringify({ enabledPlugins: { "oked@oked": false } }),
+  );
+
+  // Watch mode allows the same high-stakes call and does not post it for approval.
+  {
+    const before = approvePosts().length;
+    const out = await runHook(HIGH_STAKES, { OKED_MODE: "watch" });
+    assert.equal(out.permissionDecision, "allow");
+    assert.match(out.permissionDecisionReason, /OKed watch: would have paused$/);
+    assert.equal(approvePosts().length, before, "watch mode does not call approve");
+    const text = readFileSync(join(home, ".oked", "watch.log"), "utf8");
+    assert.ok(!text.includes(SECRET));
+    const line = JSON.parse(text.trim().split("\n").at(-1));
+    assert.equal(line.outcome, "would_have_paused");
+    assert.equal(line.tool, "Bash");
+    assert.equal(line.tier, "high_stakes");
+    assert.equal(line.reason, "would have paused");
+    passed++;
+  }
+
+  // A safe command in watch mode is not recorded as something that would have paused.
+  {
+    const before = readFileSync(join(home, ".oked", "watch.log"), "utf8");
+    const out = await runHook({ tool_name: "Bash", tool_input: { command: "ls" } }, { OKED_MODE: "watch" });
+    assert.equal(out.permissionDecision, "allow");
+    assert.equal(out.permissionDecisionReason, undefined);
+    assert.equal(readFileSync(join(home, ".oked", "watch.log"), "utf8"), before);
+    passed++;
+  }
+
+  // Enforce mode still pauses. This request is denied by the mock.
+  {
+    reply = { status: 200, headers: {}, body: JSON.stringify({ approval_id: "appr-enf", decision: "denied", status: "denied" }) };
+    const before = approvePosts().length;
+    const out = await runHook(HIGH_STAKES, { OKED_MODE: "enforce" });
+    assert.equal(out.permissionDecision, "deny");
+    assert.match(out.permissionDecisionReason, /^Denied via OKed/);
+    assert.equal(approvePosts().length, before + 1);
+    passed++;
+  }
+
+  assert.equal(passed, 23);
 } finally {
   server.close();
   rmSync(home, { recursive: true, force: true });
 }
 
-console.log(`ok - @oked/claude-code hook: ${passed}/20 passed`);
+console.log(`ok - @oked/claude-code hook: ${passed}/23 passed`);
