@@ -19,7 +19,7 @@ Once the package is listed on ClawHub, `openclaw plugins install @oked/openclaw`
 
 `openclaw` must already be on your PATH. `init` then:
 
-1. If a local checkout or a global npm copy of `@oked/openclaw` is present, runs `openclaw plugins install --link <path>`. If the plugin is already installed and no local copy is present, skips install. Otherwise runs `openclaw plugins install @oked/openclaw`.
+1. If a local checkout or a global npm copy of `@oked/openclaw` is present, runs `openclaw plugins install --link <path>`. If the plugin is already installed and no local copy is present, skips install. Otherwise it tries `openclaw plugins install @oked/openclaw` (ClawHub). If that fails, it retries `openclaw plugins install npm:@oked/openclaw`.
 2. Reuses `OKED_API_KEY` or an existing `plugins.entries.oked.apiKey`. Otherwise it pairs this device in the browser and saves the key to `~/.oked/config.json`. It does not ask you to paste a key.
 3. Keeps `OKED_MIN_TIER` or an existing `minTier` when one is set. Otherwise a terminal asks (default `review`), and a non-interactive run uses `review`. Accepted values are `safe`, `warning`, `review`, and `high_stakes`.
 4. Adds `"oked"` to `plugins.allow` and writes `plugins.entries.oked` with `enabled`, `apiKey`, and `minTier`. Existing keys on that entry are kept.

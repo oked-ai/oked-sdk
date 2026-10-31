@@ -19,6 +19,10 @@ Decisions are made in Telegram and on the [web dashboard](https://oked.ai/dashbo
 - A `v*` tag publishes this package to ClawHub when the `CLAWHUB_TOKEN` secret is set. If the secret is missing, that step logs a skip line and the npm publish still succeeds. The one-time setup (`clawhub login`, the `oked` publisher handle, the first manual publish, the trusted publisher, and `CLAWHUB_TOKEN`) is in [RELEASING.md](./RELEASING.md).
 - The catalog category is `security`. The package ships `assets/icon.png` for the ClawHub listing.
 
+### @oked/openclaw-cli
+
+- `oked-openclaw init` tries `openclaw plugins install @oked/openclaw` when no local copy of the plugin is present. OpenClaw resolves that bare name from ClawHub only. If the ClawHub install fails, init retries `openclaw plugins install npm:@oked/openclaw`. The failure hint prints that npm command.
+
 ### @oked/claude-code and @oked/sdk
 
 - Windows recursive deletes now wait for a person. That is PowerShell `Remove-Item -Recurse` (including `-Force`), the aliases `ri`, `del`, `rmdir`, and `rd` with `-r`, and `rmdir /s`, `rd /s`, and `del /s`. `Format-Volume` and `format X:` wait too. A target that is a drive root (`C:\`, `D:\`), `/`, `~`, `$HOME`, `$home`, `$env:USERPROFILE`, or `%USERPROFILE%` waits even when the rest of the path looks narrow. An 8.3 profile path (`C:\Users\ALICE~1`) waits with them.
