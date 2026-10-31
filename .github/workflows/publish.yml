@@ -160,13 +160,17 @@ jobs:
             exit 1
           fi
           npm install -g clawhub@0.24.1
+          # Do not pass an owner handle. ClawHub rejects a trusted publish that
+          # sets one ("Trusted publishes must not override the package owner").
+          # Source commit and ref must match the OIDC token, which is this
+          # workflow run (github.sha and github.ref), not the checked-out tag.
+          # clawhub 0.24.1 has no channel flag and does not send one.
           set +e
           clawhub package publish packages/openclaw \
             --family code-plugin \
-            --owner oked \
             --source-repo oked-ai/oked-sdk \
-            --source-commit "$(git rev-parse HEAD)" \
-            --source-ref "${{ inputs.tag }}" \
+            --source-commit "${{ github.sha }}" \
+            --source-ref "${{ github.ref }}" \
             --no-input \
             --json >"$RUNNER_TEMP/clawhub-publish.json" 2>&1
           status="$?"

@@ -129,10 +129,15 @@ assert.ok(workflow.includes("id-token: write"));
 assert.ok(workflow.includes("clawhub_only"));
 assert.ok(workflow.includes("is already on npm. Skipping npm publish."));
 assert.ok(workflow.includes("--family code-plugin"));
-assert.ok(workflow.includes("--owner oked"));
 assert.ok(workflow.includes("clawhub@0.24.1"));
 assert.equal(workflow.includes("secrets.CLAWHUB_TOKEN"), false);
 assert.equal(workflow.includes("--manual-override-reason"), false);
+assert.equal(workflow.includes("--owner"), false);
 assert.equal(workflow.includes("clawhub login"), false);
+const clawhubJob = workflow.split("publish-clawhub:")[1];
+assert.ok(clawhubJob.includes('--source-commit "${{ github.sha }}"'));
+assert.ok(clawhubJob.includes('--source-ref "${{ github.ref }}"'));
+assert.equal(clawhubJob.includes("git rev-parse HEAD"), false);
+assert.ok(releasing.includes("Trusted publishes must not override the package owner"));
 
 console.log("OK ClawHub metadata");
