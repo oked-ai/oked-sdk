@@ -15,7 +15,7 @@ Decisions are made in Telegram and on the [web dashboard](https://oked.ai/dashbo
 
 ### @oked/openclaw
 
-- Install from ClawHub, which is what `openclaw plugins install` checks first: `openclaw plugins install @oked/openclaw`. Pairing still uses `@oked/openclaw-cli` (`npm install -g @oked/openclaw-cli`, then `oked-openclaw init`).
+- Install from npm with `openclaw plugins install npm:@oked/openclaw`. Once the package is listed on ClawHub, `openclaw plugins install @oked/openclaw` installs it from there. Pairing still uses `@oked/openclaw-cli` (`npm install -g @oked/openclaw-cli`, then `oked-openclaw init`).
 - A `v*` tag publishes this package to ClawHub when the `CLAWHUB_TOKEN` secret is set. If the secret is missing, that step logs a skip line and the npm publish still succeeds. The one-time setup (`clawhub login`, the `oked` publisher handle, the first manual publish, the trusted publisher, and `CLAWHUB_TOKEN`) is in [RELEASING.md](./RELEASING.md).
 - The catalog category is `security`. The package ships `assets/icon.png` for the ClawHub listing.
 
