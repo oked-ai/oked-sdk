@@ -3,7 +3,7 @@
 [![npm version](https://img.shields.io/npm/v/@oked/openclaw-cli.svg)](https://www.npmjs.com/package/@oked/openclaw-cli)
 [![License: Apache-2.0](https://img.shields.io/npm/l/@oked/openclaw-cli.svg)](./LICENSE)
 
-Pairing CLI for the [`@oked/openclaw`](../openclaw) plugin. Install the plugin with `openclaw plugins install npm:@oked/openclaw`, then use this CLI to pair the device, write the OKed entry into `~/.openclaw/openclaw.json`, and restart the gateway.
+Pairing CLI for the [`@oked/openclaw`](../openclaw) plugin. Install the plugin with `openclaw plugins install npm:@oked/openclaw`, then use this CLI to pair the device, write the OKed entry into `~/.openclaw/openclaw.json`, and restart the gateway. The plugin requires OpenClaw 2026.5.4 or newer.
 
 Approvals are decided in Telegram and on the [web dashboard](https://oked.ai/dashboard). The iPhone app is coming soon.
 
