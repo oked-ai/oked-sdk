@@ -81,7 +81,7 @@ Each approval is one JSON request. These fields are in the body:
 | `description` | One-line summary built from the tool arguments. |
 | `tier` | `review` or `high_stakes`. |
 | `nonce` | A new id for this request, so an old receipt cannot approve a later call. |
-| `client` | This package and version, for example `@oked/openclaw@0.6.24`. |
+| `client` | This package and version, for example `@oked/openclaw@0.6.25`. |
 | `metadata.tool_input` | The full tool arguments. |
 | `metadata.cwd` | Working directory of the OpenClaw process. |
 | `metadata.source` | `openclaw`. |

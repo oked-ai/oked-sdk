@@ -1,6 +1,6 @@
 {
   "name": "@oked/openclaw",
-  "version": "0.6.24",
+  "version": "0.6.25",
   "description": "Pauses risky OpenClaw actions, like rm -rf, force-push, destructive SQL and prod deploys, until you approve them in Telegram or on the OKed web dashboard. Everything else just runs. Every decision gets a signed receipt.",
   "type": "module",
   "main": "dist/index.js",
@@ -51,7 +51,7 @@
     }
   },
   "dependencies": {
-    "@oked/sdk": "0.6.24"
+    "@oked/sdk": "0.6.25"
   },
   "devDependencies": {
     "@types/node": "^26.6.5",

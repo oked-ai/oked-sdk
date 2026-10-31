@@ -6,6 +6,8 @@ Decisions are made in Telegram and on the [web dashboard](https://oked.ai/dashbo
 
 ## Unreleased
 
+## 0.6.25 - 2026-10-31
+
 ### Claude Code plugin
 
 - The Claude Code plugin icon, the OpenClaw package icon, and `assets/logo.png` are the OKed logo: black "ok" with a green dot on white, 512x512.
