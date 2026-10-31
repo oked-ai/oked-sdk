@@ -7,7 +7,7 @@
  * classifier that produced them.
  */
 
-export const CLASSIFIER_VERSION = "v3";
+export const CLASSIFIER_VERSION = "v4";
 
 export type OperationKind =
   // File operations

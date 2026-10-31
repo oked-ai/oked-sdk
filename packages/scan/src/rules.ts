@@ -31,7 +31,10 @@ export function pausesForApproval(tier: RiskTier): boolean {
  * the user turns it on). Codex omits the option, so test runners stay allowed.
  * Custom user rules are not applied.
  */
-export function classifyCommand(host: Host, command: string): { tier: RiskTier; category: string } {
+export function classifyCommand(
+  host: Host,
+  command: string,
+): { tier: RiskTier; category: string; routine: boolean } {
   const options = host === "claude-code" ? { sandboxEnforced: false as const } : undefined;
   let tier: RiskTier = "review";
   try {
@@ -46,7 +49,19 @@ export function classifyCommand(host: Host, command: string): { tier: RiskTier; 
   } catch {
     category = "unknown_bash";
   }
-  return { tier, category };
+  // Claude Code asks for a test runner or script only when the Bash sandbox
+  // is off, which is the default. The same command is safe when that flag is
+  // omitted, which is what Codex and a sandbox that is on both do.
+  let plain = tier;
+  if (host === "claude-code") {
+    try {
+      plain = classify("Bash", { command });
+    } catch {
+      plain = tier;
+    }
+  }
+  const routine = host === "claude-code" && plain === "safe" && tier === "review";
+  return { tier, category, routine };
 }
 
 export function classifierVersion(): string {

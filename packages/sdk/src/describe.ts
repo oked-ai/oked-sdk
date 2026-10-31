@@ -11,7 +11,7 @@
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
-import { blankTextCommandArgs, classify, classifyBashSteps, extractShellWriteOps, splitTopLevel, stripCodeHeredocBodies, stripInlineScriptBodies } from "./classify.js";
+import { blankTextCommandArgs, classify, classifyBashSteps, extractShellWriteOps, productionDeployCard, splitTopLevel, stripCodeHeredocBodies, stripInlineScriptBodies } from "./classify.js";
 import { TIER_ORDER } from "./degraded.js";
 
 const BODY_PREVIEW_MAX = 200;
@@ -486,6 +486,11 @@ function summarizeBash(command: string, sizeBytes?: number, cwd?: string, sandbo
   if (/\bnpm\s+test\b/.test(cmd)) return { title: "Run npm tests", kind: "npm_test" };
   if (/\bnpm\s+unpublish\b/.test(shellText(cmd))) return { title: "Unpublish package from npm", kind: "npm_unpublish" };
   if (/\bnpx\s+.*\s+deploy\b/.test(shellText(cmd))) return { title: "Deploy via npx", body: truncateBody(cmd), kind: "npx_deploy" };
+
+  // Production deploys (vercel --prod, fly deploy, and the same class).
+  // The tier already comes from classify(). This only names the card.
+  const prodDeploy = productionDeployCard(cmd);
+  if (prodDeploy) return { title: prodDeploy.title, target: prodDeploy.target, kind: "deploy" };
 
   // sudo / chmod (kill/pkill/killall are handled in command position above,
   // ahead of the compound catch-all).

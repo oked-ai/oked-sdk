@@ -34,15 +34,15 @@ Tiers come from `classify()` in [`@oked/sdk`](../sdk), the same function the hoo
 
 `review` and `high_stakes` would have paused for a person. `warning` and `safe` would have run.
 
-Claude Code is classified with the Bash sandbox not containing child processes, which is the default unless you turn the sandbox on and set `allowUnsandboxedCommands` to false. Test runners and scripts (`npm test`, `cargo test`, `npx`, a script file) then count as `review`. Codex is classified the way [`@oked/codex`](../codex) classifies commands: that option is omitted, so the same runners stay allowed. One command can therefore differ by host. `oked-scan --verbose` prints these notes. The default text report leaves them out.
+Claude Code is classified with the Bash sandbox not containing child processes, which is the default unless you turn the sandbox on and set `allowUnsandboxedCommands` to false. Test runners and scripts (`npm test`, `cargo test`, `npx`, a script file) then count as `review`. That is what the Claude Code hook does by default: with no sandbox settings, it asks before `npm test`. Codex is classified the way [`@oked/codex`](../codex) classifies commands: that option is omitted, so the same runners stay allowed. One command can therefore differ by host. `oked-scan --verbose` prints these notes. The default text report leaves the notes out, and it puts those runners on their own line instead of hiding them.
 
-Categories are the classifier's operation kinds (`file_delete`, `git_force_push`, `npm_test`, and the rest), from `describeFields()`.
+The text report uses plain words. Tiers are "High-stakes (always asks)", "Worth a look (asks)", "Runs, logged", and "Runs". Kinds are "rm -rf / file delete", "force-push", "curl POST/PUT/DELETE", "destructive SQL", "prod deploy", "npm publish", and so on. `--json` keeps the machine names (`high_stakes`, `file_delete`, and the rest) and adds `tierLabel` and `categoryLabel`.
 
 Commands in the report are truncated. Values that look like tokens, passwords, or URL userinfo are replaced with `[redacted]`. A home directory in a command is shown as `~`.
 
 ## Next step
 
-There is no `@oked/cli` package. The report ends with how many commands would have paused, the two or three most common high-stakes kinds in plain words (force-push, rm -rf, destructive SQL, prod deploy, and so on), then the install command for the history that was found, then `https://oked.ai`. If nothing would have paused, it says so and does not invent a count. A short line says decisions happen in Telegram or on the web dashboard. The iPhone app is coming soon.
+There is no `@oked/cli` package. The report ends with how many commands would have paused, leaving test runners and scripts out of that count, the two or three most common high-stakes kinds in plain words (force-push, rm -rf / file delete, destructive SQL, prod deploy, and so on), then the install command for the history that was found, then `https://oked.ai`. Those runners stay in the totals, on their own line, with how to allow them. If history exists and nothing would have paused, the report says so and does not invent a count. If no Claude Code transcripts and no Codex sessions are found, it says that no history was found at the paths checked, suggests `--path <dir>`, and does not print a zero table. A short line says decisions happen in Telegram or on the web dashboard. The iPhone app is coming soon.
 
 | History found | Command |
 |---|---|
@@ -69,7 +69,7 @@ Exit code 0 when the report is printed, including when no transcripts were found
 
 ## Sample
 
-The counts below are the fixture transcripts in this package (`test/fixtures`), not a person's machine. `npm test` pauses for Claude Code and does not pause for Codex, because those are the two defaults. `vercel --prod` is `high_stakes` with kind `unknown_bash`: the describer has no tighter label, and the tier is what pauses the command. The closing line names kinds that have plain words, so it counts the `rm -rf` and force-push commands and does not call `unknown_bash` a prod deploy. The Claude Code curl is past the top 8. In the JSON report it is `curl -X POST https://example.com/hook -H "Authorization: Bearer [redacted]" -d hi`. An empty history ends with a different closing line, and it does not invent a count.
+The counts below are the fixture transcripts in this package (`test/fixtures`), not a person's machine. `npm test` asks for Claude Code and does not ask for Codex, because those are the two hook defaults. The Claude Code one is the routine line. It stays in "Would have paused" and out of the closing count. `vercel --prod` is high-stakes, kind `deploy`. The Claude Code curl is past the top 8. In the JSON report it is `curl -X POST https://example.com/hook -H "Authorization: Bearer [redacted]" -d hi`. When no history is found, the report says so and does not print a zero table.
 
 <!-- fixture-report -->
 ```
@@ -81,41 +81,47 @@ Codex CLI     7 commands in 2 files
 Window        all history
 Skipped 1 unreadable line.
 
-Commands               16
-Would have paused      10
-  high_stakes           7
-  review                3
-Would have run          6
-  warning               2
-  safe                  4
+Commands                          16
+Would have paused                 10
+  High-stakes (always asks)        7
+    Destructive or hard to undo.
+  Worth a look (asks)              3
+    OKed asks before it runs.
+Would have run                     6
+  Runs, logged                     2
+    It runs, and OKed logs it.
+  Runs                             4
+    It runs. No log line.
 
-Paused by category
-  file_delete           3
-  git_force_push        2
-  http_post             2
-  unknown_bash          2
-  npm_test              1
+What would pause
+  7 high-stakes: 3 rm -rf / file delete, 2 force-pushes, 2 prod deploys
+  3 worth a look: 2 curl POST/PUT/DELETE, 1 test runner
 
 Top risky commands
-    1  claude-code  high_stakes  git_force_push     git push --force origin main
-    1  claude-code  high_stakes  git_force_push     git push --force origin other
-    1  claude-code  high_stakes  file_delete        rm -rf /etc/old
-    1  claude-code  high_stakes  file_delete        rm -rf /var/data
-    1  codex        high_stakes  file_delete        rm -rf /var/data
-    1  claude-code  high_stakes  unknown_bash       vercel --prod
-    1  codex        high_stakes  unknown_bash       vercel --prod
-    1  codex        review       http_post          bash -lc 'curl -X POST https://example.com/hook -d hi'
+  High-stakes (always asks)
+      1  claude-code  force-push             git push --force origin main
+      1  claude-code  force-push             git push --force origin other
+      1  claude-code  rm -rf / file delete   rm -rf /etc/old
+      1  claude-code  rm -rf / file delete   rm -rf /var/data
+      1  codex        rm -rf / file delete   rm -rf /var/data
+      1  claude-code  prod deploy            vercel --prod
+      1  codex        prod deploy            vercel --prod
+  Worth a look (asks)
+      1  codex        curl POST/PUT/DELETE   bash -lc 'curl -X POST https://example.com/hook -d hi'
   Showing 8 of 10. Re-run with --json for every paused command.
+
+1 routine command (test runners, scripts) would also ask under Claude Code's default sandbox setting.
+To allow those without a prompt, turn on the Bash sandbox and set allowUnsandboxedCommands to false in ~/.claude/settings.json or .claude/settings.local.json.
 
 Decisions happen in Telegram or on the web dashboard (https://oked.ai/dashboard). The iPhone app is coming soon.
 
-OKed would have paused 10 of these commands, including 3 rm -rf and 2 force-pushes.
+OKed would have paused 9 of these commands, including 3 rm -rf / file delete, 2 force-pushes and 2 prod deploys.
 Get a yes/no in Telegram before your agent runs them:
   npm install -g @oked/claude-code @oked/codex && oked init && oked-codex init
 https://oked.ai
 ```
 
-An empty home, with no transcript directory, ends like this. The zero counts in the table are the real totals. The closing line does not invent a paused count.
+An empty home, with no transcript directory, says that no history was found. It does not print a zero table, and it does not invent a paused count.
 
 <!-- empty-report -->
 ```
@@ -126,24 +132,12 @@ Claude Code   no transcripts at ~/.claude/projects
 Codex CLI     no sessions at ~/.codex/sessions
 Window        all history
 
-Commands                0
-Would have paused       0
-  high_stakes           0
-  review                0
-Would have run          0
-  warning               0
-  safe                  0
-
-Paused by category
-  (none)
-
-Top risky commands
-  (none)
+No Claude Code or Codex history was found at the paths checked.
+Pass --path <dir> to read a different directory.
 
 Decisions happen in Telegram or on the web dashboard (https://oked.ai/dashboard). The iPhone app is coming soon.
 
-No risky commands found in this history, and OKed would pause things like rm -rf, force-push and prod deploys.
-Get a yes/no in Telegram before your agent runs them:
+Get a yes/no in Telegram before your agent runs a risky command:
   npm install -g @oked/claude-code && oked init
 https://oked.ai
 ```

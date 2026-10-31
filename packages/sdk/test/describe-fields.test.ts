@@ -4,6 +4,7 @@ import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { classify } from "../src/classify.js";
 import { describeFields, describe as describeOne } from "../src/describe.js";
 
 describe("Bash — SQL via host language", () => {
@@ -1306,5 +1307,74 @@ describe("git cards name the repo", () => {
 
   it("a command of several steps has no footnote", () => {
     assert.equal(at("git status; git push --force origin main").Footnote, undefined);
+  });
+});
+
+describe("production deploys", () => {
+  const prod: Array<[string, string, string?]> = [
+    ["vercel --prod", "Deploy to Vercel production"],
+    ["vercel deploy --prod", "Deploy to Vercel production"],
+    ["vercel deploy --target production", "Deploy to Vercel production"],
+    ["vercel --target=production", "Deploy to Vercel production"],
+    ["npx vercel@latest --prod --yes", "Deploy to Vercel production"],
+    ["vercel redeploy --prod", "Redeploy on Vercel production"],
+    ["vercel promote https://acme-abc.vercel.app", "Promote a Vercel deployment to production", "https://acme-abc.vercel.app"],
+    ["netlify deploy --prod --dir dist", "Deploy to Netlify production"],
+    ["netlify deploy -p", "Deploy to Netlify production"],
+    ["netlify deploy --prod --site acme", "Deploy to Netlify production", "acme"],
+    ["fly deploy", "Deploy to Fly"],
+    ["flyctl deploy -a acme", "Deploy to Fly", "acme"],
+    ["wrangler deploy", "Deploy with Wrangler"],
+    ["wrangler pages deploy", "Deploy with Wrangler"],
+    ["wrangler publish", "Publish with Wrangler"],
+    ["firebase deploy --only hosting", "Deploy to Firebase"],
+    ["serverless deploy", "Deploy with Serverless"],
+    ["sls deploy", "Deploy with Serverless"],
+    ["cdk deploy --all", "Deploy with AWS CDK"],
+    ["gcloud run deploy web --image gcr.io/acme/web", "Deploy with gcloud", "web"],
+    ["npm run build && vercel --prod", "Deploy to Vercel production"],
+    ["sudo vercel --prod", "Deploy to Vercel production"],
+    ["FOO=bar vercel --prod", "Deploy to Vercel production"],
+  ];
+
+  for (const [command, title, target] of prod) {
+    it(`${command} is kind deploy and stays high_stakes`, () => {
+      const fields = describeFields("Bash", { command })!;
+      assert.equal(fields.Kind, "deploy", command);
+      assert.equal(fields.Title, title, command);
+      if (target !== undefined) assert.equal(fields.Target, target, command);
+      assert.equal(classify("Bash", { command }), "high_stakes", command);
+    });
+  }
+
+  const other: Array<[string, string, string]> = [
+    ["vercel", "review", "unknown_bash"],
+    ["vercel deploy", "review", "unknown_bash"],
+    ["vercel deploy --help", "safe", "unknown_bash"],
+    ["vercel redeploy", "review", "unknown_bash"],
+    ["netlify deploy --dir dist", "review", "unknown_bash"],
+    ["firebase hosting:channel:deploy preview", "review", "unknown_bash"],
+    ["vercel rm acme-web --yes", "high_stakes", "file_delete"],
+    ["fly apps destroy acme-web", "high_stakes", "unknown_bash"],
+    ["fly status", "safe", "unknown_bash"],
+    ["fly deploy --help", "safe", "unknown_bash"],
+    ["helm rollback web 3", "high_stakes", "unknown_bash"],
+    ["echo vercel --prod", "safe", "unknown_bash"],
+    ["git commit -m \"vercel --prod\"", "warning", "git_commit"],
+  ];
+
+  for (const [command, tier, kind] of other) {
+    it(`${command} keeps tier ${tier} and kind ${kind}`, () => {
+      const fields = describeFields("Bash", { command })!;
+      assert.equal(fields.Kind, kind, command);
+      assert.equal(classify("Bash", { command }), tier, command);
+    });
+  }
+
+  it("npx wrangler deploy stays a deploy kind", () => {
+    const fields = describeFields("Bash", { command: "npx wrangler deploy" })!;
+    assert.equal(fields.Kind, "npx_deploy");
+    assert.equal(fields.Title, "Deploy via npx");
+    assert.equal(classify("Bash", { command: "npx wrangler deploy" }), "high_stakes");
   });
 });
