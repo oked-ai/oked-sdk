@@ -653,6 +653,8 @@ function summarizeBash(command2, sizeBytes, cwd, sandboxEnforced) {
   if (/\bnpm\s+test\b/.test(cmd)) return { title: "Run npm tests", kind: "npm_test" };
   if (/\bnpm\s+unpublish\b/.test(shellText(cmd))) return { title: "Unpublish package from npm", kind: "npm_unpublish" };
   if (/\bnpx\s+.*\s+deploy\b/.test(shellText(cmd))) return { title: "Deploy via npx", body: truncateBody(cmd), kind: "npx_deploy" };
+  const prodDeploy = productionDeployCard(cmd);
+  if (prodDeploy) return { title: prodDeploy.title, target: prodDeploy.target, kind: "deploy" };
   if (/\bsudo\b/.test(cmd)) {
     const inner = cmd.replace(/^sudo\s+/, "");
     return { title: `Run as root: ${truncate(inner, COMMAND_INLINE_MAX)}`, body: truncateBody(cmd), kind: "sudo" };
@@ -2540,6 +2542,80 @@ function classifyCloudCliStage(stage) {
   return null;
 }
 __name(classifyCloudCliStage, "classifyCloudCliStage");
+function productionDeployCard(stage) {
+  let bare = stage.trim().replace(DELETE_LEAD, "");
+  bare = bare.replace(/^(?:\w+=\S+\s+)+/, "");
+  const args = splitArgs(bare.replace(CLI_RUNNER_RE, ""));
+  const tool = (args.shift() ?? "").replace(/^.*\//, "").replace(/(?<=.)@.*$/, "");
+  const sep = args.indexOf("--");
+  const head = sep === -1 ? args : args.slice(0, sep);
+  if (head.some((arg) => CLI_PREVIEW_ARG_RE.test(arg))) return null;
+  if (cliPositionals(args)[0] === "help") return null;
+  const flag = /* @__PURE__ */ __name((names) => {
+    for (let i = 0; i < args.length; i++) {
+      const arg = args[i];
+      for (const name of names) {
+        if (arg === name && args[i + 1]) return args[i + 1];
+        if (arg.startsWith(`${name}=`)) return arg.slice(name.length + 1);
+      }
+    }
+    return void 0;
+  }, "flag");
+  switch (tool) {
+    case "vercel": {
+      const [sub, op] = cliPositionals(args, VERCEL_VALUE_FLAGS);
+      const prod = args.some((arg, i) => arg === "--prod" || arg === "--target=production" || arg === "--target" && args[i + 1] === "production");
+      const path2 = sub !== void 0 && sub !== "deploy" && !VERCEL_SUBCOMMANDS.has(sub);
+      if ((sub === void 0 || sub === "deploy" || path2) && prod) {
+        return { title: "Deploy to Vercel production", target: path2 ? sub : void 0 };
+      }
+      if (sub === "redeploy" && prod) return { title: "Redeploy on Vercel production" };
+      if (sub === "promote") return { title: "Promote a Vercel deployment to production", target: op };
+      return null;
+    }
+    case "netlify": {
+      const words = cliPositionals(args, /* @__PURE__ */ new Set(["--site", "--dir", "-d", "--auth", "--filter", "-a", "-s", "-m", "--message", "--alias"]));
+      const prod = args.some((arg) => /^(?:--prod|-p|--prodIfUnlocked|--prod-if-unlocked)$/.test(arg));
+      if (words[0] === "deploy" && prod) return { title: "Deploy to Netlify production", target: flag(["--site", "-s"]) };
+      return null;
+    }
+    case "fly":
+    case "flyctl": {
+      const words = cliPositionals(args, /* @__PURE__ */ new Set(["-a", "--app", "-c", "--config", "-r", "--region", "--image", "-t", "--access-token"]));
+      if (words[0] === "deploy") return { title: "Deploy to Fly", target: flag(["-a", "--app"]) };
+      return null;
+    }
+    case "wrangler": {
+      const words = cliPositionals(args, /* @__PURE__ */ new Set(["-c", "--config", "-e", "--env", "--name"]));
+      const name = flag(["--name"]);
+      if (words.includes("publish")) return { title: "Publish with Wrangler", target: name };
+      if (words.includes("deploy")) return { title: "Deploy with Wrangler", target: name };
+      return null;
+    }
+    case "firebase": {
+      const words = cliPositionals(args, /* @__PURE__ */ new Set(["-P", "--project", "--only", "--except", "--token"]));
+      if (words[0] === "deploy") return { title: "Deploy to Firebase", target: flag(["-P", "--project"]) };
+      return null;
+    }
+    case "serverless":
+    case "sls":
+      return cliPositionals(args)[0] === "deploy" ? { title: "Deploy with Serverless" } : null;
+    case "cdk":
+      return cliPositionals(args)[0] === "deploy" ? { title: "Deploy with AWS CDK" } : null;
+    case "gcloud": {
+      const words = cliPositionals(args, /* @__PURE__ */ new Set(["--project", "--account", "--configuration", "--format", "--verbosity", "--impersonate-service-account"]));
+      const local = ["config", "auth", "components", "info", "init", "version", "topic"];
+      if (local.includes(words[0] ?? "")) return null;
+      const verbs = words.slice(1);
+      const at = verbs.indexOf("deploy");
+      if (at === -1) return null;
+      return { title: "Deploy with gcloud", target: verbs[at + 1] };
+    }
+    default:
+      return null;
+  }
+}
+__name(productionDeployCard, "productionDeployCard");
 function classifyGhApiStage(stage) {
   if (!/^gh\s+api\b/.test(stage)) return null;
   const method = stage.match(/\s(?:-X|--method)(?:\s+|=)?([A-Za-z]+)\b/)?.[1]?.toUpperCase();

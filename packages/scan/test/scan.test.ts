@@ -99,7 +99,18 @@ describe("classifyCommand uses the hook classifier", () => {
 
   it("pauses npm test on Claude Code and not on Codex", () => {
     assert.equal(classifyCommand("claude-code", "npm test").tier, "review");
+    assert.equal(classifyCommand("claude-code", "npm test").routine, true);
     assert.equal(classifyCommand("codex", "npm test").tier, "safe");
+    assert.equal(classifyCommand("codex", "npm test").routine, false);
+  });
+
+  it("labels a production deploy and does not treat rm as routine", () => {
+    assert.equal(classifyCommand("claude-code", "vercel --prod").category, "deploy");
+    assert.equal(classifyCommand("claude-code", "vercel --prod").tier, "high_stakes");
+    assert.equal(classifyCommand("claude-code", "vercel --prod").routine, false);
+    assert.equal(classifyCommand("codex", "fly deploy").category, "deploy");
+    assert.equal(classifyCommand("codex", "netlify deploy --prod").category, "deploy");
+    assert.equal(classifyCommand("claude-code", "rm -rf /var/data").routine, false);
   });
 });
 
@@ -193,30 +204,47 @@ describe("fixture transcripts", () => {
     const text = formatReport(report);
     assert.match(text, /Local only\. This scan does not use the network and does not send telemetry\./);
     assert.match(text, /Would have paused/);
-    assert.match(text, /high_stakes/);
-    assert.match(text, /OKed would have paused 10 of these commands, including 3 rm -rf and 2 force-pushes\./);
+    assert.match(text, /High-stakes \(always asks\)/);
+    assert.match(text, /Worth a look \(asks\)/);
+    assert.match(text, /Runs, logged/);
+    assert.match(text, /7 high-stakes: 3 rm -rf \/ file delete, 2 force-pushes, 2 prod deploys/);
+    assert.match(text, /3 worth a look: 2 curl POST\/PUT\/DELETE, 1 test runner/);
+    assert.match(text, /OKed would have paused 9 of these commands, including 3 rm -rf \/ file delete, 2 force-pushes and 2 prod deploys\./);
+    assert.match(text, /1 routine command \(test runners, scripts\) would also ask under Claude Code's default sandbox setting\./);
+    assert.match(text, /allowUnsandboxedCommands to false/);
     assert.match(text, /Get a yes\/no in Telegram before your agent runs them:\n {2}npm install -g @oked\/claude-code @oked\/codex && oked init && oked-codex init\nhttps:\/\/oked\.ai\n/);
     assert.equal(text.includes("Next:"), false);
     assert.equal(text.includes(SECRET), false);
     assert.equal(text.includes("\u2014"), false);
     assert.equal(text.includes("oked.ai?"), false);
     assert.equal(text.includes("utm_"), false);
+    assert.equal(text.includes("high_stakes"), false);
+    assert.equal(text.includes("file_delete"), false);
+    assert.equal(text.includes("unknown_bash"), false);
     assert.match(text, /The iPhone app is coming soon/);
     assert.match(text, /https:\/\/oked\.ai\/dashboard/);
     assert.equal(text.includes("Tiers come from"), false);
-    assert.equal(text.includes("Bash sandbox"), false);
+    assert.equal(text.includes("not containing child processes"), false);
     assert.equal(text.includes("Codex hook"), false);
     assert.equal(report.notes.some((note) => note.startsWith("Tiers come from")), true);
     assert.equal(report.notes.some((note) => note.includes("Bash sandbox")), true);
     assert.equal(report.notes.some((note) => note.includes("Codex hook")), true);
     assert.equal(report.notes.at(-1)?.includes("The iPhone app is coming soon"), true);
+    const vercel = report.commands.find((command) => command.host === "claude-code" && command.command === "vercel --prod");
+    assert.equal(vercel?.category, "deploy");
+    assert.equal(vercel?.tier, "high_stakes");
+    assert.equal(vercel?.tierLabel, "High-stakes (always asks)");
+    assert.equal(vercel?.categoryLabel, "prod deploy");
+    assert.equal(vercel?.routine, false);
+    assert.equal(claudeTest?.category, "npm_test");
+    assert.equal(claudeTest?.routine, true);
 
     const verbose = formatReport(report, { verbose: true });
     assert.match(verbose, /Tiers come from @oked\/sdk classify\(\), the same function the hooks call\. Custom rules are not applied\./);
     assert.match(verbose, /A command would have paused when the tier is review or high_stakes\. warning and safe would have run\./);
     assert.match(verbose, /Claude Code is classified with the Bash sandbox not containing child processes/);
     assert.match(verbose, /Codex is classified the way the Codex hook classifies commands/);
-    assert.match(verbose, /OKed would have paused 10 of these commands, including 3 rm -rf and 2 force-pushes\./);
+    assert.match(verbose, /OKed would have paused 9 of these commands, including 3 rm -rf \/ file delete, 2 force-pushes and 2 prod deploys\./);
     assert.equal(verbose.split("The iPhone app is coming soon").length - 1, 1);
     assert.equal(verbose.split("Tiers come from").length - 1, 1);
   });
@@ -273,15 +301,20 @@ describe("missing directories", () => {
     const text = formatReport(report);
     assert.match(text, /no transcripts at ~\/\.claude\/projects/);
     assert.match(text, /no sessions at ~\/\.codex\/sessions/);
-    assert.match(text, /No risky commands found in this history, and OKed would pause things like rm -rf, force-push and prod deploys\./);
-    assert.match(text, /Get a yes\/no in Telegram before your agent runs them:\n {2}npm install -g @oked\/claude-code && oked init\nhttps:\/\/oked\.ai\n/);
+    assert.match(text, /No Claude Code or Codex history was found at the paths checked\./);
+    assert.match(text, /Pass --path <dir> to read a different directory\./);
+    assert.match(text, /Get a yes\/no in Telegram before your agent runs a risky command:\n {2}npm install -g @oked\/claude-code && oked init\nhttps:\/\/oked\.ai\n/);
+    assert.equal(text.includes("No risky commands found"), false);
+    assert.equal(text.includes("Would have paused"), false);
+    assert.equal(text.includes("Top risky commands"), false);
     assert.equal(text.includes("OKed would have paused"), false);
     assert.equal(text.includes("including"), false);
     assert.equal(text.includes("Tiers come from"), false);
     assert.match(text, /The iPhone app is coming soon/);
     const verbose = formatReport(report, { verbose: true });
     assert.match(verbose, /Tiers come from @oked\/sdk classify\(\)/);
-    assert.match(verbose, /No risky commands found in this history/);
+    assert.equal(verbose.includes("No risky commands found"), false);
+    assert.match(verbose, /No Claude Code or Codex history was found/);
   });
 
   it("rejects a --path that does not exist", async () => {
@@ -384,8 +417,11 @@ describe("cli", () => {
     const quiet = run([], { HOME: empty });
     assert.equal(quiet.status, 0, quiet.stderr);
     assert.match(quiet.stdout, /no transcripts/);
-    assert.match(quiet.stdout, /No risky commands found in this history, and OKed would pause things like rm -rf, force-push and prod deploys\./);
+    assert.match(quiet.stdout, /No Claude Code or Codex history was found at the paths checked\./);
+    assert.match(quiet.stdout, /Pass --path <dir>/);
     assert.match(quiet.stdout, / {2}npm install -g @oked\/claude-code && oked init\nhttps:\/\/oked\.ai\n/);
+    assert.equal(quiet.stdout.includes("No risky commands found"), false);
+    assert.equal(quiet.stdout.includes("Would have paused"), false);
     assert.equal(quiet.stdout.includes("OKed would have paused"), false);
     assert.equal(quiet.stdout.includes("Tiers come from"), false);
     assert.equal(quiet.stdout.includes("\u2014"), false);
@@ -395,12 +431,21 @@ describe("cli", () => {
     assert.match(shown.stdout, /Tiers come from @oked\/sdk classify\(\)/);
     assert.match(shown.stdout, /Bash sandbox/);
     assert.match(shown.stdout, /Codex is classified the way the Codex hook/);
-    assert.match(shown.stdout, /OKed would have paused 10 of these commands, including 3 rm -rf and 2 force-pushes\./);
+    assert.match(shown.stdout, /OKed would have paused 9 of these commands, including 3 rm -rf \/ file delete, 2 force-pushes and 2 prod deploys\./);
     const plain = run(["--path", fixtureHome]);
     assert.equal(plain.status, 0, plain.stderr);
     assert.equal(plain.stdout.includes("Tiers come from"), false);
-    assert.equal(plain.stdout.includes("Bash sandbox"), false);
-    assert.match(plain.stdout, /OKed would have paused 10 of these commands/);
+    assert.equal(plain.stdout.includes("not containing child processes"), false);
+    assert.match(plain.stdout, /OKed would have paused 9 of these commands/);
+    assert.match(plain.stdout, /1 routine command \(test runners, scripts\)/);
+    const parsed = JSON.parse(run(["--path", fixtureHome, "--json"]).stdout) as {
+      commands: { command: string; category: string; tier: string; tierLabel: string; routine: boolean }[];
+    };
+    const prod = parsed.commands.find((command) => command.command === "vercel --prod");
+    assert.equal(prod?.category, "deploy");
+    assert.equal(prod?.tier, "high_stakes");
+    assert.equal(prod?.tierLabel, "High-stakes (always asks)");
+    assert.equal(prod?.routine, false);
 
     const jsonVerbose = run(["--path", fixtureHome, "--json", "--verbose"]);
     assert.equal(jsonVerbose.status, 0, jsonVerbose.stderr);
@@ -415,13 +460,16 @@ describe("closing call to action", () => {
   const decision = "Decisions happen in Telegram or on the web dashboard (https://oked.ai/dashboard). The iPhone app is coming soon.";
   const classification = "Tiers come from @oked/sdk classify(), the same function the hooks call. Custom rules are not applied.";
 
-  function row(category: string, tier: CommandRow["tier"] = "high_stakes"): CommandRow {
+  function row(category: string, tier: CommandRow["tier"] = "high_stakes", routine = false): CommandRow {
     return {
       host: "claude-code",
       tier,
+      tierLabel: tier,
       category,
+      categoryLabel: category,
       command: category,
       paused: tier === "review" || tier === "high_stakes",
+      routine,
       timestamp: null,
     };
   }
@@ -473,7 +521,7 @@ describe("closing call to action", () => {
     ];
     assert.equal(
       closing(commands),
-      "OKed would have paused 12 of these commands, including 4 rm -rf, 3 force-pushes and 2 prod deploys.",
+      "OKed would have paused 12 of these commands, including 4 rm -rf / file delete, 3 force-pushes and 2 prod deploys.",
     );
   });
 
@@ -498,8 +546,33 @@ describe("closing call to action", () => {
   it("breaks ties by the plain phrase", () => {
     assert.equal(
       closing([row("file_delete"), row("file_delete"), row("git_force_push"), row("git_force_push")]),
-      "OKed would have paused 4 of these commands, including 2 force-pushes and 2 rm -rf.",
+      "OKed would have paused 4 of these commands, including 2 force-pushes and 2 rm -rf / file delete.",
     );
+  });
+
+  it("leaves routine commands out of the closing count", () => {
+    const commands = [
+      row("file_delete"),
+      row("npm_test", "review", true),
+      row("http_post", "review"),
+    ];
+    assert.equal(
+      closing(commands),
+      "OKed would have paused 2 of these commands, including 1 rm -rf / file delete.",
+    );
+    const text = formatReport(reportFor(commands));
+    assert.match(text, /1 routine command \(test runners, scripts\) would also ask under Claude Code's default sandbox setting\./);
+    assert.match(text, /allowUnsandboxedCommands to false/);
+    assert.match(text, /Would have paused/);
+  });
+
+  it("keeps the honest line when history exists and nothing would pause", () => {
+    const text = formatReport(reportFor([]));
+    assert.match(text, /No risky commands found in this history, and OKed would pause things like rm -rf, force-push and prod deploys\./);
+    assert.match(text, /Would have paused/);
+    assert.match(text, /What would pause\n {2}\(none\)/);
+    assert.match(text, /Top risky commands\n {2}\(none\)/);
+    assert.equal(text.includes("No Claude Code or Codex history"), false);
   });
 
   it("hides classification notes unless verbose is set", () => {

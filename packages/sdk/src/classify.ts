@@ -590,6 +590,93 @@ function classifyCloudCliStage(stage: string): RiskTier | null {
   return null;
 }
 
+export interface ProductionDeployCard {
+  title: string;
+  target?: string;
+}
+
+/**
+ * A production deploy the tier logic already treats as high_stakes.
+ * Preview deploys, deletes, help, and dry runs return null.
+ * Calling this does not change the tier. describe() uses it for the card.
+ */
+export function productionDeployCard(stage: string): ProductionDeployCard | null {
+  let bare = stage.trim().replace(DELETE_LEAD, "");
+  bare = bare.replace(/^(?:\w+=\S+\s+)+/, "");
+  const args = splitArgs(bare.replace(CLI_RUNNER_RE, ""));
+  const tool = (args.shift() ?? "").replace(/^.*\//, "").replace(/(?<=.)@.*$/, "");
+  const sep = args.indexOf("--");
+  const head = sep === -1 ? args : args.slice(0, sep);
+  if (head.some((arg) => CLI_PREVIEW_ARG_RE.test(arg))) return null;
+  if (cliPositionals(args)[0] === "help") return null;
+
+  const flag = (names: string[]): string | undefined => {
+    for (let i = 0; i < args.length; i++) {
+      const arg = args[i];
+      for (const name of names) {
+        if (arg === name && args[i + 1]) return args[i + 1];
+        if (arg.startsWith(`${name}=`)) return arg.slice(name.length + 1);
+      }
+    }
+    return undefined;
+  };
+
+  switch (tool) {
+    case "vercel": {
+      const [sub, op] = cliPositionals(args, VERCEL_VALUE_FLAGS);
+      const prod = args.some((arg, i) => arg === "--prod" || arg === "--target=production" ||
+        (arg === "--target" && args[i + 1] === "production"));
+      const path = sub !== undefined && sub !== "deploy" && !VERCEL_SUBCOMMANDS.has(sub);
+      if ((sub === undefined || sub === "deploy" || path) && prod) {
+        return { title: "Deploy to Vercel production", target: path ? sub : undefined };
+      }
+      if (sub === "redeploy" && prod) return { title: "Redeploy on Vercel production" };
+      if (sub === "promote") return { title: "Promote a Vercel deployment to production", target: op };
+      return null;
+    }
+    case "netlify": {
+      const words = cliPositionals(args, new Set(["--site", "--dir", "-d", "--auth", "--filter", "-a", "-s", "-m", "--message", "--alias"]));
+      const prod = args.some((arg) => /^(?:--prod|-p|--prodIfUnlocked|--prod-if-unlocked)$/.test(arg));
+      if (words[0] === "deploy" && prod) return { title: "Deploy to Netlify production", target: flag(["--site", "-s"]) };
+      return null;
+    }
+    case "fly":
+    case "flyctl": {
+      const words = cliPositionals(args, new Set(["-a", "--app", "-c", "--config", "-r", "--region", "--image", "-t", "--access-token"]));
+      if (words[0] === "deploy") return { title: "Deploy to Fly", target: flag(["-a", "--app"]) };
+      return null;
+    }
+    case "wrangler": {
+      const words = cliPositionals(args, new Set(["-c", "--config", "-e", "--env", "--name"]));
+      const name = flag(["--name"]);
+      if (words.includes("publish")) return { title: "Publish with Wrangler", target: name };
+      if (words.includes("deploy")) return { title: "Deploy with Wrangler", target: name };
+      return null;
+    }
+    case "firebase": {
+      const words = cliPositionals(args, new Set(["-P", "--project", "--only", "--except", "--token"]));
+      if (words[0] === "deploy") return { title: "Deploy to Firebase", target: flag(["-P", "--project"]) };
+      return null;
+    }
+    case "serverless":
+    case "sls":
+      return cliPositionals(args)[0] === "deploy" ? { title: "Deploy with Serverless" } : null;
+    case "cdk":
+      return cliPositionals(args)[0] === "deploy" ? { title: "Deploy with AWS CDK" } : null;
+    case "gcloud": {
+      const words = cliPositionals(args, new Set(["--project", "--account", "--configuration", "--format", "--verbosity", "--impersonate-service-account"]));
+      const local = ["config", "auth", "components", "info", "init", "version", "topic"];
+      if (local.includes(words[0] ?? "")) return null;
+      const verbs = words.slice(1);
+      const at = verbs.indexOf("deploy");
+      if (at === -1) return null;
+      return { title: "Deploy with gcloud", target: verbs[at + 1] };
+    }
+    default:
+      return null;
+  }
+}
+
 /**
  * `gh api` is curl for GitHub: a mutating method, or fields without a method
  * (gh then sends a POST), is an outward write like a curl POST. A GraphQL call
