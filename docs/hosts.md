@@ -23,3 +23,9 @@ OKed stops a risky tool call until a person decides in Telegram or on the [web d
 Claude Code is the host that reads sandbox settings (`.claude/settings.json`, `.claude/settings.local.json`, and `~/.claude/settings.json`). When `sandbox.enabled` is true and `allowUnsandboxedCommands` is false, `cargo test`, `npm test`, `npm run`, `pytest`, `go test`, `make`, `./script.sh`, and `npx` stay allowed, because child processes cannot write outside the working directory. Otherwise those commands ask (`review`). Codex, Cursor, Copilot, and the SDK hosts do not read those files, so the same commands stay allowed there.
 
 The hook timeout hosts should set, when they allow it, is 690 seconds (`HOOK_TIMEOUT_SECONDS`). That sits above the SDK wait of 630 seconds.
+
+## Local audit
+
+[`@oked/scan`](../packages/scan) does not install a hook. `npx @oked/scan` reads Claude Code transcripts and Codex CLI sessions that are already on this machine and prints which commands the default rules would have paused. It does not use the network and it does not send telemetry. A missing directory is skipped.
+
+It ends with how many commands would have paused, the install command for the history it found (`npm install -g @oked/claude-code && oked init`, and `oked-codex init` when Codex history is present), and https://oked.ai. If nothing would have paused, it says so and does not invent a count. Claude Code can also be installed with no global package: `/plugin marketplace add oked-ai/oked-sdk`, then `/plugin install oked@oked`, then `/oked:pair`. Decisions happen in Telegram or on the [web dashboard](https://oked.ai/dashboard). The iPhone app is coming soon.

@@ -1,0 +1,2 @@
+{"timestamp":"2026-10-30T13:00:00.000Z","type":"session_meta","payload":{"id":"33333333-3333-3333-3333-333333333333","timestamp":"2026-10-30T13:00:00.000Z","cwd":"/tmp/demo","forked_from_id":"22222222-2222-2222-2222-222222222222"}}
+{"timestamp":"2026-10-30T13:00:01.000Z","type":"response_item","payload":{"type":"function_call","name":"shell_command","arguments":"{\"command\":\"vercel --prod\"}","call_id":"call_vercel"}}

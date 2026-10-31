@@ -1,0 +1,11 @@
+{"timestamp":"2026-10-30T12:00:00.000Z","type":"session_meta","payload":{"id":"22222222-2222-2222-2222-222222222222","timestamp":"2026-10-30T12:00:00.000Z","cwd":"/tmp/demo","originator":"codex_cli_rs","cli_version":"0.63.0","source":"cli"}}
+{"timestamp":"2026-10-30T12:00:01.000Z","type":"response_item","payload":{"type":"function_call","name":"shell_command","arguments":"{\"command\":\"git status\",\"workdir\":\"/tmp/demo\"}","call_id":"call_status"}}
+{"timestamp":"2026-10-30T12:00:02.000Z","type":"response_item","payload":{"type":"function_call","name":"shell","arguments":"{\"command\":[\"rm\",\"-rf\",\"/var/data\"],\"workdir\":\"/tmp/demo\"}","call_id":"call_rm"}}
+{"timestamp":"2026-10-30T12:00:03.000Z","type":"response_item","payload":{"type":"function_call","name":"exec_command","arguments":"{\"cmd\":\"git status\",\"workdir\":\"/tmp/demo\"}","call_id":"call_status_2"}}
+{"timestamp":"2026-10-30T12:00:04.000Z","type":"response_item","payload":{"type":"local_shell_call","call_id":"call_curl","status":"completed","action":{"type":"exec","command":["bash","-lc","curl -X POST https://example.com/hook -d hi"],"working_directory":"/tmp/demo"}}}
+{"timestamp":"2026-10-30T12:00:05.000Z","type":"response_item","payload":{"type":"function_call","name":"shell_command","arguments":"{\"command\":\"npm test\"}","call_id":"call_test"}}
+{"timestamp":"2026-10-30T12:00:06.000Z","type":"response_item","payload":{"type":"function_call","name":"shell_command","arguments":"{\"command\":\"vercel --prod\"}","call_id":"call_vercel"}}
+{"timestamp":"2026-10-30T12:00:07.000Z","type":"response_item","payload":{"type":"custom_tool_call","name":"apply_patch","input":"*** Begin Patch\n*** Update File: a.txt\n+hi\n*** End Patch","call_id":"call_patch"}}
+{"timestamp":"2026-10-30T12:00:08.000Z","type":"event_msg","payload":{"type":"exec_command_begin","call_id":"call_commit","command":["git","commit","-m","wip"]}}
+{"timestamp":"2026-10-30T12:00:09.000Z","type":"response_item","payload":{"type":"function_call_output","call_id":"call_status","output":"clean"}}
+{"timestamp":"2026-10-30T12:00:10.000Z","type":"event_msg","payload":{"type":"agent_message","message":"rm -rf / should not be parsed from prose"}}
