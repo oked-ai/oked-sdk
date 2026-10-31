@@ -3,7 +3,8 @@
  * @oked/openclaw-cli - installer for the @oked/openclaw plugin.
  *
  * Subcommands:
- *   oked-openclaw init       Install the plugin via `openclaw plugins install`,
+ *   oked-openclaw init       Install the plugin if needed (`openclaw plugins install
+ *                            @oked/openclaw`, or `--link` for a local copy),
  *                            persist API key + minTier into ~/.openclaw/openclaw.json,
  *                            and restart the OpenClaw gateway daemon.
  *   oked-openclaw status     Print install state, config, and backend reachability.
@@ -14,7 +15,7 @@
 import { readFile, writeFile, mkdir, access, chmod } from 'node:fs/promises';
 import { homedir, hostname, platform } from 'node:os';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import readline from 'node:readline/promises';
 import { stdin as input, stdout as output } from 'node:process';
 import { spawn, spawnSync } from 'node:child_process';
@@ -274,6 +275,27 @@ function detectDaemon() {
 
 // --- commands -------------------------------------------------------------
 
+/**
+ * Decide how init installs the plugin.
+ * A local checkout or global npm copy stays on `--link`.
+ * An already installed plugin with no local copy is left in place so pairing
+ * does not replace a ClawHub install. Otherwise install from ClawHub.
+ */
+export function resolvePluginInstall({ pluginPath, alreadyInstalled }) {
+  if (pluginPath) {
+    return { kind: 'link', args: ['plugins', 'install', '--link', pluginPath] };
+  }
+  if (alreadyInstalled) return { kind: 'skip', args: [] };
+  return { kind: 'clawhub', args: ['plugins', 'install', '@oked/openclaw'] };
+}
+
+function pluginAlreadyInstalled() {
+  if (!commandExists('openclaw')) return false;
+  const listed = run('openclaw', ['plugins', 'list']);
+  if (listed.code !== 0) return false;
+  return /\boked\b/.test(listed.stdout) && !/\boked\b.*not\s+found/i.test(listed.stdout);
+}
+
 async function cmdInit() {
   console.log('\nOKed -> OpenClaw plugin installer\n');
 
@@ -283,29 +305,45 @@ async function cmdInit() {
     process.exit(1);
   }
 
-  // 1. Find the plugin source.
+  // 1. Find a local copy, or plan a ClawHub install.
   process.stdout.write('1. Locating @oked/openclaw plugin... ');
   const pluginPath = await findPluginPath();
-  if (!pluginPath) {
-    console.log('failed');
-    console.error('\nCould not find a sibling packages/openclaw with openclaw.plugin.json.');
-    console.error('If you cloned the monorepo, run this from inside it. Otherwise install');
-    console.error('@oked/openclaw globally first:  npm install -g @oked/openclaw\n');
-    process.exit(1);
+  const plan = resolvePluginInstall({
+    pluginPath,
+    alreadyInstalled: pluginPath ? false : pluginAlreadyInstalled(),
+  });
+  if (plan.kind === 'link') {
+    console.log('found');
+    console.log(`   Path: ${pluginPath}\n`);
+  } else if (plan.kind === 'skip') {
+    console.log('already installed');
+    console.log('   Leaving the current install in place.\n');
+  } else {
+    console.log('not on disk');
+    console.log('   Will install from ClawHub: openclaw plugins install @oked/openclaw\n');
   }
-  console.log('found');
-  console.log(`   Path: ${pluginPath}\n`);
 
   // 2. Register the plugin with OpenClaw.
-  console.log('2. Installing into OpenClaw...');
-  const installArgs = ['plugins', 'install', '--link', pluginPath];
-  console.log(`   $ openclaw ${installArgs.join(' ')}`);
-  const installCode = await runStreaming('openclaw', installArgs);
-  if (installCode !== 0) {
-    console.error(`\n   X openclaw plugins install exited ${installCode}.`);
-    process.exit(installCode);
+  if (plan.kind === 'skip') {
+    console.log('2. Plugin is already installed. Skipping install.\n');
+  } else {
+    console.log('2. Installing into OpenClaw...');
+    console.log(`   $ openclaw ${plan.args.join(' ')}`);
+    const installCode = await runStreaming('openclaw', plan.args);
+    if (installCode !== 0) {
+      const present = plan.kind === 'clawhub' && pluginAlreadyInstalled();
+      if (!present) {
+        console.error(`\n   X openclaw plugins install exited ${installCode}.`);
+        if (plan.kind === 'clawhub') {
+          console.error('   Install with: openclaw plugins install @oked/openclaw\n');
+        }
+        process.exit(installCode);
+      }
+      console.log('   Already installed. Continuing.\n');
+    } else {
+      console.log('');
+    }
   }
-  console.log('');
 
   // 3. API key - reuse existing if present, otherwise pair this device.
   const existing = await readConfig();
@@ -513,10 +551,10 @@ async function cmdUninstall() {
 }
 
 function usage() {
-  console.log(`oked-openclaw - installer for the @oked/openclaw plugin
+  console.log(`oked-openclaw - pairing CLI for the @oked/openclaw plugin
 
 Usage:
-  oked-openclaw init        Install the plugin and configure openclaw.json
+  oked-openclaw init        Install the plugin if needed, then configure openclaw.json
   oked-openclaw status      Show install state + backend reachability
   oked-openclaw uninstall   Remove the OKed entry and uninstall the plugin
   oked-openclaw test        Send a test approval request via the OKed SDK
@@ -552,7 +590,12 @@ async function main() {
   }
 }
 
-main().catch((err) => {
-  console.error(`oked-openclaw: ${err.message}`);
-  process.exit(1);
-});
+const isDirectRun =
+  process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
+
+if (isDirectRun) {
+  main().catch((err) => {
+    console.error(`oked-openclaw: ${err.message}`);
+    process.exit(1);
+  });
+}

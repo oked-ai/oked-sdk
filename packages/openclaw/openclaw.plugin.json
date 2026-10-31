@@ -2,6 +2,7 @@
   "id": "oked",
   "name": "OKed",
   "description": "Human approval layer for AI agents - freezes the agent before sensitive tool calls and asks for human approval via Telegram or the OKed dashboard.",
+  "categories": ["security"],
   "activation": {
     "onStartup": true
   },
@@ -46,12 +47,8 @@
     "apiKey": {
       "label": "OKed API Key",
       "placeholder": "ok_...",
-      "help": "Your OKed API key from https://app.oked.ai/dashboard."
-    },
-    "backendUrl": {
-      "label": "Backend URL",
-      "placeholder": "https://api.oked.ai",
-      "help": "Override the OKed backend URL. Default is the hosted backend."
+      "help": "Your OKed API key from https://app.oked.ai/dashboard.",
+      "sensitive": true
     },
     "minTier": {
       "label": "Minimum Approval Tier",

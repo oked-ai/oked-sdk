@@ -1,10 +1,10 @@
 /**
  * @oked/openclaw. OKed plugin for OpenClaw.
  *
- * Registers a `before_tool_call` hook that runs for *every* tool the agent
+ * Registers a `before_tool_call` hook that runs for every tool the agent
  * invokes (built-in or skill-registered). For tool calls classified as
  * sensitive, the hook freezes the agent and asks for a human approval via
- * the OKed backend (push to your phone). The agent only proceeds on Approve;
+ * Telegram or the OKed dashboard. The agent only proceeds on Approve;
  * any other outcome blocks the call.
  *
  * Failure semantics: fail safe always. If the OKed backend is unreachable,
@@ -14,7 +14,6 @@
  * Plugin config (set in openclaw.json under plugins.entries.oked):
  * {
  *   "apiKey": "ok_...",                  // OKed API key (or OKED_API_KEY env)
- *   "backendUrl": "https://...",         // optional override
  *   "alwaysApprove": ["custom_tool"],    // additional names to require approval for
  *   "alwaysAllow":   ["safe_tool"],      // names to never gate
  *   "minTier": "review"                  // minimum tier to require approval (default: "review")
@@ -171,7 +170,7 @@ const plugin = {
   id: PLUGIN_ID,
   name: "OKed Approvals",
   description:
-    "Freeze the agent before sensitive tool calls and ask for human approval via the OKed mobile app.",
+    "Freeze the agent before sensitive tool calls and ask for human approval via Telegram or the OKed dashboard.",
 
   register(api: OpenClawPluginApi): void {
     const cfg = api.pluginConfig ?? {};

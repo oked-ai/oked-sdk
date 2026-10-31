@@ -14,19 +14,32 @@
   "files": [
     "dist",
     "openclaw.plugin.json",
-    "README.md"
+    "README.md",
+    "assets"
   ],
   "scripts": {
     "prebuild": "npm run build --workspace=@oked/sdk",
     "build": "tsc",
     "dev": "tsc --watch",
-    "test": "npm run build && node src/smoke.test.mjs",
+    "test": "npm run build && node src/clawhub-metadata.test.mjs && node src/smoke.test.mjs",
     "prepublishOnly": "npm run build"
   },
   "openclaw": {
     "extensions": [
       "./dist/index.js"
-    ]
+    ],
+    "compat": {
+      "pluginApi": ">=2026.4.20"
+    },
+    "build": {
+      "openclawVersion": "2026.4.20"
+    },
+    "install": {
+      "clawhubSpec": "@oked/openclaw",
+      "npmSpec": "@oked/openclaw",
+      "defaultChoice": "clawhub",
+      "minHostVersion": ">=2026.4.20"
+    }
   },
   "peerDependencies": {
     "openclaw": ">=2026.4.20"
