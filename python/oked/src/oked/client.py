@@ -17,7 +17,6 @@ from dataclasses import asdict, dataclass
 from typing import Any, Mapping
 
 from oked.config import PersistedConfig, heartbeat_path, load_oked_config, rules_cache_path
-from oked.watch import resolve_mode
 from oked.errors import (
     OkedAuthError,
     OkedBackendUnreachableError,
@@ -27,6 +26,7 @@ from oked.errors import (
 from oked.receipt import OKED_RECEIPT_KEYS_URL, check_receipt
 from oked.transport import ConnectFailed, HeldTimeout, request_bytes, request_with_retry
 from oked.types import ApprovalRequest, ApprovalResponse
+from oked.watch import resolve_mode
 
 # 30s above the backend's 10 minute expiry.
 DEFAULT_APPROVAL_TIMEOUT_MS = 630_000
