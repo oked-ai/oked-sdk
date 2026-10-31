@@ -93,6 +93,8 @@ gh workflow run publish.yml --ref main -f tag=vX.Y.Z -f clawhub_only=true
 
 `clawhub_only` skips the npm jobs. `tag` is checked out and must match `packages/openclaw/package.json`. For 0.6.25, which is already on npm, use `tag=v0.6.25`. If `clawhub_only` is false, an npm job whose version is already on npm logs `is already on npm. Skipping npm publish.` and exits 0.
 
+The `publish-clawhub` command does not pass `--owner`. A trusted publish that sets an owner is rejected with `Trusted publishes must not override the package owner`. The owner stays the handle from the first manual publish (`--owner oked` below). The same command passes `--source-repo oked-ai/oked-sdk`, `--source-commit` from `github.sha`, and `--source-ref` from `github.ref`. Those three have to match the OIDC token for this workflow run. The checked-out tag can be older than that ref, so the source commit is not `git rev-parse` of the tag. `clawhub@0.24.1` has no channel flag and does not send one. A trusted publish that changes the package channel is rejected too. `--manual-override-reason` is only for a maintainer machine. Passing it makes this CLI use a manual token instead of OIDC.
+
 The workflow installs `clawhub@0.24.1`. The upload is accepted before ClawHub's security checks finish. The package stays out of `openclaw plugins install` until those checks pass. A rejected upload fails the `publish-clawhub` job only. The npm jobs are separate.
 
 ### One-time setup
