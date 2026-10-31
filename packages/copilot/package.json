@@ -1,6 +1,6 @@
 {
   "name": "@oked/copilot",
-  "version": "0.6.24",
+  "version": "0.6.25",
   "description": "OKed for GitHub Copilot CLI and VS Code. A preToolUse hook that holds risky agent tool calls for a human decision.",
   "type": "module",
   "bin": {
@@ -46,8 +46,8 @@
     "access": "public"
   },
   "dependencies": {
-    "@oked/hook-core": "0.6.24",
-    "@oked/sdk": "0.6.24"
+    "@oked/hook-core": "0.6.25",
+    "@oked/sdk": "0.6.25"
   },
   "devDependencies": {
     "@types/node": "^26.6.5",

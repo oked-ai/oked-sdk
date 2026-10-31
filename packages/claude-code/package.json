@@ -1,6 +1,6 @@
 {
   "name": "@oked/claude-code",
-  "version": "0.6.24",
+  "version": "0.6.25",
   "description": "OKed for Claude Code - zero-code human approval for sensitive actions",
   "type": "module",
   "bin": {
@@ -44,8 +44,8 @@
     "access": "public"
   },
   "dependencies": {
-    "@oked/hook-core": "0.6.24",
-    "@oked/sdk": "0.6.24"
+    "@oked/hook-core": "0.6.25",
+    "@oked/sdk": "0.6.25"
   },
   "devDependencies": {
     "typescript": "^7.0.2"
