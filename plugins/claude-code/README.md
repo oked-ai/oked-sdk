@@ -27,7 +27,7 @@ When a risky tool call needs a person, this plugin sends the tool name, the comm
 
 If you also ran `oked init`, Claude Code has an `oked-hook` command in `.claude/settings.json` or in your user settings. That command and this plugin must not both ask. While the plugin is enabled and its hook file is installed, the settings hook returns allow without calling OKed, and this plugin is the only gate. `oked init` will not add a settings hook when the plugin is already enabled. If you disable the plugin, an existing `oked-hook` entry gates again. `oked uninstall` removes the project entry.
 
-The hook matches `Bash`, `Write`, `Edit`, `Agent`, and MCP tools (`mcp__.*`). Claude Code allows it 690 seconds, which is longer than the approval window, so a timeout is a deny rather than a killed hook.
+The hook matches `Bash`, `PowerShell`, `Write`, `Edit`, `Agent`, `Task`, and MCP tools (`mcp__.*`). On Windows without Git Bash, Claude Code sends shell commands to `PowerShell` and does not register `Bash`. `Task` is the older name of the subagent tool. Current Claude Code sends `Agent`. Claude Code allows the hook 690 seconds, which is longer than the approval window, so a timeout is a deny rather than a killed hook.
 
 ## License
 

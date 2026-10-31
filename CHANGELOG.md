@@ -9,7 +9,7 @@ Decisions are made in Telegram and on the [web dashboard](https://oked.ai/dashbo
 ### Claude Code plugin
 
 - OKed can be installed as a Claude Code plugin. In Claude Code: `/plugin marketplace add oked-ai/oked-sdk`, then `/plugin install oked@oked`. The marketplace name is `oked` and the plugin name is `oked`. No global npm install is required.
-- The hook is `plugins/claude-code/scripts/oked-hook.mjs`, a readable bundle of the hook and the SDK, run with `node`. The matcher is `Bash|Write|Edit|Agent|mcp__.*` and the timeout is 690 seconds. `node scripts/build-claude-plugin.mjs` rebuilds it. CI fails if the committed file is stale or larger than 256 KiB. `npm run bump` sets the plugin version to the same number as the packages and rebuilds the bundle.
+- The hook is `plugins/claude-code/scripts/oked-hook.mjs`, a readable bundle of the hook and the SDK, run with `node`. The matcher is `Bash|PowerShell|Write|Edit|Agent|Task|mcp__.*` and the timeout is 690 seconds. `PowerShell` covers Windows when Git Bash is absent. `Task` is the older name of the subagent tool. `node scripts/build-claude-plugin.mjs` rebuilds it. CI fails if the committed file is stale or larger than 256 KiB. `npm run bump` sets the plugin version to the same number as the packages and rebuilds the bundle.
 - Pair with `/oked:pair`. The plugin API key is sensitive. The hook reads `CLAUDE_PLUGIN_OPTION_APIKEY`. Until a key is saved, a risky action returns `ask`.
 - If the plugin is enabled and `oked init` has also installed `oked-hook`, only the plugin calls OKed. The settings hook returns allow. `oked init` does not add a settings hook while the plugin is enabled. `oked uninstall` removes the project entry. If you disable the plugin, that entry gates again.
 

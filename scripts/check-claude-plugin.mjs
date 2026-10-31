@@ -41,7 +41,7 @@ if (plugin.userConfig?.apiKey?.sensitive !== true) {
 const hooks = readJson(join(PLUGIN, "hooks", "hooks.json"));
 const entry = hooks.hooks?.PreToolUse?.[0];
 const hook = entry?.hooks?.[0];
-if (entry?.matcher !== "Bash|Write|Edit|Agent|mcp__.*") fail("hooks.json matcher is wrong");
+if (entry?.matcher !== "Bash|PowerShell|Write|Edit|Agent|Task|mcp__.*") fail("hooks.json matcher is wrong");
 if (hook?.timeout !== 690) fail("hooks.json timeout must be 690");
 if (hook?.command !== 'node "${CLAUDE_PLUGIN_ROOT}/scripts/oked-hook.mjs"') {
   fail(`hooks.json command is wrong: ${hook?.command}`);

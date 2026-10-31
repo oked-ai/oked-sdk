@@ -518,15 +518,16 @@ function summarizeBash(command2, sizeBytes, cwd, sandboxEnforced) {
   if (npmPublish) return npmPublish;
   const shellWrite = summarizeShellWrite(cmd);
   if (shellWrite) return shellWrite;
-  const rmMatch = shellText(cmd).match(/\b(rm|trash|trash-put|rmdir)\s+(?:(-rf?|-fr|--recursive|-r)\s+)?([^\n]+)/);
-  if (rmMatch && rmMatch[1] === "rmdir") {
+  const rmMatch = shellText(cmd).match(/\b(rm|trash|trash-put|rmdir|rd|del|erase|Remove-Item|ri)\s+(?:(-rf?|-fr|--recursive|-r)\s+)?([^\n]+)/i);
+  const winRecursive = rmMatch ? /(?:^|\s)\/s\b|(?:^|\s)-Recurse\b|(?:^|\s)-r\b/i.test(rmMatch[3]) : false;
+  if (rmMatch && /^(?:rmdir|rd)$/i.test(rmMatch[1]) && !winRecursive) {
     const vars = literalAssignments(cmd);
     const targets = parseRmTargets(rmMatch[3]).map((t) => shortenPath(stripQuotes(expandVars(t, vars))));
     return targets.length <= 1 ? { title: "Delete empty folder", target: targets[0], kind: "file_delete" } : { title: `Delete ${targets.length} empty folders`, target: targets.join("\n"), kind: "file_delete" };
   }
   if (rmMatch) {
     const flags = (rmMatch[2] ? `${rmMatch[2]} ` : "") + rmMatch[3];
-    const recursive = /(?:^|\s)(?:-[a-zA-Z]*[rR][a-zA-Z]*|--recursive)(?=\s|$)/.test(flags.split(/[;&|\n]/)[0]);
+    const recursive = winRecursive || /(?:^|\s)(?:-[a-zA-Z]*[rR][a-zA-Z]*|--recursive)(?=\s|$)/.test(flags.split(/[;&|\n]/)[0]);
     const vars = literalAssignments(cmd);
     const targets = parseRmTargets(rmMatch[3]).map((t) => expandVars(t, vars));
     if (targets.length <= 1) {
@@ -582,7 +583,7 @@ function summarizeBash(command2, sizeBytes, cwd, sandboxEnforced) {
   if (prisma) return prisma;
   const GIT_RESET_RE = /\bgit\s+(?:-C\s+\S+\s+)?reset\s+--hard\b/;
   if (GIT_RESET_RE.test(cmd)) return { title: `Hard reset${inRepo(GIT_RESET_RE)}, discard all local changes`, kind: "git_reset_hard" };
-  const GIT_CLEAN_RE = /\bgit\s+(?:-C\s+\S+\s+)?clean\s+-f/;
+  const GIT_CLEAN_RE = /\bgit\s+(?:-C\s+\S+\s+)?clean\s+(?:-\S+\s+)*(?:--force|-[^\s]*f)/;
   if (GIT_CLEAN_RE.test(cmd)) return { title: `Remove all untracked files${inRepo(GIT_CLEAN_RE)}`, kind: "git_clean" };
   const GIT_CHECKOUT_RE = /\bgit\s+(?:-C\s+\S+\s+)?checkout\s+--\s+\./;
   if (GIT_CHECKOUT_RE.test(cmd)) return { title: `Discard all unstaged changes${inRepo(GIT_CHECKOUT_RE)}`, kind: "git_checkout" };
@@ -1732,7 +1733,7 @@ function parseRmTargets(argsString) {
       while (i < str.length && !/[\s;|&<>`)}#]/.test(str[i])) i++;
       token = str.slice(start, i);
     }
-    if (token && !token.startsWith("-")) {
+    if (token && !token.startsWith("-") && !/^\/[sqfa]$/i.test(token)) {
       targets.push(token);
     }
   }
@@ -1993,7 +1994,8 @@ var HIGH_STAKES_COMMANDS = [
   // to `warning` in WARNING_COMMANDS below. Mirrors describe.ts force detection.
   /\bgit\s+push\b[^\n]*\s(?:--force(?:-with-lease)?|-f)\b/,
   /\bgit\s+reset\s+--hard\b/,
-  /\bgit\s+clean\s+-f/,
+  // git clean -f is NOT here. It is per-stage (classifyGitCleanStage) so a
+  // dry run stays safe and a temp or build-output path stays a warning.
   /\bgit\s+checkout\s+--\s+\./,
   /\bgit\s+restore\s+--staged\s+\./,
   // NOTE: SQL severity (DROP/DELETE FROM/TRUNCATE/…) is intentionally NOT matched
@@ -2038,8 +2040,8 @@ var HIGH_STAKES_STAGE = [
   /^shred\b/,
   /^truncate\b/,
   // `truncate -s 0 file` wipes contents
-  /^find\b.*\s-delete\b/,
-  // `find … -delete` removes matches
+  // `find … -delete` is per-stage (classifyFindDelete) so a temp or build
+  // path can stay a warning. A find of `.` or any other path stays high_stakes.
   // Power / system state.
   /^(shutdown|reboot|halt|poweroff)\b/,
   // Remote/outward file transfer (almost always a remote target).
@@ -2571,9 +2573,10 @@ var WARNING_COMMANDS = [
 ];
 var EPHEMERAL_PATH_RE = /^(?:\/tmp\/|\/var\/tmp\/|\/var\/folders\/|\/private\/tmp\/|\/private\/var\/folders\/|[A-Za-z]:[\\/](?:Windows[\\/]Temp|Users[\\/][^\\/]+[\\/]AppData[\\/]Local[\\/]Temp)[\\/])/i;
 var TEMP_VAR_RE = /^\$\{?(?:TMPDIR|TMP|TEMP)\}?(?:\/|$)/;
+var WIN_TEMP_VAR_RE = /^(?:\$\{?env:(?:TMPDIR|TMP|TEMP)\}?|%(?:TMPDIR|TMP|TEMP)%)(?:[\\/]|$)/i;
 function isEphemeralPath(filePath) {
   if (!filePath) return false;
-  return TEMP_VAR_RE.test(filePath) || EPHEMERAL_PATH_RE.test(filePath);
+  return TEMP_VAR_RE.test(filePath) || WIN_TEMP_VAR_RE.test(filePath) || EPHEMERAL_PATH_RE.test(filePath);
 }
 __name(isEphemeralPath, "isEphemeralPath");
 var MKTEMP_ASSIGN_RE = /^(?:export\s+|declare\s+|local\s+|readonly\s+)?(\w+)=["']?(?:\$\(|`)\s*mktemp\b/;
@@ -2643,9 +2646,10 @@ function collectMktempVars(stage, into) {
 __name(collectMktempVars, "collectMktempVars");
 function isEphemeralVar(target, vars) {
   if (vars.size === 0) return false;
-  const m = target.match(/^\$\{?(\w+)\}?(\/.*)?$/);
+  if (isCatastrophicTarget(target)) return false;
+  const m = target.match(/^\$\{?(\w+)\}?([\\/].*)?$/);
   if (!m || !vars.has(m[1])) return false;
-  if (m[2] && m[2].split("/").includes("..")) return false;
+  if (m[2] && m[2].split(/[/\\]/).includes("..")) return false;
   return true;
 }
 __name(isEphemeralVar, "isEphemeralVar");
@@ -2703,8 +2707,8 @@ function classify(toolName, toolInput, options) {
     const filePath = toolInput.file_path;
     return isSensitiveWritePath(filePath) ? "review" : "warning";
   }
-  if (toolName === "Agent") return "safe";
-  if (toolName === "Bash") {
+  if (toolName === "Agent" || toolName === "Task" || toolName === "Subagent") return "safe";
+  if (toolName === "Bash" || toolName === "PowerShell") {
     return classifyBashCommand(toolInput.command, /* @__PURE__ */ new Set(), sandboxEnforced);
   }
   if (toolName.startsWith("mcp__")) {
@@ -2843,15 +2847,18 @@ function isEphemeralOnlyDeletion(command2, ephemeralVars = /* @__PURE__ */ new S
 }
 __name(isEphemeralOnlyDeletion, "isEphemeralOnlyDeletion");
 var BUILD_OUTPUT_DIRS = /* @__PURE__ */ new Set(["build", "dist", ".build", "DerivedData", ".next"]);
+function isBuildOutputPath(target) {
+  const parts = unquote(target).replace(/\\/g, "/").replace(/^(?:\.\/)+/, "").split("/");
+  if (!parts[0] || parts[0].includes(":") || parts.includes("..")) return false;
+  return BUILD_OUTPUT_DIRS.has(parts[0]);
+}
+__name(isBuildOutputPath, "isBuildOutputPath");
 function isBuildOutputOnlyDeletion(command2) {
   const m = command2.match(/^(?:rm|trash|trash-put)\b\s+(.+)$/s);
   if (!m) return false;
   const targets = splitArgs(m[1]).filter((a) => !a.startsWith("-") && !/^(?:\d|&)?>>?\S+$/.test(a));
   if (targets.length === 0) return false;
-  return targets.every((a) => {
-    const parts = unquote(a).replace(/^(?:\.\/)+/, "").split("/");
-    return BUILD_OUTPUT_DIRS.has(parts[0]) && !parts.includes("..");
-  });
+  return targets.every((a) => isBuildOutputPath(a));
 }
 __name(isBuildOutputOnlyDeletion, "isBuildOutputOnlyDeletion");
 function classifyAssignmentStage(stage, sandboxEnforced) {
@@ -2984,6 +2991,7 @@ function classifyGitGlobalOptsStage(stage, ephemeralVars, sandboxEnforced) {
     return i2;
   }, "readToken");
   let floor = "safe";
+  let repoInTemp = false;
   let i = lead[0].length;
   while (i < stage.length) {
     while (i < stage.length && /\s/.test(stage[i])) i++;
@@ -2992,7 +3000,9 @@ function classifyGitGlobalOptsStage(stage, ephemeralVars, sandboxEnforced) {
     i = readToken(i);
     const tok = stage.slice(start, i);
     if (!tok.startsWith("-")) {
-      const inner = classifyBashCommand(`git ${stage.slice(start).trim()}`, ephemeralVars, sandboxEnforced);
+      const vars = new Set(ephemeralVars);
+      if (repoInTemp) vars.add(TEMP_CWD);
+      const inner = classifyBashCommand(`git ${stage.slice(start).trim()}`, vars, sandboxEnforced);
       return maxTier(floor, inner);
     }
     let value = "";
@@ -3005,6 +3015,9 @@ function classifyGitGlobalOptsStage(stage, ephemeralVars, sandboxEnforced) {
       value = unquote(tok.slice(2));
     }
     if ((tok === "-c" || tok.startsWith("-c")) && /^alias\./i.test(value)) floor = "review";
+    if (tok === "-C" && (isEphemeralPath(value) || isEphemeralVar(value, ephemeralVars) || /^\$\(\s*mktemp\b/.test(value))) {
+      repoInTemp = true;
+    }
   }
   return floor;
 }
@@ -3081,14 +3094,215 @@ function classifySshStage(stage, sandboxEnforced) {
   return "review";
 }
 __name(classifySshStage, "classifySshStage");
+var WRAPPED_SHELLS = /* @__PURE__ */ new Set(["bash", "sh", "zsh", "ksh", "dash", "pwsh", "powershell", "cmd"]);
+function shellInvocationName(token) {
+  return commandBase(unquote(token)).replace(/\.exe$/i, "").toLowerCase();
+}
+__name(shellInvocationName, "shellInvocationName");
 function classifyShellCStage(stage, sandboxEnforced) {
-  const m = stage.match(
-    /^(?:bash|sh|zsh|ksh|dash)\b[^'"]*?\s-[A-Za-z]*c\s+(['"])([\s\S]*?)\1/
-  );
-  if (!m) return null;
-  return classifyBashCommand(m[2], /* @__PURE__ */ new Set(), sandboxEnforced);
+  const args = splitArgs(stage);
+  let i = args[0] === "sudo" ? 1 : 0;
+  if (i >= args.length) return null;
+  const name = shellInvocationName(args[i]);
+  if (!WRAPPED_SHELLS.has(name)) return null;
+  i++;
+  const run = /* @__PURE__ */ __name((body) => {
+    const inner = body.trim();
+    if (!inner || inner === stage.trim()) return null;
+    return classifyBashCommand(inner, /* @__PURE__ */ new Set(), sandboxEnforced);
+  }, "run");
+  if (name === "cmd") {
+    while (i < args.length) {
+      const a = args[i];
+      const inline = /^\/[cd]:([\s\S]*)$/i.exec(a);
+      if (inline) return run(inline[1]);
+      if (/^\/[cd]$/i.test(a) || /^-[cd]$/i.test(a)) {
+        const rest = args.slice(i + 1);
+        if (rest.length === 0) return null;
+        return run(rest.join(" "));
+      }
+      i++;
+    }
+    return null;
+  }
+  const ps = name === "powershell" || name === "pwsh";
+  while (i < args.length) {
+    const a = args[i];
+    if (ps && /^-(?:encodedcommand|enc)$/i.test(a)) return "review";
+    if (/^-(?:command|c)$/i.test(a) || !ps && /^-[A-Za-z]*c$/.test(a) && !a.startsWith("--")) {
+      const rest = args.slice(i + 1);
+      if (rest.length === 0) return null;
+      return run(ps ? rest.join(" ") : rest[0]);
+    }
+    if (/^-(?:file|inputformat|if|outputformat|of|executionpolicy|ep|version|workingdirectory|wd|configurationname)$/i.test(a)) {
+      i += 2;
+      continue;
+    }
+    if (a.startsWith("-")) {
+      i++;
+      continue;
+    }
+    return null;
+  }
+  return null;
 }
 __name(classifyShellCStage, "classifyShellCStage");
+function isCatastrophicTarget(raw) {
+  let t = unquote(raw).trim().replace(/^\\\\\?\\/, "");
+  if (!t) return false;
+  if (t === "/" || t === "\\" || t === "~" || t === "~/" || t === "~\\") return true;
+  if (/^\$\{?(?:home|env:home|env:userprofile)\}?[\\/]?$/i.test(t)) return true;
+  if (/^%(?:userprofile|home)%[\\/]?$/i.test(t)) return true;
+  if (/^[A-Za-z]:[\\/]?$/.test(t)) return true;
+  if (/^[A-Za-z]:[\\/]Users[\\/][^\\/]+~\d+[\\/]?$/i.test(t)) return true;
+  return false;
+}
+__name(isCatastrophicTarget, "isCatastrophicTarget");
+function isCleanupTarget(target, vars) {
+  const t = unquote(target);
+  if (!t || isCatastrophicTarget(t)) return false;
+  if (isEphemeralPath(t) || isEphemeralVar(t, vars) || vars.has(CREATED_PATH + t)) return true;
+  if (vars.has(TEMP_CWD) && /^[\w.-][\w./\\-]*$/.test(t) && !t.split(/[/\\]/).includes("..")) return true;
+  return isBuildOutputPath(t);
+}
+__name(isCleanupTarget, "isCleanupTarget");
+function isCollapsedWindowsDelete(stage) {
+  if (!/\\"/.test(stage)) return false;
+  if (!/\b(?:Remove-Item|ri|rd|del|erase|rmdir|rm)\b/i.test(stage)) return false;
+  return /(?:-Recurse|\s\/s\b|\/s\/q\b|--recursive|-[A-Za-z]*[rR])/i.test(stage);
+}
+__name(isCollapsedWindowsDelete, "isCollapsedWindowsDelete");
+function isCmdRecurseFlag(arg) {
+  return /^\/s(?:\/[qfa])*$/i.test(arg) || /^\/[qfa]*\/s(?:\/[qfa])*$/i.test(arg);
+}
+__name(isCmdRecurseFlag, "isCmdRecurseFlag");
+function isPsRecurseFlag(arg) {
+  return /^-(?:r|re|rec|recu|recur|recurs|recurse)$/i.test(arg);
+}
+__name(isPsRecurseFlag, "isPsRecurseFlag");
+function windowsDeleteTargets(args) {
+  const out = [];
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
+    if (isCmdRecurseFlag(a) || /^\/[qfa]$/i.test(a)) continue;
+    if (isPsRecurseFlag(a) || /^-(?:force|f|confirm|whatif|verbose|debug|ea)$/i.test(a)) continue;
+    const pathFlag = /^-(?:path|literalpath)$/i.exec(a);
+    if (pathFlag) {
+      if (args[i + 1]) out.push(unquote(args[++i]));
+      continue;
+    }
+    const inline = /^-(?:path|literalpath):(.+)$/i.exec(a);
+    if (inline) {
+      out.push(unquote(inline[1]));
+      continue;
+    }
+    if (/^-(?:filter|include|exclude|erroraction|warningaction|informationaction|errorvariable|warningvariable|outvariable|outbuffer|pipelinevariable|credential|stream|confirm|informationvariable)$/i.test(a)) {
+      i++;
+      continue;
+    }
+    if (a.startsWith("-")) continue;
+    if (/^(?:\d|&)?>>?\S+$/.test(a)) continue;
+    out.push(unquote(a));
+  }
+  return out;
+}
+__name(windowsDeleteTargets, "windowsDeleteTargets");
+function tierOfWindowsDelete(invocation, ephemeralVars) {
+  const args = splitArgs(invocation);
+  const cmd = (args[0] ?? "").replace(/\.exe$/i, "").toLowerCase();
+  if (!/^(?:remove-item|ri|rd|del|erase|rmdir)$/.test(cmd)) return null;
+  const rest = args.slice(1);
+  const recursive = rest.some((a) => isCmdRecurseFlag(a) || isPsRecurseFlag(a));
+  const targets = windowsDeleteTargets(rest);
+  if (targets.some((t) => isCatastrophicTarget(t))) return "high_stakes";
+  if (!recursive) {
+    if (cmd === "rmdir" || cmd === "rd") return null;
+  }
+  if (targets.length === 0) return "high_stakes";
+  if (targets.every((t) => isCleanupTarget(t, ephemeralVars))) return "warning";
+  return "high_stakes";
+}
+__name(tierOfWindowsDelete, "tierOfWindowsDelete");
+function classifyWindowsDestruction(stage, ephemeralVars) {
+  const lead = stage.replace(DELETE_LEAD, "");
+  const re = /(?:^|[\n`({;]|\$\()\s*((?:Remove-Item|ri|rd|del|erase|rmdir)\b[\s\S]*?)(?=$|[;|&\n}])/gi;
+  let worst = null;
+  for (const match of lead.matchAll(re)) {
+    const tier = tierOfWindowsDelete(match[1], ephemeralVars);
+    if (tier) worst = worst ? maxTier(worst, tier) : tier;
+  }
+  return worst;
+}
+__name(classifyWindowsDestruction, "classifyWindowsDestruction");
+function classifyFindDelete(stage, ephemeralVars) {
+  if (!/^find\b/.test(stage) || !/(?:^|\s)-delete\b/.test(stage)) return null;
+  const paths = [];
+  for (const arg of splitArgs(stage).slice(1)) {
+    if (arg.startsWith("-")) break;
+    paths.push(unquote(arg));
+  }
+  const targets = paths.length > 0 ? paths : ["."];
+  if (targets.every((t) => isCleanupTarget(t, ephemeralVars))) return "warning";
+  return "high_stakes";
+}
+__name(classifyFindDelete, "classifyFindDelete");
+function classifyGitCleanStage(stage, ephemeralVars) {
+  const match = /^git\s+clean\b([\s\S]*)$/.exec(stage);
+  if (!match) return null;
+  const args = splitArgs(match[1]);
+  let force = false;
+  let dry = false;
+  const paths = [];
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (arg === "--") {
+      paths.push(...args.slice(i + 1).map(unquote));
+      break;
+    }
+    if (arg === "--force") {
+      force = true;
+      continue;
+    }
+    if (arg === "--dry-run" || arg === "--dryrun") {
+      dry = true;
+      continue;
+    }
+    if (arg === "--exclude" || arg === "-e") {
+      i++;
+      continue;
+    }
+    if (arg.startsWith("--exclude=")) continue;
+    if (arg.startsWith("--")) continue;
+    if (arg.startsWith("-") && arg.length > 1) {
+      const flags = arg.slice(1);
+      if (flags.includes("n")) dry = true;
+      if (flags.includes("f")) force = true;
+      if (flags.includes("e")) i++;
+      continue;
+    }
+    paths.push(unquote(arg));
+  }
+  if (!force || dry) return "safe";
+  if (paths.length === 0) return ephemeralVars.has(TEMP_CWD) ? "warning" : "high_stakes";
+  if (paths.every((p) => isCleanupTarget(p, ephemeralVars))) return "warning";
+  return "high_stakes";
+}
+__name(classifyGitCleanStage, "classifyGitCleanStage");
+function isDiskFormat(stage) {
+  if (/^format-volume\b/i.test(stage)) {
+    if (/(?:^|\s)-wh(?:a(?:t(?:i(?:f)?)?)?)?\b/i.test(stage)) return false;
+    return true;
+  }
+  return /^format(?:\.com)?\s+[A-Za-z]:/i.test(stage);
+}
+__name(isDiskFormat, "isDiskFormat");
+function isInfraVolumeDeleteCurl(command2) {
+  const stage = command2.trim();
+  if (!/^(?:(?:sudo|command)\s+)*(?:\w+=\S+\s+)*curl\b/.test(stage)) return false;
+  if (!/\bvolumeDelete\b/i.test(stage)) return false;
+  return /graphql|railway\.app|backboard\./i.test(stage);
+}
+__name(isInfraVolumeDeleteCurl, "isInfraVolumeDeleteCurl");
 function isLoopbackAuthority(authority) {
   const host = authority.replace(/^\[/, "").replace(/\]$/, "").toLowerCase();
   return host === "localhost" || host === "0.0.0.0" || host === "::1" || /^127(?:\.\d{1,3}){3}$/.test(host);
@@ -3130,6 +3344,7 @@ function classifyBashCommand(command2, ephemeralVars = /* @__PURE__ */ new Set()
   }
   const sql = findSqlInCommand(intact);
   const sqlTier = sql ? classifySqlSeverity(sql) : "safe";
+  if (isInfraVolumeDeleteCurl(intact)) return "high_stakes";
   return maxTier(maxTier(sqlTier, pipesToShell ? "review" : "safe"), classifyStageShellEffects(stripped, ephemeralVars, sandboxEnforced));
 }
 __name(classifyBashCommand, "classifyBashCommand");
@@ -3450,13 +3665,16 @@ function classifyStageShellEffects(stage, ephemeralVars = /* @__PURE__ */ new Se
 }
 __name(classifyStageShellEffects, "classifyStageShellEffects");
 function classifyStageEffects(stage, ephemeralVars, sandboxEnforced) {
+  if (isCollapsedWindowsDelete(stage)) return "high_stakes";
   if (isEphemeralOnlyDeletion(stage, ephemeralVars)) return "warning";
   const gitTier = classifyGitGlobalOptsStage(stage, ephemeralVars, sandboxEnforced);
   if (gitTier !== null) return gitTier;
+  const winTier = classifyWindowsDestruction(stage, ephemeralVars);
+  if (winTier) return winTier;
   if (isBuildOutputOnlyDeletion(stage.replace(DELETE_LEAD, ""))) return "warning";
   const deleteStage = stage.replace(DELETE_LEAD, "");
   const rmdirArgs = deleteStage.match(/^(?:sudo\s+)?rmdir\b(.*)$/s)?.[1];
-  if (rmdirArgs !== void 0 && !DELETE_COMMAND_RE.test(rmdirArgs)) return "warning";
+  if (rmdirArgs !== void 0 && !DELETE_COMMAND_RE.test(rmdirArgs) && !/(?:^|\s)\/s\b|(?:^|\s)-r(?:ecurse)?\b/i.test(rmdirArgs)) return "warning";
   if (DELETE_COMMAND_RE.test(deleteStage)) return "high_stakes";
   const bareStage = stage.replace(/^sudo\s+/, "");
   if (/^pkill\s+(?:-\w+\s+)*-f\s+/.test(bareStage)) {
@@ -3466,6 +3684,11 @@ function classifyStageEffects(stage, ephemeralVars, sandboxEnforced) {
   if (isOwnJobKill(bareStage, ephemeralVars)) return "warning";
   if (isRestartableKill(bareStage)) return "review";
   if (/^railway\s/.test(bareStage) && PREVIEW_FLAG_RE.test(bareStage)) return "safe";
+  const findTier = classifyFindDelete(bareStage, ephemeralVars);
+  if (findTier) return findTier;
+  const gitCleanTier = classifyGitCleanStage(bareStage, ephemeralVars);
+  if (gitCleanTier) return gitCleanTier;
+  if (isDiskFormat(bareStage)) return "high_stakes";
   for (const pattern of HIGH_STAKES_STAGE) {
     if (pattern.test(bareStage)) return "high_stakes";
   }
