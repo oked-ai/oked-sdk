@@ -22,6 +22,7 @@ Questions and security reports go to [contact@oked.ai](mailto:contact@oked.ai). 
 | [python/oked-langgraph](./python/oked-langgraph) | Python LangGraph and LangChain wrapper. Not on PyPI yet. Until then, `pip install "oked @ git+https://github.com/oked-ai/oked-sdk#subdirectory=python/oked" "oked-langgraph @ git+https://github.com/oked-ai/oked-sdk#subdirectory=python/oked-langgraph"`. Once it is on PyPI, `pip install oked-langgraph`. Python 3.10 or newer. |
 | [packages/receipt-core](./packages/receipt-core) | Receipt format |
 | [packages/verify](./packages/verify) | Offline export check |
+| [packages/scan](./packages/scan) | Local audit of Claude Code and Codex command history. `npx @oked/scan`. No network calls |
 | [docs/hosts.md](./docs/hosts.md) | Which agents are covered |
 | [docs/receipts.md](./docs/receipts.md) | Receipt fields |
 | [RELEASING.md](./RELEASING.md) | How a version is published |

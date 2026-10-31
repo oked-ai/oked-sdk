@@ -1,6 +1,6 @@
 # Releasing
 
-All `@oked/*` packages are versioned in lockstep. They share one version number and are published together. There are fourteen: `sdk`, `hook-core`, `claude-code`, `codex`, `cursor`, `copilot`, `claude-agent-sdk`, `ai-sdk`, `openai-agents`, `openclaw`, `openclaw-cli`, `receipt-core`, `verify`, and `langgraph`.
+All `@oked/*` packages are versioned in lockstep. They share one version number and are published together. There are fifteen: `sdk`, `hook-core`, `claude-code`, `codex`, `cursor`, `copilot`, `claude-agent-sdk`, `ai-sdk`, `openai-agents`, `openclaw`, `openclaw-cli`, `receipt-core`, `verify`, `scan`, and `langgraph`.
 
 Releases are cut by hand with a git tag. Pushing a `vX.Y.Z` tag runs `.github/workflows/publish.yml`, which publishes every package with npm's OIDC trusted publishing (the workflow has `id-token: write` and stores no npm token).
 
@@ -25,6 +25,8 @@ cd packages/<name> && npm publish --access public
 ```
 
 Then add the Trusted Publisher on npmjs (same fields as above) and list the package in the `publish.yml` matrix. From the next tag on, CI publishes it with the others. A tag pushed before the manual publish fails that package's job (`ENEEDAUTH`) while the rest publish.
+
+`@oked/scan` is in the matrix and is not on npm yet. The first `npm publish` for it is the manual step above. A tag pushed before that publish fails the `scan` job only.
 
 ### On npm
 

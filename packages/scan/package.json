@@ -1,0 +1,61 @@
+{
+  "name": "@oked/scan",
+  "version": "0.6.24",
+  "description": "Local audit of Claude Code and Codex command history against OKed's default approval rules",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "oked-scan": "./dist/cli.js"
+  },
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "scripts": {
+    "prebuild": "npm run build --workspace=@oked/sdk",
+    "build": "tsc",
+    "test": "tsx --test test/*.test.ts",
+    "prepublishOnly": "npm run build"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "keywords": [
+    "oked",
+    "ai-agent",
+    "approval",
+    "human-in-the-loop",
+    "hooks",
+    "audit",
+    "scan"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/oked-ai/oked-sdk.git",
+    "directory": "packages/scan"
+  },
+  "bugs": {
+    "url": "https://github.com/oked-ai/oked-sdk/issues"
+  },
+  "homepage": "https://oked.ai",
+  "license": "Apache-2.0",
+  "engines": {
+    "node": ">=18"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "@oked/sdk": "0.6.24"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.5",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2"
+  }
+}

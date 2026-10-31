@@ -35,6 +35,7 @@ jobs:
           - openclaw-cli
           - receipt-core
           - verify
+          - scan
           - langgraph
     steps:
       - uses: actions/checkout@v6

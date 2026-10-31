@@ -4,7 +4,7 @@ Decisions are made in Telegram and on the [web dashboard](https://oked.ai/dashbo
 
 | Doc | What it covers |
 |---|---|
-| [hosts.md](./hosts.md) | Agents and libraries that can stop a tool call for a person |
+| [hosts.md](./hosts.md) | Agents and libraries that can stop a tool call for a person, and the local `npx @oked/scan` audit |
 | [../plugins/claude-code](../plugins/claude-code) | Claude Code plugin. Install with `/plugin install oked@oked` |
 | [receipts.md](./receipts.md) | Signed receipt format |
 | [../RELEASING.md](../RELEASING.md) | Versioning and npm publish |

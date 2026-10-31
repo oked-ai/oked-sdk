@@ -6,6 +6,13 @@ Decisions are made in Telegram and on the [web dashboard](https://oked.ai/dashbo
 
 ## Unreleased
 
+### @oked/scan
+
+- New package. `npx @oked/scan` reads Claude Code transcripts (`~/.claude/projects/**/*.jsonl`, Bash tool calls) and Codex CLI sessions (`~/.codex/sessions`, rollout files) on this machine. It reports which commands the default rules would have paused for approval: totals by tier and category, and the top risky commands with secrets-looking tokens redacted.
+- It uses `classify()` from `@oked/sdk`, the same function the hooks call. Custom rules are not applied. Claude Code is classified with the Bash sandbox not containing child processes, which is the default, so test runners and scripts count as `review`. Codex is classified the way the Codex hook classifies commands, so those runners stay allowed.
+- The command does not use the network and does not send telemetry. A missing transcript directory is skipped. The printed next step is `oked init` (and `oked-codex init` when Codex history is present). There is no `@oked/cli` package.
+- Not on npm yet. The first publish is by hand. See [RELEASING.md](./RELEASING.md).
+
 ### Claude Code plugin
 
 - OKed can be installed as a Claude Code plugin. In Claude Code: `/plugin marketplace add oked-ai/oked-sdk`, then `/plugin install oked@oked`. The marketplace name is `oked` and the plugin name is `oked`. No global npm install is required.

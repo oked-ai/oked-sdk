@@ -67,6 +67,12 @@ The Claude Code plugin is the same gate without a global install. In Claude Code
 
 On Claude Code, test runners and scripts (`cargo test`, `npm test`, `npm run`, `pytest`, `go test`, `make`, `./script.sh`, `npx`) ask for approval unless the Bash sandbox is containing child processes. The hook cannot see commands those runners start. To allow them with no prompt, set `sandbox.enabled` to true and `allowUnsandboxedCommands` to false in `~/.claude/settings.json` or `.claude/settings.local.json`. `oked init` prints this when it is not already set. Other hosts do not read those files, so the same commands stay allowed there.
 
+To see what those default rules would have paused in history that is already on this machine, run `npx @oked/scan`. It reads Claude Code transcripts and Codex CLI sessions locally. It does not use the network and it does not send telemetry. The last line is the install command for the history it found (`oked init`, and `oked-codex init` when Codex sessions are present).
+
+```bash
+npx @oked/scan
+```
+
 From Node.js, call `approve` before the action. A timeout is a denial. The client waits 630 seconds (`DEFAULT_APPROVAL_TIMEOUT_MS`) so the backend's 10 minute timeout is the one that comes back.
 
 ```ts
@@ -121,6 +127,7 @@ All `@oked/*` packages share one version and are published together. Node.js 18 
 | [`oked-langgraph`](./python/oked-langgraph) | Python LangGraph and LangChain. Not on PyPI yet. Until then, `pip install "oked @ git+https://github.com/oked-ai/oked-sdk#subdirectory=python/oked" "oked-langgraph @ git+https://github.com/oked-ai/oked-sdk#subdirectory=python/oked-langgraph"`. Once it is on PyPI, `pip install oked-langgraph`. Then `with_oked_approvals(tools)` for `ToolNode` or `create_react_agent`. Python 3.10 or newer. |
 | [`@oked/receipt-core`](./packages/receipt-core) | Receipt format: canonical JSON, digests, Ed25519 signing and verification, chain checks. |
 | [`@oked/verify`](./packages/verify) | `npx @oked/verify <export.zip>`: check an export offline. |
+| [`@oked/scan`](./packages/scan) | `npx @oked/scan`: local audit of Claude Code and Codex command history. No network calls. |
 
 ## Receipts
 
