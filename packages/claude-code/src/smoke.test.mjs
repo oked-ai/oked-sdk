@@ -12,6 +12,7 @@ import {
   HOOK_TIMEOUT_SECONDS,
   ensureHookTimeout,
   ensureMcpMatcher,
+  ensureShellMatcher,
   hasOkedCommandHook,
   upgradeOkedHooks,
   upgradeSettingsFile,
@@ -74,6 +75,17 @@ let passed = 0;
 {
   assert.equal(ensureMcpMatcher("Bash|Write"), "Bash|Write|mcp__.*", "should append the MCP matcher");
   assert.equal(ensureMcpMatcher("Bash|mcp__.*"), "Bash|mcp__.*", "should not double-append");
+  assert.equal(
+    ensureShellMatcher("Bash|Write|Edit|Agent"),
+    "Bash|PowerShell|Write|Edit|Agent|Task|mcp__.*",
+    "should add PowerShell, Task, and the MCP matcher",
+  );
+  assert.equal(
+    ensureShellMatcher("Bash|PowerShell|Write|Edit|Agent|Task|mcp__.*"),
+    "Bash|PowerShell|Write|Edit|Agent|Task|mcp__.*",
+    "should not double-append",
+  );
+  assert.equal(ensureShellMatcher("*"), "*", "a star matcher already covers every tool");
   passed++;
 }
 
@@ -97,7 +109,7 @@ let passed = 0;
     assert.equal(upgradeSettingsFile(path), "updated");
     const after = JSON.parse(readFileSync(path, "utf8"));
     assert.equal(after.hooks.PreToolUse[0].hooks[0].timeout, HOOK_TIMEOUT_SECONDS);
-    assert.equal(after.hooks.PreToolUse[0].matcher, "Bash|Write|Edit|Agent|mcp__.*");
+    assert.equal(after.hooks.PreToolUse[0].matcher, "Bash|PowerShell|Write|Edit|Agent|Task|mcp__.*");
     assert.deepEqual(after.hooks.PreToolUse[1], before.hooks.PreToolUse[1], "a foreign hook stays");
     assert.deepEqual(after.hooks.Stop, before.hooks.Stop, "other events stay");
     assert.equal(after.model, "opus", "other settings stay");
