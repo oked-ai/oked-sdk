@@ -1,6 +1,6 @@
 // ClawHub publish metadata. No test runner. Fails if the package would not
 // validate, if the public listing would label the internal service override,
-// or if the release workflow could fail an npm publish when the token is absent.
+// or if the release workflow publishes ClawHub with a manual token.
 
 import { execFileSync } from "node:child_process";
 import { strict as assert } from "node:assert";
@@ -117,17 +117,22 @@ const changelog = readFileSync(join(repoRoot, "CHANGELOG.md"), "utf8");
 const unreleased = changelog.split("## 0.6.22")[0];
 assert.ok(unreleased.includes("openclaw plugins install @oked/openclaw"));
 assert.ok(unreleased.includes("CLAWHUB_TOKEN"));
+const unreleasedOnly = changelog.split("## Unreleased")[1].split("## 0.6.25")[0];
+assert.ok(unreleasedOnly.includes("workflow_dispatch"));
+assert.ok(unreleasedOnly.includes("clawhub_only"));
+assert.ok(unreleasedOnly.includes("id-token: write"));
+assert.ok(unreleasedOnly.includes("tag=v0.6.25"));
 
 const workflow = readFileSync(join(repoRoot, ".github/workflows/publish.yml"), "utf8");
-assert.ok(
-  workflow.includes(
-    "CLAWHUB_TOKEN is not set. Skipping ClawHub publish for @oked/openclaw.",
-  ),
-);
-assert.ok(workflow.includes("matrix.package == 'openclaw'"));
+assert.ok(workflow.includes("publish-clawhub:"));
+assert.ok(workflow.includes("id-token: write"));
+assert.ok(workflow.includes("clawhub_only"));
+assert.ok(workflow.includes("is already on npm. Skipping npm publish."));
 assert.ok(workflow.includes("--family code-plugin"));
 assert.ok(workflow.includes("--owner oked"));
 assert.ok(workflow.includes("clawhub@0.24.1"));
+assert.equal(workflow.includes("secrets.CLAWHUB_TOKEN"), false);
+assert.equal(workflow.includes("--manual-override-reason"), false);
 assert.equal(workflow.includes("clawhub login"), false);
 
 console.log("OK ClawHub metadata");

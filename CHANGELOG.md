@@ -6,6 +6,10 @@ Decisions are made in Telegram and on the [web dashboard](https://oked.ai/dashbo
 
 ## Unreleased
 
+### @oked/openclaw
+
+- ClawHub publish from GitHub Actions uses trusted publishing. The `publish-clawhub` job in `publish.yml` has `id-token: write`. `clawhub@0.24.1` requests a GitHub OIDC token with audience `clawhub` and does not send `CLAWHUB_TOKEN`. ClawHub accepts that token only for `workflow_dispatch`, and only when the workflow file is `publish.yml`. A `v*` tag still publishes npm. After the tag is on `main`, publish this package to ClawHub with `gh workflow run publish.yml --ref main -f tag=vX.Y.Z -f clawhub_only=true`. `clawhub_only` skips npm. An npm version that is already on the registry logs that it is already on npm and skips `npm publish`, so a rerun does not fail the npm jobs. v0.6.25 is already on npm. Its ClawHub publish is that dispatch with `tag=v0.6.25`.
+
 ## 0.6.25 - 2026-10-31
 
 ### Claude Code plugin

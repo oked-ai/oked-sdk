@@ -5,9 +5,20 @@ on:
     tags:
       - "v*"
   workflow_dispatch:
+    inputs:
+      tag:
+        description: Git tag to publish, for example v0.6.25
+        required: true
+        type: string
+      clawhub_only:
+        description: Publish @oked/openclaw to ClawHub only. Skip npm.
+        required: false
+        type: boolean
+        default: false
 
 jobs:
   publish:
+    if: github.event_name != 'workflow_dispatch' || inputs.clawhub_only == false
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -38,6 +49,8 @@ jobs:
           - langgraph
     steps:
       - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
       # Do NOT set registry-url here: it makes setup-node write an .npmrc with
       # `_authToken=${NODE_AUTH_TOKEN}` + always-auth, so npm attempts (empty)
       # token auth instead of OIDC trusted publishing. With no token .npmrc,
@@ -45,22 +58,28 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: 22
-      # Fail fast (before npm ci/build) if a tag push doesn't match the version
+      # Fail fast (before npm ci/build) if the tag doesn't match the version
       # in package.json, and decide which dist-tag this publish lands on:
       #   stable X.Y.Z          -> latest
       #   prerelease X.Y.Z-...  -> next  (so a beta never becomes `latest`)
-      # On workflow_dispatch (no git tag) the match check is skipped; it's the
-      # break-glass path.
+      # workflow_dispatch checks out inputs.tag and requires the same match.
       - name: Verify tag and resolve dist-tag
         id: ver
         run: |
           PKG_VERSION=$(node -p "require('./packages/${{ matrix.package }}/package.json').version")
           if [[ "$PKG_VERSION" == *-* ]]; then DIST_TAG=next; else DIST_TAG=latest; fi
           echo "dist_tag=$DIST_TAG" >> "$GITHUB_OUTPUT"
-          if [[ "${{ github.ref_type }}" == "tag" ]]; then
-            TAG_VERSION="${GITHUB_REF_NAME#v}"
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            TAG_NAME="${{ inputs.tag }}"
+          elif [[ "${{ github.ref_type }}" == "tag" ]]; then
+            TAG_NAME="${GITHUB_REF_NAME}"
+          else
+            TAG_NAME=""
+          fi
+          if [[ -n "$TAG_NAME" ]]; then
+            TAG_VERSION="${TAG_NAME#v}"
             if [[ "$TAG_VERSION" != "$PKG_VERSION" ]]; then
-              echo "::error::git tag $GITHUB_REF_NAME ($TAG_VERSION) != ${{ matrix.package }} package.json version $PKG_VERSION"
+              echo "::error::git tag $TAG_NAME ($TAG_VERSION) != ${{ matrix.package }} package.json version $PKG_VERSION"
               exit 1
             fi
           fi
@@ -84,41 +103,78 @@ jobs:
       # and this repo is private. dist is already built above,
       # so --ignore-scripts skips the redundant prepublishOnly rebuild (whose
       # prebuild uses --workspace=@oked/sdk and only works from the repo root).
-      - run: cd packages/${{ matrix.package }} && npm publish --access public --ignore-scripts --tag ${{ steps.ver.outputs.dist_tag }}
-      # ClawHub is a separate registry from npm. Only @oked/openclaw is a
-      # plugin. A missing CLAWHUB_TOKEN skips this step so an npm release
-      # still succeeds. See RELEASING.md for the one-time setup.
-      - name: Publish @oked/openclaw to ClawHub
-        if: matrix.package == 'openclaw'
-        env:
-          CLAWHUB_TOKEN: ${{ secrets.CLAWHUB_TOKEN }}
+      # A version already on npm is skipped so a rerun, or a ClawHub dispatch
+      # that also runs this job, does not fail with EPUBLISHCONFLICT.
+      - name: Publish to npm
         run: |
           set -euo pipefail
-          if [[ -z "${CLAWHUB_TOKEN//[[:space:]]/}" ]]; then
-            echo "CLAWHUB_TOKEN is not set. Skipping ClawHub publish for @oked/openclaw. The npm publish above is unchanged. See RELEASING.md for the one-time ClawHub setup."
+          PKG_NAME=$(node -p "require('./packages/${{ matrix.package }}/package.json').name")
+          PKG_VERSION=$(node -p "require('./packages/${{ matrix.package }}/package.json').version")
+          if npm view "${PKG_NAME}@${PKG_VERSION}" version >/dev/null 2>&1; then
+            echo "${PKG_NAME}@${PKG_VERSION} is already on npm. Skipping npm publish."
             exit 0
           fi
+          cd "packages/${{ matrix.package }}"
+          npm publish --access public --ignore-scripts --tag "${{ steps.ver.outputs.dist_tag }}"
+
+  # ClawHub accepts GitHub OIDC trusted publishing only when event_name is
+  # workflow_dispatch (audience clawhub, workflow filename publish.yml).
+  # A tag push is event_name push, so this job does not run on the tag.
+  # id-token: write is what makes ACTIONS_ID_TOKEN_REQUEST_URL available.
+  # Do not set CLAWHUB_TOKEN here. clawhub 0.24.1 treats a saved token as a
+  # manual publish, which ClawHub rejects once a trusted publisher exists.
+  publish-clawhub:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.tag }}
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+      - name: Verify tag matches @oked/openclaw
+        run: |
+          set -euo pipefail
+          TAG_NAME="${{ inputs.tag }}"
+          TAG_VERSION="${TAG_NAME#v}"
+          PKG_VERSION=$(node -p "require('./packages/openclaw/package.json').version")
+          if [[ "$TAG_NAME" != v* || "$TAG_VERSION" != "$PKG_VERSION" ]]; then
+            echo "::error::workflow input tag $TAG_NAME does not match @oked/openclaw version $PKG_VERSION"
+            exit 1
+          fi
+          echo "publishing @oked/openclaw@$PKG_VERSION to ClawHub from $TAG_NAME"
+      - run: npm ci
+      - run: npm run build
+      - name: Publish @oked/openclaw to ClawHub
+        env:
+          CLAWHUB_TOKEN: ""
+          CLAWHUB_CONFIG_PATH: ""
+        run: |
+          set -euo pipefail
+          if [[ -z "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" || -z "${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-}" ]]; then
+            echo "::error::GitHub OIDC is not available. This job needs permissions id-token: write."
+            exit 1
+          fi
           npm install -g clawhub@0.24.1
-          python3 - <<'PY'
-          import json
-          import os
-          from pathlib import Path
-          path = Path(os.environ["RUNNER_TEMP"]) / "clawhub-config.json"
-          path.write_text(
-              json.dumps(
-                  {
-                      "registry": "https://clawhub.ai",
-                      "token": os.environ["CLAWHUB_TOKEN"].strip(),
-                  },
-                  indent=2,
-              )
-              + "\n",
-              encoding="utf-8",
-          )
-          os.chmod(path, 0o600)
-          PY
-          export CLAWHUB_CONFIG_PATH="$RUNNER_TEMP/clawhub-config.json"
+          set +e
           clawhub package publish packages/openclaw \
             --family code-plugin \
             --owner oked \
-            --no-input
+            --source-repo oked-ai/oked-sdk \
+            --source-commit "$(git rev-parse HEAD)" \
+            --source-ref "${{ inputs.tag }}" \
+            --no-input \
+            --json >"$RUNNER_TEMP/clawhub-publish.json" 2>&1
+          status="$?"
+          set -e
+          cat "$RUNNER_TEMP/clawhub-publish.json"
+          if [[ "$status" -ne 0 ]]; then
+            if grep -q "Not logged in" "$RUNNER_TEMP/clawhub-publish.json"; then
+              echo "::error::ClawHub rejected trusted publishing and the CLI fell back to a manual token. This step leaves CLAWHUB_TOKEN empty. Trusted publishing requires workflow_dispatch, workflow publish.yml, and audience clawhub."
+            fi
+            exit "$status"
+          fi
