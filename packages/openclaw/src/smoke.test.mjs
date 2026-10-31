@@ -8,7 +8,7 @@
 // approval decisions.
 
 import { strict as assert } from "node:assert";
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -316,6 +316,141 @@ const UNREACHABLE = "http://127.0.0.1:1";
     console.log("OK plugin: OKED_REQUIRE_RECEIPT=0 allows an approval that has no receipt");
   } finally {
     delete process.env.OKED_REQUIRE_RECEIPT;
+    server.close();
+  }
+}
+
+// Script excerpt: what the approval request contains, redaction, and the opt-out.
+{
+  const { createServer } = await import("node:http");
+  const dir = mkdtempSync(join(tmpdir(), "oked-excerpt-"));
+  const script = join(dir, "deploy.py");
+  const shellScript = join(dir, "foo.sh");
+  writeFileSync(
+    script,
+    [
+      "print('hello')",
+      "API_KEY=supersecretvalue",
+      'password = "hunter2hunter2"',
+      "token = 'abcd1234token'",
+      "aws = 'AKIAIOSFODNN7EXAMPLE'",
+      "Authorization: Bearer abcdefghijklmnopqrstuvwxyz",
+      "print('still here')",
+    ].join("\n"),
+  );
+  writeFileSync(shellScript, "SECRET=shell-only-secret\n");
+  const command = `python ${script} && git push --force`;
+  let captured = null;
+  const server = createServer(async (req, res) => {
+    const chunks = [];
+    for await (const chunk of req) chunks.push(chunk);
+    captured = {
+      body: JSON.parse(Buffer.concat(chunks).toString("utf8")),
+      authorization: req.headers.authorization,
+    };
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ approval_id: "ap_script", decision: "denied", status: "denied" }));
+  });
+  await new Promise((r) => server.listen(0, "127.0.0.1", r));
+  const port = server.address().port;
+  const prevSend = process.env.OKED_SEND_SCRIPT_CONTENT;
+  const run = async (pluginConfig, event, ctx) => {
+    captured = null;
+    const { api, handlers } = makeStubApi({
+      apiKey: "ok_test",
+      backendUrl: `http://127.0.0.1:${port}`,
+      timeoutMs: 3000,
+      ...pluginConfig,
+    });
+    plugin.register(api);
+    await handlers.get("before_tool_call")(event, ctx);
+    assert.ok(captured, "approval request was sent");
+    return captured;
+  };
+  try {
+    delete process.env.OKED_SEND_SCRIPT_CONTENT;
+    const sessionId = "sess-script";
+    const sent = await run(
+      {},
+      { toolName: "bash", params: { command } },
+      { toolName: "bash", sessionId },
+    );
+    assert.equal(sent.authorization, "Bearer ok_test");
+    const body = sent.body;
+    assert.deepEqual(Object.keys(body).sort(), ["action", "client", "description", "metadata", "nonce", "tier"]);
+    assert.equal(body.action, "bash");
+    assert.equal(typeof body.description, "string");
+    assert.ok(body.description.length > 0);
+    assert.equal(body.tier, "high_stakes");
+    assert.equal(typeof body.nonce, "string");
+    assert.match(body.client, /^@oked\/openclaw@/);
+    assert.equal(body.fields, undefined);
+    assert.deepEqual(Object.keys(body.metadata).sort(), ["cwd", "session_id", "source", "tool_input"]);
+    assert.equal(body.metadata.source, "openclaw");
+    assert.equal(body.metadata.cwd, process.cwd());
+    assert.equal(body.metadata.session_id, sessionId);
+    assert.equal(body.metadata.tool_input.command, command);
+    const excerpt = body.metadata.tool_input._script_body;
+    assert.ok(excerpt.includes("print('hello')"));
+    assert.ok(excerpt.includes("print('still here')"));
+    assert.ok(excerpt.includes("[REDACTED]"));
+    for (const secret of ["supersecretvalue", "hunter2hunter2", "abcd1234token", "AKIAIOSFODNN7EXAMPLE", "abcdefghijklmnopqrstuvwxyz"]) {
+      assert.equal(excerpt.includes(secret), false, `excerpt leaked ${secret}`);
+    }
+    console.log("OK script excerpt: redacted body is sent with the approval fields");
+
+    process.env.OKED_SEND_SCRIPT_CONTENT = "0";
+    const optedOut = await run(
+      {},
+      { toolName: "bash", params: { command } },
+      { toolName: "bash", sessionId },
+    );
+    assert.equal(optedOut.body.metadata.tool_input._script_body, undefined);
+    assert.equal(optedOut.body.metadata.tool_input.command, command);
+    console.log("OK script excerpt: OKED_SEND_SCRIPT_CONTENT=0 omits _script_body");
+
+    process.env.OKED_SEND_SCRIPT_CONTENT = "1";
+    const configOff = await run(
+      { sendScriptContent: false },
+      { toolName: "bash", params: { command } },
+      { toolName: "bash", sessionId },
+    );
+    assert.equal(configOff.body.metadata.tool_input._script_body, undefined);
+    console.log("OK script excerpt: sendScriptContent false wins over env 1");
+
+    process.env.OKED_SEND_SCRIPT_CONTENT = "0";
+    const configOn = await run(
+      { sendScriptContent: true },
+      { toolName: "bash", params: { command } },
+      { toolName: "bash", sessionId },
+    );
+    assert.ok(configOn.body.metadata.tool_input._script_body.includes("print('hello')"));
+    assert.equal(configOn.body.metadata.tool_input._script_body.includes("supersecretvalue"), false);
+    console.log("OK script excerpt: sendScriptContent true wins over env 0");
+
+    delete process.env.OKED_SEND_SCRIPT_CONTENT;
+    const shellOnly = await run(
+      {},
+      { toolName: "bash", params: { command: `bash ${shellScript} && git push --force` } },
+      { toolName: "bash", sessionKey: "agent:main:main" },
+    );
+    assert.equal(shellOnly.body.metadata.tool_input._script_body, undefined);
+    assert.equal(JSON.stringify(shellOnly.body).includes("shell-only-secret"), false);
+    assert.equal(shellOnly.body.metadata.session_id, "agent:main:main");
+    console.log("OK script excerpt: bash foo.sh does not attach the file");
+
+    const noSession = await run(
+      {},
+      { toolName: "bash", params: { command: "git push --force" } },
+      { toolName: "bash" },
+    );
+    assert.equal(noSession.body.metadata.session_id, undefined);
+    assert.equal(noSession.body.metadata.tool_input._script_body, undefined);
+    assert.deepEqual(Object.keys(noSession.body.metadata).sort(), ["cwd", "source", "tool_input"]);
+    console.log("OK script excerpt: session_id omitted when the host sends neither id");
+  } finally {
+    if (prevSend === undefined) delete process.env.OKED_SEND_SCRIPT_CONTENT;
+    else process.env.OKED_SEND_SCRIPT_CONTENT = prevSend;
     server.close();
   }
 }

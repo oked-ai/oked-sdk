@@ -16,7 +16,8 @@
  *   "apiKey": "ok_...",                  // OKed API key (or OKED_API_KEY env)
  *   "alwaysApprove": ["custom_tool"],    // additional names to require approval for
  *   "alwaysAllow":   ["safe_tool"],      // names to never gate
- *   "minTier": "review"                  // minimum tier to require approval (default: "review")
+ *   "minTier": "review",                 // minimum tier to require approval (default: "review")
+ *   "sendScriptContent": true            // false omits local script excerpts (or OKED_SEND_SCRIPT_CONTENT=0)
  * }
  */
 
@@ -35,29 +36,7 @@ import {
   type RiskTier,
 } from "@oked/sdk";
 import { classifyOpenClawTool, type ClassifyOptions } from "./classify-openclaw.js";
-
-const MAX_SCRIPT_READ = 4096;
-
-function tryReadScriptFile(command: string): string | undefined {
-  // Match: python3 script.py, node script.js, ruby script.rb, etc.
-  // Skip -c/-e flags (handled by findSqlInCommand inline path).
-  const m = command.trim().match(
-    /\b(?:python\d?(?:\.\d+)?|node|ruby|perl|deno\s+run|bun\s+run)\s+(?:-[^\s]+\s+)*(['"]?)([^\s'"]+\.(?:py|js|mjs|ts|rb|pl))\1/,
-  );
-  if (!m) return undefined;
-  let target = m[2];
-  if (target.startsWith("~/")) target = path.join(os.homedir(), target.slice(2));
-  else if (!path.isAbsolute(target)) target = path.resolve(target);
-  try {
-    const fd = fs.openSync(target, "r");
-    const buf = Buffer.alloc(MAX_SCRIPT_READ);
-    const bytesRead = fs.readSync(fd, buf, 0, MAX_SCRIPT_READ, 0);
-    fs.closeSync(fd);
-    return buf.toString("utf8", 0, bytesRead);
-  } catch {
-    return undefined;
-  }
-}
+import { redactScriptExcerpt, resolveSendScriptContent, tryReadScriptFile } from "./script-excerpt.js";
 
 function tryStatRmTarget(command: string): number | undefined {
   const m = command.trim().match(/\b(?:rm|trash|trash-put|rmdir)\s+(?:-[^\s]+\s+)*(['"]?)([^\s'"]+)\1/);
@@ -85,6 +64,12 @@ interface OkedPluginConfig extends ClassifyOptions {
    * single outage does not mass-abort the agent. high_stakes always denies.
    */
   strictFailClosed?: boolean;
+  /**
+   * When false, do not attach the local script excerpt (`_script_body`).
+   * Default true. Env `OKED_SEND_SCRIPT_CONTENT=0` is the same opt-out when
+   * this key is absent. A boolean here wins over the env var.
+   */
+  sendScriptContent?: boolean;
 }
 
 interface BeforeToolCallEvent {
@@ -166,11 +151,13 @@ const CLIENT_ID = (() => {
 
 const PLUGIN_ID = "oked";
 
+const LISTING_DESCRIPTION =
+  "Pauses risky OpenClaw actions, like rm -rf, force-push, destructive SQL and prod deploys, until you approve them in Telegram or on the OKed web dashboard. Everything else just runs. Every decision gets a signed receipt.";
+
 const plugin = {
   id: PLUGIN_ID,
   name: "OKed Approvals",
-  description:
-    "Freeze the agent before sensitive tool calls and ask for human approval via Telegram or the OKed dashboard.",
+  description: LISTING_DESCRIPTION,
 
   register(api: OpenClawPluginApi): void {
     const cfg = api.pluginConfig ?? {};
@@ -269,8 +256,15 @@ const plugin = {
         if (typeof cmd === "string") {
           const sizeBytes = tryStatRmTarget(cmd);
           if (sizeBytes !== undefined) enrichedParams = { ...params, _file_size_bytes: sizeBytes };
-          const scriptBody = tryReadScriptFile(cmd);
-          if (scriptBody !== undefined) enrichedParams = { ...enrichedParams, _script_body: scriptBody };
+          // First 4,096 bytes of a recognized local script, after redaction,
+          // so the approver can see what will run. Opt out with
+          // sendScriptContent: false or OKED_SEND_SCRIPT_CONTENT=0.
+          if (resolveSendScriptContent(cfg.sendScriptContent)) {
+            const scriptBody = tryReadScriptFile(cmd);
+            if (scriptBody !== undefined) {
+              enrichedParams = { ...enrichedParams, _script_body: redactScriptExcerpt(scriptBody) };
+            }
+          }
         }
       }
 

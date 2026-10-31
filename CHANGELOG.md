@@ -16,6 +16,9 @@ Decisions are made in Telegram and on the [web dashboard](https://oked.ai/dashbo
 
 ### @oked/openclaw
 
+- Requires OpenClaw 2026.5.4 or newer. Hosts before that ignored a denial and ran the tool. The floor is `>=2026.5.4` on `peerDependencies.openclaw`, `engines.openclaw`, `openclaw.compat.pluginApi`, and `openclaw.install.minHostVersion`. `openclaw.compat.minGatewayVersion` and `openclaw.build.openclawVersion` are `2026.5.4`.
+- A shell command that runs a local Python, Node, Ruby, Perl, Deno, or Bun script can include the first 4,096 bytes of that file on the approval request, so you can see what will run. Assignments named like a key, token, secret, or password, AWS access key ids, bearer tokens, and PEM private keys are replaced with `[REDACTED]` first. Set `sendScriptContent` to `false`, or `OKED_SEND_SCRIPT_CONTENT=0`, to omit the excerpt. The default is still to send it. `OKED_STRICT_FAIL_CLOSED=1` is the recommended setting so sensitive actions stay blocked when OKed cannot be reached.
+- The npm description and the plugin manifest description now say what pauses, where you approve, and that everything else runs.
 - Install from npm with `openclaw plugins install npm:@oked/openclaw`. Once the package is listed on ClawHub, `openclaw plugins install @oked/openclaw` installs it from there. Pairing still uses `@oked/openclaw-cli` (`npm install -g @oked/openclaw-cli`, then `oked-openclaw init`).
 - A `v*` tag publishes this package to ClawHub when the `CLAWHUB_TOKEN` secret is set. If the secret is missing, that step logs a skip line and the npm publish still succeeds. The one-time setup (`clawhub login`, the `oked` publisher handle, the first manual publish, the trusted publisher, and `CLAWHUB_TOKEN`) is in [RELEASING.md](./RELEASING.md).
 - The catalog category is `security`. The package ships `assets/icon.png` for the ClawHub listing.
