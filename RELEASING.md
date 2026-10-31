@@ -81,9 +81,19 @@ npx -y @oked/claude-code@X.Y.Z --help
 
 ## ClawHub (`@oked/openclaw`)
 
-`openclaw plugins install @oked/openclaw` installs from ClawHub, OpenClaw's plugin registry. An npm publish does not put the package there. `.github/workflows/publish.yml` publishes `@oked/openclaw` to ClawHub after that package's npm publish, on the same `vX.Y.Z` tag and on `workflow_dispatch`. The step runs only for the `openclaw` matrix entry. It uses the `CLAWHUB_TOKEN` repository secret. If that secret is missing or blank, the step logs `CLAWHUB_TOKEN is not set. Skipping ClawHub publish for @oked/openclaw.` and exits 0, so the npm publish is not failed. Do not publish from a pull request.
+`openclaw plugins install @oked/openclaw` installs from ClawHub, OpenClaw's plugin registry. An npm publish does not put the package there. Do not publish from a pull request.
 
-The workflow installs `clawhub@0.24.1`. The upload is accepted before ClawHub's security checks finish. The package stays out of `openclaw plugins install` until those checks pass. A rejected upload fails the openclaw job after npm has already published that package. The other packages in the matrix are separate jobs.
+A `vX.Y.Z` tag runs the npm jobs in `.github/workflows/publish.yml`. It does not publish to ClawHub. ClawHub trusted publishing accepts a GitHub OIDC token only when the workflow event is `workflow_dispatch` (a tag push is `push`, and ClawHub rejects that). `clawhub@0.24.1` requests that token itself, audience `clawhub`, when `ACTIONS_ID_TOKEN_REQUEST_URL` is set. GitHub sets that variable only if the job has `permissions: id-token: write`. The `publish-clawhub` job has that permission. It does not read `CLAWHUB_TOKEN`. A saved token makes this CLI fall back to a manual publish, and ClawHub then requires `--manual-override-reason`.
+
+After the tag is on `main`, publish ClawHub from the workflow on `main` (the trusted publisher workflow filename is `publish.yml`):
+
+```bash
+gh workflow run publish.yml --ref main -f tag=vX.Y.Z -f clawhub_only=true
+```
+
+`clawhub_only` skips the npm jobs. `tag` is checked out and must match `packages/openclaw/package.json`. For 0.6.25, which is already on npm, use `tag=v0.6.25`. If `clawhub_only` is false, an npm job whose version is already on npm logs `is already on npm. Skipping npm publish.` and exits 0.
+
+The workflow installs `clawhub@0.24.1`. The upload is accepted before ClawHub's security checks finish. The package stays out of `openclaw plugins install` until those checks pass. A rejected upload fails the `publish-clawhub` job only. The npm jobs are separate.
 
 ### One-time setup
 
@@ -104,11 +114,16 @@ clawhub package trusted-publisher set @oked/openclaw \
 
 `clawhub login` is device login. Approve it in the browser. If `clawhub whoami` already prints the handle `oked`, skip `publisher create`. Otherwise `clawhub publisher create` claims the `oked` handle. If that handle is already taken, do not publish under a different owner. The package scope would not match. Open an Org / Namespace Claim with public proof, and keep tokens out of the issue. Questions: [contact@oked.ai](mailto:contact@oked.ai).
 
-Create an API token in ClawHub (Settings, API tokens). Add it as the Actions secret `CLAWHUB_TOKEN` on `oked-ai/oked-sdk`. `clawhub token` prints the token stored by `clawhub login` if you want to reuse that one. Do not commit it, and do not paste it into a pull request.
+The first publish above is the manual one that creates the package row. It does not need `--manual-override-reason`, because the trusted publisher is not set yet. Set the trusted publisher after that publish succeeds. Later publishes from a maintainer machine, while the trusted publisher exists, need the reason flag:
 
-Tag-push publishes still need `CLAWHUB_TOKEN`. Trusted publisher config is what a later secretless `workflow_dispatch` can use. This workflow sends the token whenever the secret is present, including the first publishes and any break-glass run.
+```bash
+clawhub package publish packages/openclaw \
+  --family code-plugin \
+  --owner oked \
+  --manual-override-reason "release from a maintainer machine"
+```
 
-A tag pushed before this setup still publishes to npm. The ClawHub step skips until the secret exists.
+`CLAWHUB_TOKEN` is not used by `publish.yml`. A tag pushed before the trusted publisher exists still publishes to npm. ClawHub waits for the `workflow_dispatch` above, after the trusted publisher is saved.
 
 ## Python packages on PyPI
 
