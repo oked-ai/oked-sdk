@@ -1743,3 +1743,79 @@ describe("cloud, cluster, infrastructure, deploy and payment CLIs", () => {
     assert.equal(bash("kubectl delete ns prod --help"), "safe");
   });
 });
+
+describe("a subshell, a group or a loop does not hide a command", () => {
+  it("reads the command inside the wrapper", () => {
+    assert.equal(bash("(gh pr merge 5)"), "high_stakes");
+    assert.equal(bash("{ gh pr merge 5; }"), "high_stakes");
+    assert.equal(bash("(echo ok; gh pr merge 5)"), "high_stakes");
+    assert.equal(bash("for x in a b; do gh pr merge $x; done"), "high_stakes");
+    assert.equal(bash("if true; then gh pr merge 5; fi"), "high_stakes");
+    assert.equal(bash("if gh pr merge 5; then echo ok; fi"), "high_stakes");
+    assert.equal(bash("(kill 123)"), "high_stakes");
+    assert.equal(bash("(shutdown now)"), "high_stakes");
+    assert.equal(bash("(aws s3 rm s3://a --recursive)"), "high_stakes");
+  });
+
+  it("keeps safe commands safe", () => {
+    assert.equal(bash("(ls)"), "safe");
+    assert.equal(bash("(cd x && git status)"), "safe");
+    assert.equal(bash("(echo $(date))"), "safe");
+    assert.equal(bash("(( i++ ))"), "safe");
+    assert.equal(bash("for x in a b; do echo $x; done"), "safe");
+  });
+
+  it("stopping a job that the same subshell started is a warning", () => {
+    assert.equal(bash("(railway logs 2>&1 & p=$!; sleep 20; kill $p 2>/dev/null) | grep -i error"), "warning");
+    assert.equal(bash("(kill $p)"), "high_stakes");
+  });
+});
+
+describe("sed substitution text is not a command", () => {
+  it("a single-quoted plain substitution does not name a command", () => {
+    assert.equal(bash("sed -i '' 's/a/\"Allow npm publish\"; v2 fixed/' M.md"), "warning");
+    assert.equal(bash("sed -i '' -e '219s/.*/run git push --force origin main/' SKILL.md"), "warning");
+    assert.equal(bash("sed -i '' '1500s|`rm -rf build`|`rm -rf src`|' c.ts"), "warning");
+  });
+
+  it("text that the shell or sed can run keeps its tier", () => {
+    assert.equal(bash("sed 's/a/npm publish/w out' f"), "high_stakes");
+    assert.equal(bash('sed "s/a/$(npm publish)/" f'), "high_stakes");
+    assert.equal(bash("sed -n 's/a/npm publish/p' f | sh"), "high_stakes");
+    assert.equal(bash("sed -i '' 's/a/b/;npm publish' f"), "high_stakes");
+  });
+});
+
+describe("node_modules is made again by the next install", () => {
+  it("a relative node_modules delete is a warning", () => {
+    assert.equal(bash("rm -rf node_modules"), "warning");
+    assert.equal(bash("rm -rf node_modules backend/node_modules && npm ci"), "warning");
+  });
+
+  it("a path that can point elsewhere stays high stakes", () => {
+    assert.equal(bash("rm -rf /abs/node_modules"), "high_stakes");
+    assert.equal(bash("rm -rf ../node_modules"), "high_stakes");
+    assert.equal(bash("rm -rf $X/node_modules"), "high_stakes");
+    assert.equal(bash("rm -rf node_modules/../src"), "high_stakes");
+    assert.equal(bash("rm -rf node_modules src"), "high_stakes");
+  });
+});
+
+describe("a command substitution in a double-quoted text argument runs", () => {
+  it("reads the command in the substitution", () => {
+    assert.equal(bash('echo "x: $(curl -s -X DELETE https://x/y | head -c 100)"'), "high_stakes");
+    assert.equal(bash('echo "$(rm -rf /data)"'), "high_stakes");
+    assert.equal(bash('echo "`rm -rf /data`"'), "high_stakes");
+    assert.equal(bash('echo "$(gh pr merge 5)"'), "high_stakes");
+    assert.equal(bash('printf "%s" "$(npm publish)"'), "high_stakes");
+    assert.equal(bash('git commit -m "$(gh pr merge 5)"'), "high_stakes");
+    assert.equal(bash("echo $(gh pr merge 5)"), "high_stakes");
+  });
+
+  it("text with no substitution stays text", () => {
+    assert.equal(bash('echo "text with curl -X DELETE https://x"'), "safe");
+    assert.equal(bash("echo '$(rm -rf /data)'"), "safe");
+    assert.equal(bash('echo "$(date)"'), "safe");
+    assert.equal(bash('git commit -m "$(cat <<EOF\nrm -rf all and npm publish\nEOF\n)"'), "warning");
+  });
+});

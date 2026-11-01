@@ -631,6 +631,18 @@ function summarizeGh(cmd: string, cwd?: string): Rendered | null {
   const name = noun === "release" || noun === "secret" || noun === "variable" || noun === "workflow"
     ? rest.match(/^\s+([^\s-][^\s]*)/)?.[1] : undefined;
   const body = rest.match(/\s(?:-b|--body)[\s=]+(?:'([^']*)'|"((?:[^"\\]|\\.)*)")/);
+  if (noun === "repo" && (verb === "create" || verb === "fork")) {
+    // The repo to make or fork is the first argument. The folder's repo is not
+    // the place of a new repo, and a fork with no argument forks the folder's repo.
+    const named = rest.match(/^\s+(?:https:\/\/github\.com\/)?([\w.-]+(?:\/[\w.-]+)?)(?=\s|$)/)?.[1]?.replace(/\.git$/, "");
+    const subject = named ?? (verb === "fork" ? repo : undefined);
+    const org = rest.match(/\s--org[\s=]+([\w.-]+)/)?.[1];
+    return {
+      title: `${verb === "fork" ? "Fork" : "Create"} repo${subject ? ` ${subject}` : ""}${verb === "fork" && org ? ` to ${org}` : ""}`,
+      annotation: verb === "create" ? rest.match(/\s--(private|public|internal)\b/)?.[1] : undefined,
+      kind: "gh_write",
+    };
+  }
   const obj = `${thing}${ref ? ` ${ref}` : name ? ` ${name}` : ""}`;
   const phrase = verb === "comment" ? `Comment on ${obj}`
     : verb === "ready" ? `Mark ${obj} ready for review`

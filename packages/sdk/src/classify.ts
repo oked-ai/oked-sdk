@@ -1119,7 +1119,8 @@ function isEphemeralOnlyDeletion(command: string, ephemeralVars: Set<string> = n
 }
 
 // Build output folders in the project. The next build makes them again, so
-// deleting them is a reversible local change.
+// deleting them is a reversible local change. node_modules is the same: the
+// next install makes it again.
 const BUILD_OUTPUT_DIRS = new Set(["build", "dist", ".build", "DerivedData", ".next"]);
 
 // rm/trash whose every target is a relative path inside a build output folder
@@ -1129,6 +1130,8 @@ function isBuildOutputPath(target: string): boolean {
   const parts = unquote(target).replace(/\\/g, "/").replace(/^(?:\.\/)+/, "").split("/");
   // An absolute path, a drive letter, or `..` can point outside the build tree.
   if (!parts[0] || parts[0].includes(":") || parts.includes("..")) return false;
+  // A package folder can hold it (`backend/node_modules`), if each segment is a plain name.
+  if (parts.includes("node_modules") && parts.every((p) => /^[\w.@-]+$/.test(p))) return true;
   return BUILD_OUTPUT_DIRS.has(parts[0]);
 }
 
@@ -1603,6 +1606,60 @@ function isLoopbackHttpStage(stage: string): boolean {
   return /(?:^|[\s@])(?:localhost|127(?:\.\d{1,3}){3}|0\.0\.0\.0|\[::1\])(?::\d+)?(?:[/\s'"]|$)/i.test(stage);
 }
 
+/**
+ * Remove what a subshell, a group or a loop or `if` keyword adds around a stage.
+ * The split gives `(gh pr merge 5`, `do gh pr merge 5` and `kill $p)`, and the
+ * rules read a command at the stage start, so the prefix hid the command and a
+ * `)` changed its last word. `((` is arithmetic and stays.
+ */
+function unwrapShellGroup(stage: string): string {
+  let out = stage.replace(/^(?:\((?!\()|\{\s|!\s|(?:if|elif|while|until|then|else|do)\s)\s*/, "");
+  let depth = 0;
+  let quote: string | null = null;
+  for (let i = 0; i < out.length; i++) {
+    const ch = out[i];
+    if (ch === "\\" && quote !== "'") { i++; continue; }
+    if (quote) { if (ch === quote) quote = null; continue; }
+    if (ch === '"' || ch === "'") quote = ch;
+    else if (ch === "(") depth++;
+    else if (ch === ")") depth--;
+  }
+  while (depth < 0 && out.endsWith(")")) {
+    out = out.slice(0, -1).trimEnd();
+    depth++;
+  }
+  return out;
+}
+
+/** The commands in `$(…)` and backticks that the shell runs. Single quotes keep them as text. */
+function commandSubstitutions(stage: string): string[] {
+  const out: string[] = [];
+  let quote: string | null = null;
+  for (let i = 0; i < stage.length; i++) {
+    const ch = stage[i];
+    if (ch === "\\" && quote !== "'") { i++; continue; }
+    if (quote === "'") { if (ch === "'") quote = null; continue; }
+    if (ch === '"') { quote = quote ? null : '"'; continue; }
+    if (ch === "'" && !quote) { quote = "'"; continue; }
+    if (ch === "`") {
+      const end = stage.indexOf("`", i + 1);
+      if (end < 0) break;
+      out.push(stage.slice(i + 1, end));
+      i = end;
+    } else if (ch === "$" && stage[i + 1] === "(" && stage[i + 2] !== "(") {
+      let depth = 1;
+      let j = i + 2;
+      for (; j < stage.length && depth > 0; j++) {
+        if (stage[j] === "(") depth++;
+        else if (stage[j] === ")") depth--;
+      }
+      out.push(stage.slice(i + 2, depth === 0 ? j - 1 : j));
+      i = j - 1;
+    }
+  }
+  return out;
+}
+
 function classifyBashCommand(command: string, ephemeralVars: Set<string> = new Set(), sandboxEnforced?: boolean): RiskTier {
   if (!command) return "safe";
 
@@ -1672,6 +1729,9 @@ function classifyBashCommand(command: string, ephemeralVars: Set<string> = new S
 
   // ---- single stage from here ----
 
+  const unwrapped = unwrapShellGroup(intact);
+  if (unwrapped !== intact) return classifyBashCommand(unwrapped, ephemeralVars, sandboxEnforced);
+
   // SQL severity from the body-INTACT view: an interpreter wrapper (python -c,
   // node -e, heredoc), a DB CLI (psql -c, sqlite3 db "...", mysql -e), or SQL at
   // the top of the command. Folded in as a floor so it survives even when the
@@ -1683,7 +1743,14 @@ function classifyBashCommand(command: string, ephemeralVars: Set<string> = new S
   // Read it from the intact command. A normal POST stays review below.
   if (isInfraVolumeDeleteCurl(intact)) return "high_stakes";
 
-  return maxTier(maxTier(sqlTier, pipesToShell ? "review" : "safe"), classifyStageShellEffects(stripped, ephemeralVars, sandboxEnforced));
+  // The rules read a command at the stage start, so one in a substitution
+  // (`echo "$(gh pr merge 5)"`) is classified on its own.
+  let substitutionTier: RiskTier = "safe";
+  for (const inner of commandSubstitutions(stripped)) {
+    substitutionTier = maxTier(substitutionTier, classifyBashCommand(inner, ephemeralVars, sandboxEnforced));
+  }
+
+  return maxTier(maxTier(maxTier(sqlTier, pipesToShell ? "review" : "safe"), substitutionTier), classifyStageShellEffects(stripped, ephemeralVars, sandboxEnforced));
 }
 
 /**
@@ -2188,6 +2255,14 @@ const SCRIPT_FILE_STEP_RE =
   /^(?:\\\s+)?(?:\w+=(?:"[^"]*"|'[^']*'|\S+)\s+)*(?:node|tsx|bun)\s+(?!-)\S+\.[cm]?[jt]s(?:\s|$)/;
 const LONG_OPTION_QUOTED_VALUE_RE = /(--[\w-]+(?:=|\s+))('[^']*'|"(?:[^"\\]|\\.)*")/g;
 
+// `sed` with a single-quoted plain substitution (`'12s/old/new/g'`): the new
+// text goes into a file, and the shell does not run it. The `e` flag runs a
+// command and the `w` flag writes a file, so an expression with either flag
+// keeps its text. So does a double-quoted one, where `$(…)` runs.
+const SED_STEP_RE = /^(?:\\\s+)?(?:\w+=(?:"[^"]*"|'[^']*'|\S+)\s+)*sed\s/;
+const SED_PLAIN_SUBSTITUTION_RE =
+  /^(?:\d+(?:,\d+)?|\$|\/(?:\\.|[^\\/])*\/)?s([^\w\s\\])(?:\\.|(?!\1)[^\\])*\1(?:\\.|(?!\1)[^\\])*\1[gGiIpmM\d]*$/;
+
 // Commands that run the text piped into them as code.
 const RUNS_PIPED_TEXT_RE =
   /^(?:sudo\s+)?(?:(?:ba|z|k|da)?sh|xargs|eval|source|\.|node|deno|bun|python\d?(?:\.\d+)?|ruby|perl|psql|mysql|mariadb|sqlite3?)\b/;
@@ -2207,11 +2282,19 @@ export function blankTextCommandArgs(command: string): string {
         return step.replace(LONG_OPTION_QUOTED_VALUE_RE, (_m, opt: string, q: string) =>
           opt + q[0] + " ".repeat(Math.max(0, q.length - 2)) + q[0]);
       }
+      if (SED_STEP_RE.test(step)) {
+        if (splitTopLevel(step).slice(1).some((p) => RUNS_PIPED_TEXT_RE.test(p))) return step;
+        return step.replace(/'[^']*'/g, (q) =>
+          SED_PLAIN_SUBSTITUTION_RE.test(q.slice(1, -1)) ? q[0] + " ".repeat(Math.max(0, q.length - 2)) + q[0] : q);
+      }
       if (!TEXT_ARG_COMMAND_RE.test(step)) return step;
       if (splitTopLevel(step).slice(1).some((p) => RUNS_PIPED_TEXT_RE.test(p))) return step;
-      // A quoted redirect target (`>> "$HOME/.ssh/authorized_keys"`) is a path, not text.
+      // A quoted redirect target (`>> "$HOME/.ssh/authorized_keys"`) is a path, not
+      // text. A double-quoted `$(…)` or backtick runs (`echo "$(rm -rf /data)"`).
       return step.replace(/'[^']*'|"(?:[^"\\]|\\.)*"/g, (q, at: number) =>
-        /[<>]\s*$/.test(step.slice(0, at)) ? q : q[0] + " ".repeat(Math.max(0, q.length - 2)) + q[0]);
+        /[<>]\s*$/.test(step.slice(0, at)) || (q[0] === '"' && /\$\(|`/.test(q))
+          ? q
+          : q[0] + " ".repeat(Math.max(0, q.length - 2)) + q[0]);
     })
     .join("\n");
 }

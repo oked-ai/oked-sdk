@@ -3,6 +3,125 @@
 Every change the approval review loop made to a card's tier, text or layout, newest first.
 Built from `changes.jsonl` by `node scripts/approval-review/record.mjs log`. Do not edit by hand.
 
+## 2026-11-01 · tier · `Bash`
+
+**Why:** A risky step in double-quoted text was safe, so no card showed. The classifier blanked the text of echo and git arguments, also when the text had a command substitution that the shell runs. Examples: echo "$(rm -rf /data)" and echo "$(gh pr merge 5)". Now the classifier reads each substitution as a command. Text with no substitution stays text.
+
+| | Before | After |
+|---|---|---|
+| Tier | ⚪ safe (no card) | 🔴 high stakes (Face ID) |
+| Title | Run command | DELETE request to URL |
+| Kind | shell_pipeline | http_delete |
+
+Corpus: `2026-11-01-substitution-in-echo-text`
+
+## 2026-11-01 · tier · `Bash`
+
+**Why:** Risky steps were safe, so no card showed. The rules read a command at the start of a stage, and a parenthesis, a brace, do, then or if hid it. Examples: (gh pr merge 5), for x in a; do gh pr merge 5; done, (kill 123) and (shutdown now). A probe found this while the run read a subshell card. No real card in this window moves, so a person was not asked for these steps.
+
+| | Before | After |
+|---|---|---|
+| Tier | ⚪ safe (no card) | 🔴 high stakes (Face ID) |
+| Title | Merge PR #5 | Merge PR #5 |
+| Kind | git_pr_merge | git_pr_merge |
+
+Corpus: `2026-11-01-loop-hides-merge`
+
+## 2026-11-01 · text · `Bash`
+
+**Why:** The card named the repo of the folder, not the new repo, so a person could not see what the command makes. The card now names the new repo and its visibility. The repo name in this record is an example, because the real repo is private.
+
+| | Before | After |
+|---|---|---|
+| Tier | 🔵 review (asks you) | 🔵 review (asks you) |
+| Title | Create repo in oked-ai/oked-sdk | Create repo acme/tool |
+| Annotation | · | private |
+| Kind | gh_write | gh_write |
+
+Corpus: `2026-11-01-gh-repo-create-target`
+
+## 2026-11-01 · text · `Bash`
+
+**Why:** The card said Fork repo in oked-ai/oked-sdk, but the command forked aml11/oked-app to oked-ai. The card named the repo of the folder, so the place was false. Both cards timed out. The card now names the source and the organization.
+
+| | Before | After |
+|---|---|---|
+| Tier | 🔵 review (asks you) | 🔵 review (asks you) |
+| Title | Fork repo in oked-ai/oked-sdk | Fork repo aml11/oked-app to oked-ai |
+| Kind | gh_write | gh_write |
+
+Seen 2× (✅ 0, ❌ 0) · Corpus: `2026-11-01-gh-repo-fork-target`
+
+## 2026-11-01 · tier · `Bash`
+
+**Why:** Two cards asked for Face ID to edit a local file with sed. The new text had the words npm publish or rm -rf in it. The shell does not run the text in a single-quoted plain substitution. A local file edit is a warning. There was no deny.
+
+| | Before | After |
+|---|---|---|
+| Tier | 🔴 high stakes (Face ID) | 🟡 warning (logged, no card) |
+| Title | Edit file | Create file |
+| Target | classify.test.ts | $S/test.log |
+| Subline | Also: Delete file recursively $E | · |
+| Body | sed -i '' '1500s\|`rm -rf build 2>/dev/null`\|`rm -rf src 2>/dev/null`\|' classify.test.ts | S=/private/tmp/claude-501/-Users-oren-Dev-OKed/dad7889a-c504-420a-a3ec-de12e8a79931/scratchpad; cd $S/fix/packages/sdk/test && sed -i '' '1500s/rm -rf build 2>/' classify.test.ts 2>/dev/null; sed -i… |
+| Kind | file_edit | file_create |
+
+Seen 2× (✅ 2, ❌ 0) · Corpus: `2026-11-01-sed-text-npm-publish`
+
+## 2026-11-01 · tier · `Bash`
+
+**Why:** The card said Force push, but no force push ran. The command used sed to write the words git push --force into a file. A single-quoted plain sed substitution is text, so now it does not name a command. The e and w flags, double quotes, and a pipe into a shell keep the text. The title was false, so this also fixes the text.
+
+| | Before | After |
+|---|---|---|
+| Tier | 🔴 high stakes (Face ID) | 🟡 warning (logged, no card) |
+| Title | Force push | Run command |
+| Target | main → oked-ai/oked-app | · |
+| Body | sed -i '' \<br> -e '45s/all 5 packages/all 7 packages/' \<br> -e '48s/.*/- The 7 lockstep packages: `sdk`, `claude-code`, `claude-agent-sdk`, `openclaw`, `openclaw-cli`, `receipt-core`, `verify`/' \<br> -e '1… | F=~/.claude/skills/oked-release/SKILL.md; cp $F /private/tmp/claude-501/-Users-oren-Dev-OKed--claude-worktrees-ios-app-release-48c54a/b2ad787b-c409-4e8b-9116-1c52bac22cf1/scratchpad/SKILL.m… |
+| Kind | git_force_push | shell_pipeline |
+
+Seen 1× (✅ 1, ❌ 0) · Corpus: `2026-11-01-sed-text-force-push`
+
+## 2026-11-01 · tier · `Bash`
+
+**Why:** One card asked for Face ID for rm -rf node_modules and timed out. The next install makes the folder again, so this is a reversible local change. There was no deny.
+
+| | Before | After |
+|---|---|---|
+| Tier | 🔴 high stakes (Face ID) | 🟡 warning (logged, no card) |
+| Title | Delete file recursively | Delete file recursively |
+| Target | node_modules | node_modules |
+| Body | rm -rf node_modules | · |
+| Kind | file_delete | file_delete |
+
+Seen 1× (✅ 0, ❌ 0) · Corpus: `2026-11-01-rm-node-modules`
+
+## 2026-11-01 · tier · `Bash`
+
+**Why:** One card asked for Face ID to delete node_modules before npm ci. The next install makes the folder again, so this is a reversible local change, the same as a build folder. An absolute path, a variable, or .. can point elsewhere, so those stay high_stakes. There was no deny.
+
+| | Before | After |
+|---|---|---|
+| Tier | 🔴 high stakes (Face ID) | 🟡 warning (logged, no card) |
+| Title | Delete 2 files recursively | Delete 2 files recursively |
+| Target | node_modules<br>backend/node_modules | node_modules<br>backend/node_modules |
+| Body | rm -rf node_modules backend/node_modules | · |
+| Kind | file_delete | file_delete |
+
+Seen 1× (✅ 1, ❌ 0) · Corpus: `2026-11-01-rm-node-modules`
+
+## 2026-11-01 · tier · `Bash`
+
+**Why:** One card asked for Face ID to stop a log reader. The same subshell started the reader, kept its PID with p=$!, and stopped it after 20 seconds. The card timed out, so the agent lost the logs. The classifier did not read the kill because of the closing parenthesis. Nothing outside the command stops, so this is a reversible local change. A kill of a PID from somewhere else stays high_stakes. There was no deny.
+
+| | Before | After |
+|---|---|---|
+| Tier | 🔴 high stakes (Face ID) | 🟡 warning (logged, no card) |
+| Title | Stop processes | Stop processes |
+| Body | kill $p 2>/dev/null) \| grep -iE "apns\|push\|approval\|error\|warn" \| tail -30 | cd ~/Dev/OKed/oked-app && (railway logs --service oked-app 2>&1 & p=$!; sleep 20; kill $p 2>/dev/null) \| grep -iE "apns\|push\|approval\|error\|warn" \| tail -30; grep -nE "logger\.(log\|warn\|error)" backe… |
+| Kind | kill_process | kill_process |
+
+Seen 1× (✅ 0, ❌ 0) · Corpus: `2026-11-01-subshell-own-job-kill`
+
 ## 2026-10-30 · tier · `Bash`
 
 **Why:** Three cards asked for Face ID to stop a mock server. The same command started the server in the background, kept its PID with MP=$!, and then ran kill $MP. This stops only the job that the command started, so it is a reversible local change: warning. A kill of a PID from a different source stays high_stakes. All three cards were approved.
