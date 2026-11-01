@@ -38,6 +38,9 @@ if (plugin.author?.name !== "OKed" || plugin.author?.email !== "contact@oked.ai"
 if (plugin.userConfig?.apiKey?.sensitive !== true) {
   fail("plugin.json userConfig.apiKey must be sensitive");
 }
+if (plugin.privacyPolicyUrl !== "https://oked.ai/privacy") {
+  fail("plugin.json privacyPolicyUrl must be https://oked.ai/privacy");
+}
 
 const hooks = readJson(join(PLUGIN, "hooks", "hooks.json"));
 const entry = hooks.hooks?.PreToolUse?.[0];
@@ -76,6 +79,9 @@ const requiredReadme = [
   ["~/.oked/receipt-keys.json", "plugin README must name the receipt key cache"],
   ["src/main.ts", "plugin README must say the hook is built from src/main.ts"],
   ["scripts/build-claude-plugin.mjs", "plugin README must name the build script"],
+  ["## Privacy", "plugin README must have a Privacy section"],
+  ["https://oked.ai/privacy", "plugin README must link to the OKed privacy policy"],
+  ["Deletion requests go to", "plugin README must say where deletion requests go"],
 ];
 for (const [needle, message] of requiredReadme) {
   if (!readme.includes(needle)) fail(message);

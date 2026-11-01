@@ -18,6 +18,7 @@
     "oked"
   ],
   "documentationUrl": "https://oked.ai/docs",
+  "privacyPolicyUrl": "https://oked.ai/privacy",
   "userConfig": {
     "apiKey": {
       "type": "string",
