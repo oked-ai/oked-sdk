@@ -9,6 +9,7 @@ Decisions are made in Telegram and on the [web dashboard](https://oked.ai/dashbo
 ### Claude Code plugin
 
 - The plugin README lists every request the hook makes and every local file it writes. That includes the approval request to api.oked.ai, the receipt public-key fetch, the rules fetch, and the heartbeat, which runs by default when an API key is present and at most once a day. Local files include `~/.oked/receipts.jsonl` and `~/.oked/hook.log`. The API key comes from the plugin API key field, then from `OKED_API_KEY` when that variable is set, then from the key `oked init` saved on this machine.
+- The root README, `packages/claude-code/README.md`, and the pair skill say the same key order. A risky action returns `ask` only while the plugin API key field, `OKED_API_KEY`, and the key `oked init` saved in `~/.oked/config.json` are all empty.
 - `scripts/check-claude-plugin.mjs` fails when `plugins/claude-code/scripts/oked-hook.mjs` is larger than 240 KiB, so the committed file stays under the directory limit of 256 KiB. The plugin README says that file is built from `src/main.ts` and the open-source packages in this repo by `scripts/build-claude-plugin.mjs`.
 
 ### @oked/scan
@@ -39,7 +40,7 @@ Decisions are made in Telegram and on the [web dashboard](https://oked.ai/dashbo
 - The Claude Code plugin icon, the OpenClaw package icon, and `assets/logo.png` are the OKed logo: black "ok" with a green dot on white, 512x512.
 - OKed can be installed as a Claude Code plugin. In Claude Code: `/plugin marketplace add oked-ai/oked-sdk`, then `/plugin install oked@oked`. The marketplace name is `oked` and the plugin name is `oked`. No global npm install is required.
 - The hook is `plugins/claude-code/scripts/oked-hook.mjs`, a readable bundle of the hook and the SDK, run with `node`. The matcher is `Bash|PowerShell|Write|Edit|Agent|Task|mcp__.*` and the timeout is 690 seconds. `PowerShell` covers Windows when Git Bash is absent. `Task` is the older name of the subagent tool. `node scripts/build-claude-plugin.mjs` rebuilds it. CI fails if the committed file is stale or larger than 256 KiB. `npm run bump` sets the plugin version to the same number as the packages and rebuilds the bundle.
-- Pair with `/oked:pair`. The plugin API key is sensitive. The hook reads `CLAUDE_PLUGIN_OPTION_APIKEY`. Until a key is saved, a risky action returns `ask`.
+- Pair with `/oked:pair`. The plugin API key is sensitive. The hook reads the plugin API key field (`CLAUDE_PLUGIN_OPTION_APIKEY`), then `OKED_API_KEY` when that variable is set, then the key `oked init` saved in `~/.oked/config.json`. While all three are empty, a risky action returns `ask`.
 - If the plugin is enabled and `oked init` has also installed `oked-hook`, only the plugin calls OKed. The settings hook returns allow. `oked init` does not add a settings hook while the plugin is enabled. `oked uninstall` removes the project entry. If you disable the plugin, that entry gates again.
 
 ### @oked/openclaw
