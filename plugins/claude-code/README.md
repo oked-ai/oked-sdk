@@ -55,6 +55,10 @@ If you also ran `oked init`, Claude Code has an `oked-hook` command in `.claude/
 
 The hook matches `Bash`, `PowerShell`, `Write`, `Edit`, `Agent`, `Task`, and MCP tools (`mcp__.*`). On Windows without Git Bash, Claude Code sends shell commands to `PowerShell` and does not register `Bash`. `Task` is the older name of the subagent tool. Current Claude Code sends `Agent`. Claude Code allows the hook 690 seconds, which is longer than the approval window, so a timeout is a deny rather than a killed hook.
 
+## Privacy
+
+This plugin follows the [OKed privacy policy](https://oked.ai/privacy). Deletion requests go to [contact@oked.ai](mailto:contact@oked.ai).
+
 ## License
 
 Apache-2.0. Copyright OKed. Contact [contact@oked.ai](mailto:contact@oked.ai).
