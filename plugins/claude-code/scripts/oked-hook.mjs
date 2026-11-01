@@ -776,6 +776,16 @@ function summarizeGh(cmd, cwd) {
   const thing = { pr: "PR", issue: "issue", release: "release", repo: "repo", workflow: "workflow", run: "workflow run", secret: "secret", variable: "variable" }[noun] ?? noun;
   const name = noun === "release" || noun === "secret" || noun === "variable" || noun === "workflow" ? rest.match(/^\s+([^\s-][^\s]*)/)?.[1] : void 0;
   const body = rest.match(/\s(?:-b|--body)[\s=]+(?:'([^']*)'|"((?:[^"\\]|\\.)*)")/);
+  if (noun === "repo" && (verb === "create" || verb === "fork")) {
+    const named = rest.match(/^\s+(?:https:\/\/github\.com\/)?([\w.-]+(?:\/[\w.-]+)?)(?=\s|$)/)?.[1]?.replace(/\.git$/, "");
+    const subject = named ?? (verb === "fork" ? repo : void 0);
+    const org = rest.match(/\s--org[\s=]+([\w.-]+)/)?.[1];
+    return {
+      title: `${verb === "fork" ? "Fork" : "Create"} repo${subject ? ` ${subject}` : ""}${verb === "fork" && org ? ` to ${org}` : ""}`,
+      annotation: verb === "create" ? rest.match(/\s--(private|public|internal)\b/)?.[1] : void 0,
+      kind: "gh_write"
+    };
+  }
   const obj = `${thing}${ref ? ` ${ref}` : name ? ` ${name}` : ""}`;
   const phrase = verb === "comment" ? `Comment on ${obj}` : verb === "ready" ? `Mark ${obj} ready for review` : verb === "set" ? `Set ${obj}` : `${verb.charAt(0).toUpperCase()}${verb.slice(1)} ${obj}`;
   return {
@@ -2926,6 +2936,7 @@ var BUILD_OUTPUT_DIRS = /* @__PURE__ */ new Set(["build", "dist", ".build", "Der
 function isBuildOutputPath(target) {
   const parts = unquote(target).replace(/\\/g, "/").replace(/^(?:\.\/)+/, "").split("/");
   if (!parts[0] || parts[0].includes(":") || parts.includes("..")) return false;
+  if (parts.includes("node_modules") && parts.every((p) => /^[\w.@-]+$/.test(p))) return true;
   return BUILD_OUTPUT_DIRS.has(parts[0]);
 }
 __name(isBuildOutputPath, "isBuildOutputPath");
@@ -3394,6 +3405,71 @@ function isLoopbackHttpStage(stage) {
   return /(?:^|[\s@])(?:localhost|127(?:\.\d{1,3}){3}|0\.0\.0\.0|\[::1\])(?::\d+)?(?:[/\s'"]|$)/i.test(stage);
 }
 __name(isLoopbackHttpStage, "isLoopbackHttpStage");
+function unwrapShellGroup(stage) {
+  let out = stage.replace(/^(?:\((?!\()|\{\s|!\s|(?:if|elif|while|until|then|else|do)\s)\s*/, "");
+  let depth = 0;
+  let quote = null;
+  for (let i = 0; i < out.length; i++) {
+    const ch = out[i];
+    if (ch === "\\" && quote !== "'") {
+      i++;
+      continue;
+    }
+    if (quote) {
+      if (ch === quote) quote = null;
+      continue;
+    }
+    if (ch === '"' || ch === "'") quote = ch;
+    else if (ch === "(") depth++;
+    else if (ch === ")") depth--;
+  }
+  while (depth < 0 && out.endsWith(")")) {
+    out = out.slice(0, -1).trimEnd();
+    depth++;
+  }
+  return out;
+}
+__name(unwrapShellGroup, "unwrapShellGroup");
+function commandSubstitutions(stage) {
+  const out = [];
+  let quote = null;
+  for (let i = 0; i < stage.length; i++) {
+    const ch = stage[i];
+    if (ch === "\\" && quote !== "'") {
+      i++;
+      continue;
+    }
+    if (quote === "'") {
+      if (ch === "'") quote = null;
+      continue;
+    }
+    if (ch === '"') {
+      quote = quote ? null : '"';
+      continue;
+    }
+    if (ch === "'" && !quote) {
+      quote = "'";
+      continue;
+    }
+    if (ch === "`") {
+      const end = stage.indexOf("`", i + 1);
+      if (end < 0) break;
+      out.push(stage.slice(i + 1, end));
+      i = end;
+    } else if (ch === "$" && stage[i + 1] === "(" && stage[i + 2] !== "(") {
+      let depth = 1;
+      let j = i + 2;
+      for (; j < stage.length && depth > 0; j++) {
+        if (stage[j] === "(") depth++;
+        else if (stage[j] === ")") depth--;
+      }
+      out.push(stage.slice(i + 2, depth === 0 ? j - 1 : j));
+      i = j - 1;
+    }
+  }
+  return out;
+}
+__name(commandSubstitutions, "commandSubstitutions");
 function classifyBashCommand(command2, ephemeralVars = /* @__PURE__ */ new Set(), sandboxEnforced) {
   if (!command2) return "safe";
   const intact = stripHeredocBodies(command2).trim();
@@ -3418,10 +3494,16 @@ function classifyBashCommand(command2, ephemeralVars = /* @__PURE__ */ new Set()
     }
     return worst;
   }
+  const unwrapped = unwrapShellGroup(intact);
+  if (unwrapped !== intact) return classifyBashCommand(unwrapped, ephemeralVars, sandboxEnforced);
   const sql = findSqlInCommand(intact);
   const sqlTier = sql ? classifySqlSeverity(sql) : "safe";
   if (isInfraVolumeDeleteCurl(intact)) return "high_stakes";
-  return maxTier(maxTier(sqlTier, pipesToShell ? "review" : "safe"), classifyStageShellEffects(stripped, ephemeralVars, sandboxEnforced));
+  let substitutionTier = "safe";
+  for (const inner of commandSubstitutions(stripped)) {
+    substitutionTier = maxTier(substitutionTier, classifyBashCommand(inner, ephemeralVars, sandboxEnforced));
+  }
+  return maxTier(maxTier(maxTier(sqlTier, pipesToShell ? "review" : "safe"), substitutionTier), classifyStageShellEffects(stripped, ephemeralVars, sandboxEnforced));
 }
 __name(classifyBashCommand, "classifyBashCommand");
 var PM_NON_SCRIPT = /* @__PURE__ */ new Set([
@@ -3867,6 +3949,8 @@ __name(stripCodeHeredocBodies, "stripCodeHeredocBodies");
 var TEXT_ARG_COMMAND_RE = /^(?:\w+=(?:"[^"]*"|'[^']*'|\S+)\s+)*(?:git|grep|egrep|fgrep|rg|echo|printf|gh(?!\s+api\b))\b/;
 var SCRIPT_FILE_STEP_RE = /^(?:\\\s+)?(?:\w+=(?:"[^"]*"|'[^']*'|\S+)\s+)*(?:node|tsx|bun)\s+(?!-)\S+\.[cm]?[jt]s(?:\s|$)/;
 var LONG_OPTION_QUOTED_VALUE_RE = /(--[\w-]+(?:=|\s+))('[^']*'|"(?:[^"\\]|\\.)*")/g;
+var SED_STEP_RE = /^(?:\\\s+)?(?:\w+=(?:"[^"]*"|'[^']*'|\S+)\s+)*sed\s/;
+var SED_PLAIN_SUBSTITUTION_RE = /^(?:\d+(?:,\d+)?|\$|\/(?:\\.|[^\\/])*\/)?s([^\w\s\\])(?:\\.|(?!\1)[^\\])*\1(?:\\.|(?!\1)[^\\])*\1[gGiIpmM\d]*$/;
 var RUNS_PIPED_TEXT_RE = /^(?:sudo\s+)?(?:(?:ba|z|k|da)?sh|xargs|eval|source|\.|node|deno|bun|python\d?(?:\.\d+)?|ruby|perl|psql|mysql|mariadb|sqlite3?)\b/;
 function blankTextCommandArgs(command2) {
   return splitTopLevel(command2, { pipes: false }).map((step) => {
@@ -3874,9 +3958,13 @@ function blankTextCommandArgs(command2) {
       if (splitTopLevel(step).slice(1).some((p) => RUNS_PIPED_TEXT_RE.test(p))) return step;
       return step.replace(LONG_OPTION_QUOTED_VALUE_RE, (_m, opt, q) => opt + q[0] + " ".repeat(Math.max(0, q.length - 2)) + q[0]);
     }
+    if (SED_STEP_RE.test(step)) {
+      if (splitTopLevel(step).slice(1).some((p) => RUNS_PIPED_TEXT_RE.test(p))) return step;
+      return step.replace(/'[^']*'/g, (q) => SED_PLAIN_SUBSTITUTION_RE.test(q.slice(1, -1)) ? q[0] + " ".repeat(Math.max(0, q.length - 2)) + q[0] : q);
+    }
     if (!TEXT_ARG_COMMAND_RE.test(step)) return step;
     if (splitTopLevel(step).slice(1).some((p) => RUNS_PIPED_TEXT_RE.test(p))) return step;
-    return step.replace(/'[^']*'|"(?:[^"\\]|\\.)*"/g, (q, at) => /[<>]\s*$/.test(step.slice(0, at)) ? q : q[0] + " ".repeat(Math.max(0, q.length - 2)) + q[0]);
+    return step.replace(/'[^']*'|"(?:[^"\\]|\\.)*"/g, (q, at) => /[<>]\s*$/.test(step.slice(0, at)) || q[0] === '"' && /\$\(|`/.test(q) ? q : q[0] + " ".repeat(Math.max(0, q.length - 2)) + q[0]);
   }).join("\n");
 }
 __name(blankTextCommandArgs, "blankTextCommandArgs");
