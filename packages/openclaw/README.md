@@ -14,8 +14,10 @@ OpenClaw 2026.5.4 or newer is required. That release treats the returned denial 
 Install from [ClawHub](https://clawhub.ai/plugins/@oked/openclaw):
 
 ```bash
-openclaw plugins install @oked/openclaw
+openclaw plugins install clawhub:@oked/openclaw
 ```
+
+On OpenClaw 2026.10.9 a package name with no source locator is an npm install. A noninteractive npm install stops with `Install cancelled; rerun with --force`. The `clawhub:` locator selects ClawHub. That install may also ask you to accept the plugin capabilities.
 
 To install straight from npm instead:
 
@@ -30,7 +32,7 @@ npm install -g @oked/openclaw-cli
 oked-openclaw init
 ```
 
-If this package is not already installed, and there is no local checkout, `oked-openclaw init` tries `openclaw plugins install @oked/openclaw` ([ClawHub](https://clawhub.ai/plugins/@oked/openclaw)). If that fails, it retries `openclaw plugins install npm:@oked/openclaw`. A checkout or a global npm copy is still linked with `openclaw plugins install --link`.
+If this package is not already installed, and there is no local checkout, `oked-openclaw init` tries `openclaw plugins install clawhub:@oked/openclaw` ([ClawHub](https://clawhub.ai/plugins/@oked/openclaw)). If that fails, it retries `openclaw plugins install npm:@oked/openclaw`. A checkout or a global npm copy is still linked with `openclaw plugins install --link`.
 
 To wire the config by hand after the plugin install, edit `~/.openclaw/openclaw.json`:
 
@@ -70,7 +72,7 @@ Names are matched against OpenClaw skill conventions, then unknown names default
 
 - **High stakes** (always an approval at the default `minTier`): names that send, post, publish, call, dial, charge, pay, delete, drop, deploy, or release, among the patterns in `src/classify-openclaw.ts`.
 - **Review** (an approval at the default `minTier`): `create`, `update`, `write`, `edit`, `rename`, `modify`, and any tool name the classifier does not recognize.
-- **Safe** (never gated): `get_*`, `list_*`, `search_*`, `read_*`, `find_*`, and the other read-style prefixes and suffixes in that file.
+- **Safe** (never gated): exact read-only OpenClaw built-ins such as `read`, `ls`, `web_search`, `web_fetch`, and `memory_search` (the full list is in `src/classify-openclaw.ts`), plus `get_*`, `list_*`, `search_*`, `read_*`, `find_*`, and the other read-style prefixes and suffixes in that file. `write`, `edit`, and `apply_patch` stay at review.
 - **Bash / shell / exec**: deferred to the `@oked/sdk` shell classifier (`rm -rf`, `git push --force`, and the rest).
 
 `warning` is logged by the SDK classifier and does not block, even if you set `minTier` below `review`.

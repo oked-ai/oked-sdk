@@ -25,13 +25,13 @@ assert.deepEqual(already.fallbacks, []);
 
 const clawhub = resolvePluginInstall({ pluginPath: null, alreadyInstalled: false });
 assert.equal(clawhub.kind, "clawhub");
-assert.deepEqual(clawhub.args, ["plugins", "install", "@oked/openclaw"]);
+assert.deepEqual(clawhub.args, ["plugins", "install", "clawhub:@oked/openclaw"]);
 assert.deepEqual(clawhub.fallbacks, [["plugins", "install", "npm:@oked/openclaw"]]);
 
 const attempts = [clawhub.args, ...clawhub.fallbacks];
 
 const clawhubOk = await runInstallAttempts(attempts, async (args) => {
-  assert.deepEqual(args, ["plugins", "install", "@oked/openclaw"]);
+  assert.deepEqual(args, ["plugins", "install", "clawhub:@oked/openclaw"]);
   return 0;
 });
 assert.equal(clawhubOk.ok, true);
@@ -46,7 +46,7 @@ const npmOk = await runInstallAttempts(attempts, async (args) => {
   return seen.length === 1 ? 2 : 0;
 });
 assert.deepEqual(seen, [
-  "plugins install @oked/openclaw",
+  "plugins install clawhub:@oked/openclaw",
   "plugins install npm:@oked/openclaw",
 ]);
 assert.equal(npmOk.ok, true);
@@ -62,7 +62,7 @@ assert.equal(bothFail.calls.length, 2);
 assert.deepEqual(
   bothFail.calls.map((call) => call.args),
   [
-    ["plugins", "install", "@oked/openclaw"],
+    ["plugins", "install", "clawhub:@oked/openclaw"],
     ["plugins", "install", "npm:@oked/openclaw"],
   ],
 );

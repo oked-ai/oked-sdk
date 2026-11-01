@@ -35,6 +35,42 @@ const SAFE_PATTERNS = [
   /_health$/,
 ];
 
+/**
+ * Exact OpenClaw core tool ids that only read, list, search, or fetch.
+ * The match is case-insensitive and exact, so `read` is safe and
+ * `read_and_delete_file` is not. Names are from OpenClaw v2026.10.9
+ * `src/agents/tool-catalog.ts` (`CORE_TOOL_DEFINITIONS`). Session summaries
+ * are from `src/agents/tool-description-presets.ts` at the same tag.
+ *
+ * Not included: `glob`, `grep`, `find`, and `search` are not core tool ids
+ * in that catalog. `write`, `edit`, and `apply_patch` change files.
+ * `exec`, `bash`, and `shell` stay on the shell classifier.
+ */
+const SAFE_BUILTIN_TOOLS = new Set([
+  // Files: "List directory entries", "Read file contents".
+  "ls",
+  "read",
+  // Web: "Search the web", "Fetch web content", "Search X posts".
+  "web_search",
+  "web_fetch",
+  "x_search",
+  // Memory: "Semantic search", "Read memory files".
+  "memory_search",
+  "memory_get",
+  // Sessions and agents that only list, read, or search.
+  "presence",
+  "sessions_list",
+  "sessions_history",
+  "sessions_search",
+  "conversations_list",
+  "session_status",
+  "github_identity_status",
+  "agents_list",
+  "get_goal",
+  "skills_search",
+  "skills_read",
+]);
+
 const HIGH_STAKES_PATTERNS = [
   // Communication that touches the real world
   /(_|^)(send|reply|post|publish|broadcast|email|sms|imessage|whatsapp|slack|telegram|tweet|toot)$/,
@@ -89,6 +125,8 @@ export function classifyOpenClawTool(
   for (const re of HIGH_STAKES_PATTERNS) {
     if (re.test(lower)) return "high_stakes";
   }
+
+  if (SAFE_BUILTIN_TOOLS.has(lower)) return "safe";
 
   for (const re of SAFE_PATTERNS) {
     if (re.test(lower)) return "safe";

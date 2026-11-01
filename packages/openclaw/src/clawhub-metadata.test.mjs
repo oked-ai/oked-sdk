@@ -84,7 +84,8 @@ for (const rel of publicDocs) {
 }
 
 const openclawReadme = readFileSync(join(pkgDir, "README.md"), "utf8");
-assert.ok(openclawReadme.includes("openclaw plugins install @oked/openclaw"));
+assert.ok(openclawReadme.includes("openclaw plugins install clawhub:@oked/openclaw"));
+assert.equal(openclawReadme.includes("openclaw plugins install @oked/openclaw\n"), false);
 assert.ok(openclawReadme.includes("npm install -g @oked/openclaw-cli"));
 assert.ok(openclawReadme.includes("The iPhone app is coming soon."));
 assert.ok(openclawReadme.includes("## What OKed sends"));
@@ -96,9 +97,11 @@ assert.equal(/push to your phone|from your phone/i.test(openclawReadme), false);
 assert.ok(openclawReadme.includes("free during beta"));
 
 const rootReadme = readFileSync(join(repoRoot, "README.md"), "utf8");
-assert.ok(rootReadme.includes("openclaw plugins install @oked/openclaw"));
+assert.ok(rootReadme.includes("openclaw plugins install clawhub:@oked/openclaw"));
+assert.equal(rootReadme.includes("openclaw plugins install @oked/openclaw"), false);
 const hosts = readFileSync(join(repoRoot, "docs/hosts.md"), "utf8");
-assert.ok(hosts.includes("openclaw plugins install @oked/openclaw"));
+assert.ok(hosts.includes("openclaw plugins install clawhub:@oked/openclaw"));
+assert.equal(hosts.includes("openclaw plugins install @oked/openclaw"), false);
 
 const releasing = readFileSync(join(repoRoot, "RELEASING.md"), "utf8");
 for (const needle of [
@@ -115,7 +118,7 @@ for (const needle of [
 
 const changelog = readFileSync(join(repoRoot, "CHANGELOG.md"), "utf8");
 const unreleased = changelog.split("## 0.6.22")[0];
-assert.ok(unreleased.includes("openclaw plugins install @oked/openclaw"));
+assert.ok(unreleased.includes("openclaw plugins install clawhub:@oked/openclaw"));
 assert.ok(unreleased.includes("CLAWHUB_TOKEN"));
 const unreleasedOnly = changelog.split("## Unreleased")[1].split("## 0.6.25")[0];
 assert.ok(unreleasedOnly.includes("workflow_dispatch"));
