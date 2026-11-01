@@ -17,7 +17,7 @@ From a shell, the same two steps are `claude plugin marketplace add oked-ai/oked
 
 Run `/oked:pair`. The script prints a pairing link and, in a terminal, a QR code. Open the link and approve it in Telegram or on the web dashboard. The iPhone app is coming soon. The script then saves the API key into the plugin's API key field when the `claude` command can do that. Otherwise it prints the key once so you can paste it into `/plugin configure oked@oked`. Do not paste the key into the chat.
 
-The API key field is marked sensitive. Claude Code stores it outside `settings.json` and passes it to the hook as `CLAUDE_PLUGIN_OPTION_APIKEY`. Until the plugin API key field, the OKED_API_KEY environment variable, and the key saved by `oked init` are all empty, a risky action returns `ask`, so Claude Code's own permission prompt can decide.
+The API key field is marked sensitive. Claude Code stores it outside `settings.json` and passes it to the hook as `CLAUDE_PLUGIN_OPTION_APIKEY`. While the plugin API key field, the OKED_API_KEY environment variable, and the key saved by `oked init` are all empty, a risky action returns `ask`, so Claude Code's own permission prompt can decide.
 
 ## What is sent
 

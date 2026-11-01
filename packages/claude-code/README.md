@@ -18,7 +18,7 @@ oked init
 
 `oked init` writes a `PreToolUse` hook into the current project's `.claude/settings.json`, opens the device-pairing page in your browser, and stores the API key in `~/.oked/config.json`. Open a new Claude Code session in that project.
 
-You can also install OKed as a Claude Code plugin, with no global npm install. In Claude Code run `/plugin marketplace add oked-ai/oked-sdk`, then `/plugin install oked@oked`, then `/oked:pair`. The plugin ships the hook as one file and reads the API key from the plugin configuration (`CLAUDE_PLUGIN_OPTION_APIKEY`). Until you pair, a risky action returns `ask`. See [plugins/claude-code](../../plugins/claude-code).
+You can also install OKed as a Claude Code plugin, with no global npm install. In Claude Code run `/plugin marketplace add oked-ai/oked-sdk`, then `/plugin install oked@oked`, then `/oked:pair`. The plugin ships the hook as one file. It reads the API key from the plugin API key field (`CLAUDE_PLUGIN_OPTION_APIKEY`), then from the `OKED_API_KEY` environment variable when it is set, then from the key `oked init` saved in `~/.oked/config.json`. While all three are empty, a risky action returns `ask`. See [plugins/claude-code](../../plugins/claude-code).
 
 If the plugin is enabled, `oked init` does not add a settings hook. If both are already installed, the plugin gates and the settings hook stands down, so the action is asked once. `oked uninstall` removes the project settings entry. Turning the plugin off makes that entry gate again.
 
