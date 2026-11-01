@@ -13,7 +13,7 @@ Built from `changes.jsonl` by `node scripts/approval-review/record.mjs log`. Do 
 | Title | Run command | DELETE request to URL |
 | Kind | shell_pipeline | http_delete |
 
-Corpus: `2026-11-01-substitution-in-echo-text`
+Corpus: `2026-11-01-substitution-in-echo-text` · PR: https://github.com/oked-ai/oked-sdk/pull/134
 
 ## 2026-11-01 · tier · `Bash`
 
@@ -25,7 +25,7 @@ Corpus: `2026-11-01-substitution-in-echo-text`
 | Title | Merge PR #5 | Merge PR #5 |
 | Kind | git_pr_merge | git_pr_merge |
 
-Corpus: `2026-11-01-loop-hides-merge`
+Corpus: `2026-11-01-loop-hides-merge` · PR: https://github.com/oked-ai/oked-sdk/pull/134
 
 ## 2026-11-01 · text · `Bash`
 
@@ -38,7 +38,7 @@ Corpus: `2026-11-01-loop-hides-merge`
 | Annotation | · | private |
 | Kind | gh_write | gh_write |
 
-Corpus: `2026-11-01-gh-repo-create-target`
+Corpus: `2026-11-01-gh-repo-create-target` · PR: https://github.com/oked-ai/oked-sdk/pull/134
 
 ## 2026-11-01 · text · `Bash`
 
@@ -50,7 +50,7 @@ Corpus: `2026-11-01-gh-repo-create-target`
 | Title | Fork repo in oked-ai/oked-sdk | Fork repo aml11/oked-app to oked-ai |
 | Kind | gh_write | gh_write |
 
-Seen 2× (✅ 0, ❌ 0) · Corpus: `2026-11-01-gh-repo-fork-target`
+Seen 2× (✅ 0, ❌ 0) · Corpus: `2026-11-01-gh-repo-fork-target` · PR: https://github.com/oked-ai/oked-sdk/pull/134
 
 ## 2026-11-01 · tier · `Bash`
 
@@ -65,7 +65,7 @@ Seen 2× (✅ 0, ❌ 0) · Corpus: `2026-11-01-gh-repo-fork-target`
 | Body | sed -i '' '1500s\|`rm -rf build 2>/dev/null`\|`rm -rf src 2>/dev/null`\|' classify.test.ts | S=/private/tmp/claude-501/-Users-oren-Dev-OKed/dad7889a-c504-420a-a3ec-de12e8a79931/scratchpad; cd $S/fix/packages/sdk/test && sed -i '' '1500s/rm -rf build 2>/' classify.test.ts 2>/dev/null; sed -i… |
 | Kind | file_edit | file_create |
 
-Seen 2× (✅ 2, ❌ 0) · Corpus: `2026-11-01-sed-text-npm-publish`
+Seen 2× (✅ 2, ❌ 0) · Corpus: `2026-11-01-sed-text-npm-publish` · PR: https://github.com/oked-ai/oked-sdk/pull/134
 
 ## 2026-11-01 · tier · `Bash`
 
@@ -79,7 +79,7 @@ Seen 2× (✅ 2, ❌ 0) · Corpus: `2026-11-01-sed-text-npm-publish`
 | Body | sed -i '' \<br> -e '45s/all 5 packages/all 7 packages/' \<br> -e '48s/.*/- The 7 lockstep packages: `sdk`, `claude-code`, `claude-agent-sdk`, `openclaw`, `openclaw-cli`, `receipt-core`, `verify`/' \<br> -e '1… | F=~/.claude/skills/oked-release/SKILL.md; cp $F /private/tmp/claude-501/-Users-oren-Dev-OKed--claude-worktrees-ios-app-release-48c54a/b2ad787b-c409-4e8b-9116-1c52bac22cf1/scratchpad/SKILL.m… |
 | Kind | git_force_push | shell_pipeline |
 
-Seen 1× (✅ 1, ❌ 0) · Corpus: `2026-11-01-sed-text-force-push`
+Seen 1× (✅ 1, ❌ 0) · Corpus: `2026-11-01-sed-text-force-push` · PR: https://github.com/oked-ai/oked-sdk/pull/134
 
 ## 2026-11-01 · tier · `Bash`
 
@@ -93,7 +93,7 @@ Seen 1× (✅ 1, ❌ 0) · Corpus: `2026-11-01-sed-text-force-push`
 | Body | rm -rf node_modules | · |
 | Kind | file_delete | file_delete |
 
-Seen 1× (✅ 0, ❌ 0) · Corpus: `2026-11-01-rm-node-modules`
+Seen 1× (✅ 0, ❌ 0) · Corpus: `2026-11-01-rm-node-modules` · PR: https://github.com/oked-ai/oked-sdk/pull/134
 
 ## 2026-11-01 · tier · `Bash`
 
@@ -107,7 +107,7 @@ Seen 1× (✅ 0, ❌ 0) · Corpus: `2026-11-01-rm-node-modules`
 | Body | rm -rf node_modules backend/node_modules | · |
 | Kind | file_delete | file_delete |
 
-Seen 1× (✅ 1, ❌ 0) · Corpus: `2026-11-01-rm-node-modules`
+Seen 1× (✅ 1, ❌ 0) · Corpus: `2026-11-01-rm-node-modules` · PR: https://github.com/oked-ai/oked-sdk/pull/134
 
 ## 2026-11-01 · tier · `Bash`
 
@@ -120,7 +120,7 @@ Seen 1× (✅ 1, ❌ 0) · Corpus: `2026-11-01-rm-node-modules`
 | Body | kill $p 2>/dev/null) \| grep -iE "apns\|push\|approval\|error\|warn" \| tail -30 | cd ~/Dev/OKed/oked-app && (railway logs --service oked-app 2>&1 & p=$!; sleep 20; kill $p 2>/dev/null) \| grep -iE "apns\|push\|approval\|error\|warn" \| tail -30; grep -nE "logger\.(log\|warn\|error)" backe… |
 | Kind | kill_process | kill_process |
 
-Seen 1× (✅ 0, ❌ 0) · Corpus: `2026-11-01-subshell-own-job-kill`
+Seen 1× (✅ 0, ❌ 0) · Corpus: `2026-11-01-subshell-own-job-kill` · PR: https://github.com/oked-ai/oked-sdk/pull/134
 
 ## 2026-10-30 · tier · `Bash`
 
