@@ -83,7 +83,7 @@ npx -y @oked/claude-code@X.Y.Z --help
 
 ## ClawHub (`@oked/openclaw`)
 
-`openclaw plugins install @oked/openclaw` installs from [ClawHub](https://clawhub.ai/plugins/@oked/openclaw), OpenClaw's plugin registry. `@oked/openclaw` 0.6.25 is listed there with a clean scan. `openclaw plugins install npm:@oked/openclaw` installs straight from npm. An npm publish does not put the package on ClawHub. Do not publish from a pull request.
+`openclaw plugins install clawhub:@oked/openclaw` installs from [ClawHub](https://clawhub.ai/plugins/@oked/openclaw), OpenClaw's plugin registry. `@oked/openclaw` 0.6.25 is listed there with a clean scan. On OpenClaw 2026.10.9 a package name with no source locator is an npm install, so the ClawHub command keeps the `clawhub:` locator. `openclaw plugins install npm:@oked/openclaw` installs straight from npm. An npm publish does not put the package on ClawHub. Do not publish from a pull request.
 
 A `vX.Y.Z` tag runs the npm jobs in `.github/workflows/publish.yml`. It does not publish to ClawHub. ClawHub trusted publishing accepts a GitHub OIDC token only when the workflow event is `workflow_dispatch` (a tag push is `push`, and ClawHub rejects that). `clawhub@0.24.1` requests that token itself, audience `clawhub`, when `ACTIONS_ID_TOKEN_REQUEST_URL` is set. GitHub sets that variable only if the job has `permissions: id-token: write`. The `publish-clawhub` job has that permission. It does not read `CLAWHUB_TOKEN`. A saved token makes this CLI fall back to a manual publish, and ClawHub then requires `--manual-override-reason`.
 

@@ -21,7 +21,7 @@
     "prebuild": "npm run build --workspace=@oked/sdk",
     "build": "tsc",
     "dev": "tsc --watch",
-    "test": "npm run build && node src/clawhub-metadata.test.mjs && node src/script-excerpt.test.mjs && node src/smoke.test.mjs",
+    "test": "npm run build && node src/classify-openclaw.test.mjs && node src/clawhub-metadata.test.mjs && node src/script-excerpt.test.mjs && node src/smoke.test.mjs",
     "prepublishOnly": "npm run build"
   },
   "openclaw": {

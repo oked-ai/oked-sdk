@@ -4,8 +4,8 @@
  *
  * Subcommands:
  *   oked-openclaw init       Install the plugin if needed (`openclaw plugins install
- *                            @oked/openclaw`, then `npm:@oked/openclaw` if ClawHub
- *                            fails, or `--link` for a local copy),
+ *                            clawhub:@oked/openclaw`, then `npm:@oked/openclaw` if
+ *                            ClawHub fails, or `--link` for a local copy),
  *                            persist API key + minTier into ~/.openclaw/openclaw.json,
  *                            and restart the OpenClaw gateway daemon.
  *   oked-openclaw status     Print install state, config, and backend reachability.
@@ -276,8 +276,12 @@ function detectDaemon() {
 
 // --- commands -------------------------------------------------------------
 
-/** Bare package name. OpenClaw resolves this from ClawHub only, with no npm fallback. */
-export const CLAWHUB_INSTALL_ARGS = ['plugins', 'install', '@oked/openclaw'];
+/**
+ * ClawHub locator. On OpenClaw 2026.10.9 a bare package name is an npm spec
+ * (`resolvePluginInstallSourcePlan`), and a noninteractive npm install stops
+ * with "Install cancelled; rerun with --force". The clawhub: prefix selects ClawHub.
+ */
+export const CLAWHUB_INSTALL_ARGS = ['plugins', 'install', 'clawhub:@oked/openclaw'];
 /** npm specifier. Used when the ClawHub install fails. */
 export const NPM_INSTALL_ARGS = ['plugins', 'install', 'npm:@oked/openclaw'];
 /** Printed when both registry installs fail. */
@@ -359,7 +363,7 @@ async function cmdInit() {
     console.log('   Leaving the current install in place.\n');
   } else {
     console.log('not on disk');
-    console.log('   Will try ClawHub: openclaw plugins install @oked/openclaw');
+    console.log('   Will try ClawHub: openclaw plugins install clawhub:@oked/openclaw');
     console.log('   If that fails: openclaw plugins install npm:@oked/openclaw\n');
   }
 
