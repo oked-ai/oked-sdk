@@ -12,6 +12,7 @@ import { build } from "esbuild";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const OUT = join(ROOT, "plugins", "claude-code", "scripts", "oked-hook.mjs");
+// Directory hard limit. scripts/check-claude-plugin.mjs fails above 240 KiB.
 const MAX_BYTES = 256 * 1024;
 
 function readVersion(path) {
