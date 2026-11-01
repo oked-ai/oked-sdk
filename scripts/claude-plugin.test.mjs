@@ -2,7 +2,7 @@
 // JSON on stdin, JSON on stdout, no global npm install.
 import assert from "node:assert";
 import { spawn } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { delimiter, dirname, join } from "node:path";
@@ -78,6 +78,15 @@ function approvePosts() {
 
 let passed = 0;
 try {
+  {
+    const bytes = statSync(BUNDLE).size;
+    const limit = 240 * 1024;
+    assert.ok(bytes <= limit, `oked-hook.mjs is ${bytes} bytes, limit is ${limit}`);
+    const check = readFileSync(join(ROOT, "scripts", "check-claude-plugin.mjs"), "utf8");
+    assert.match(check, /const MAX_BYTES = 240 \* 1024/);
+    passed++;
+  }
+
   {
     const { code, out } = await runBundle(["--help"]);
     assert.equal(code, 0);
@@ -157,4 +166,4 @@ try {
   rmSync(root, { recursive: true, force: true });
 }
 
-console.log(`ok - claude code plugin bundle: ${passed}/5 passed`);
+console.log(`ok - claude code plugin bundle: ${passed}/6 passed`);

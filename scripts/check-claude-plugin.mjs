@@ -12,7 +12,8 @@ import { fileURLToPath } from "node:url";
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const PLUGIN = join(ROOT, "plugins", "claude-code");
 const BUNDLE = join(PLUGIN, "scripts", "oked-hook.mjs");
-const MAX_BYTES = 256 * 1024;
+// 240 KiB leaves room under the directory's 256 KiB file limit.
+const MAX_BYTES = 240 * 1024;
 
 function fail(message) {
   console.error(message);
@@ -61,6 +62,23 @@ const words = prose.split(/\s+/).filter(Boolean);
 if (words.length < 40) fail(`plugin README has ${words.length} words outside code, need at least 40`);
 if (!/tool name/i.test(readme) || !/command text|tool input/i.test(readme) || !/api\.oked\.ai/.test(readme)) {
   fail("plugin README must say that tool and command text is sent to the OKed service");
+}
+const requiredReadme = [
+  ["OKED_API_KEY", "plugin README must name the OKED_API_KEY fallback"],
+  ["https://api.oked.ai/api/v1/approve", "plugin README must name the approval request"],
+  ["https://api.oked.ai/api/v1/heartbeat", "plugin README must disclose the heartbeat"],
+  ["https://api.oked.ai/api/v1/rules", "plugin README must disclose the rules fetch"],
+  ["oked-receipt-keys.json", "plugin README must disclose the receipt public-key fetch"],
+  ["~/.oked/receipts.jsonl", "plugin README must name the receipts file"],
+  ["~/.oked/hook.log", "plugin README must name the decision log"],
+  ["~/.oked/heartbeat.json", "plugin README must name the heartbeat file"],
+  ["~/.oked/rules-cache.json", "plugin README must name the rules cache"],
+  ["~/.oked/receipt-keys.json", "plugin README must name the receipt key cache"],
+  ["src/main.ts", "plugin README must say the hook is built from src/main.ts"],
+  ["scripts/build-claude-plugin.mjs", "plugin README must name the build script"],
+];
+for (const [needle, message] of requiredReadme) {
+  if (!readme.includes(needle)) fail(message);
 }
 
 const banned = ["OKED_BACKEND_URL", "backendUrl", "\u2014"];

@@ -6,6 +6,11 @@ Decisions are made in Telegram and on the [web dashboard](https://oked.ai/dashbo
 
 ## Unreleased
 
+### Claude Code plugin
+
+- The plugin README lists every request the hook makes and every local file it writes. That includes the approval request to api.oked.ai, the receipt public-key fetch, the rules fetch, and the heartbeat, which runs by default when an API key is present and at most once a day. Local files include `~/.oked/receipts.jsonl` and `~/.oked/hook.log`. The API key comes from the plugin API key field, then from `OKED_API_KEY` when that variable is set, then from the key `oked init` saved on this machine.
+- `scripts/check-claude-plugin.mjs` fails when `plugins/claude-code/scripts/oked-hook.mjs` is larger than 240 KiB, so the committed file stays under the directory limit of 256 KiB. The plugin README says that file is built from `src/main.ts` and the open-source packages in this repo by `scripts/build-claude-plugin.mjs`.
+
 ### @oked/scan
 
 - New package. `npx @oked/scan` reads Claude Code transcripts (`~/.claude/projects/**/*.jsonl`, Bash tool calls) and Codex CLI sessions (`~/.codex/sessions`, rollout files) on this machine. It reports which commands the default rules would have paused for approval: totals by tier and category, and the top risky commands with secrets-looking tokens redacted.
