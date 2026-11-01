@@ -11,13 +11,17 @@ OpenClaw 2026.5.4 or newer is required. That release treats the returned denial 
 
 ## Install
 
-Install from npm:
+Install from [ClawHub](https://clawhub.ai/plugins/@oked/openclaw):
+
+```bash
+openclaw plugins install @oked/openclaw
+```
+
+To install straight from npm instead:
 
 ```bash
 openclaw plugins install npm:@oked/openclaw
 ```
-
-Once the package is listed on ClawHub, `openclaw plugins install @oked/openclaw` installs it from there.
 
 Pair this machine with [`@oked/openclaw-cli`](../openclaw-cli). The CLI needs the `openclaw` command on your PATH. It pairs this device (or reuses an existing API key), sets `minTier` (a terminal prompt when none is set), writes the entry into `~/.openclaw/openclaw.json`, and offers to restart the gateway.
 
@@ -26,7 +30,7 @@ npm install -g @oked/openclaw-cli
 oked-openclaw init
 ```
 
-If this package is not already installed, and there is no local checkout, `oked-openclaw init` tries `openclaw plugins install @oked/openclaw` (ClawHub). If that fails, it retries `openclaw plugins install npm:@oked/openclaw`. A checkout or a global npm copy is still linked with `openclaw plugins install --link`.
+If this package is not already installed, and there is no local checkout, `oked-openclaw init` tries `openclaw plugins install @oked/openclaw` ([ClawHub](https://clawhub.ai/plugins/@oked/openclaw)). If that fails, it retries `openclaw plugins install npm:@oked/openclaw`. A checkout or a global npm copy is still linked with `openclaw plugins install --link`.
 
 To wire the config by hand after the plugin install, edit `~/.openclaw/openclaw.json`:
 
