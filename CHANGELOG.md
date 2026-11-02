@@ -6,6 +6,8 @@ Decisions are made in Telegram and on the [web dashboard](https://oked.ai/dashbo
 
 ## Unreleased
 
+- Public docs no longer state a price. The receipt key URL is fixed at https://api.oked.ai and is not taken from the backend address. Local development may use loopback http.
+
 ## 0.6.26 - 2026-11-02
 
 ### Claude Code plugin

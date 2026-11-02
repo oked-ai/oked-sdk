@@ -8,7 +8,7 @@ The repository is public. The workflow runs `npm publish` and does not pass `--p
 
 ## One-time setup (already done, kept for reference)
 
-- An npm account with 2FA and a free `oked` organization (the `@oked` scope).
+- An npm account with 2FA and an `oked` organization (the `@oked` scope).
 - A Trusted Publisher on npmjs for each package. Every field must match the workflow:
   - Organization or user: `oked-ai`
   - Repository: `oked-sdk`, this monorepo, not the package name. All of them use `oked-sdk`. A wrong repo here shows up as a misleading `ENEEDAUTH` at publish (npm/cli#9088), not a clear mismatch error.
