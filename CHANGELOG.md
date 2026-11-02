@@ -6,6 +6,8 @@ Decisions are made in Telegram and on the [web dashboard](https://oked.ai/dashbo
 
 ## Unreleased
 
+## 0.6.26 - 2026-11-02
+
 ### Claude Code plugin
 
 - The plugin manifest sets `privacyPolicyUrl` to https://oked.ai/privacy. The plugin README links to the [OKed privacy policy](https://oked.ai/privacy). Deletion requests go to contact@oked.ai. `scripts/check-claude-plugin.mjs` requires that field and the Privacy section.
@@ -22,7 +24,7 @@ Decisions are made in Telegram and on the [web dashboard](https://oked.ai/dashbo
 - The closing line leads with how many high-stakes commands would have waited for a yes, and the two or three most common high-stakes kinds in those plain words. It then says how many worth a look would also have waited. Test runners and scripts that Claude Code asks about, because the Bash sandbox is off by default, stay in the totals and on their own line, with how to allow them (`allowUnsandboxedCommands` set to false). They are not part of that closing count. The hook does ask for `npm test` in that default, so the report keeps them in the totals.
 - The install command follows sessions that were parsed (`oked init`, and `oked-codex init` when a Codex rollout was parsed), then https://oked.ai. Codex history means at least one `rollout-*.jsonl` file was read. An empty `~/.codex/sessions` directory, or one that only contains other files such as `history.jsonl`, does not count. Claude Code history alone prints `npm install -g @oked/claude-code && oked init`.
 - If history exists and nothing would have paused, the report says so and does not invent a count. If no Claude Code transcripts and no Codex rollout sessions are found, it says that no history was found at the paths checked, suggests `--path <dir>`, and does not print a zero table. `--verbose` prints the classification notes. The default text report leaves those notes out. Decisions happen in Telegram or on the web dashboard. The iPhone app is coming soon.
-- Not on npm yet. The version stays 0.6.25 so the first publish includes this report. The first publish is by hand. See [RELEASING.md](./RELEASING.md).
+- `@oked/scan` is on npm. It was first published by hand at 0.6.25 and has a Trusted Publisher, so this tag publishes it with the other packages. See [RELEASING.md](./RELEASING.md).
 
 ### @oked/sdk
 

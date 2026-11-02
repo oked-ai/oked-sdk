@@ -26,11 +26,11 @@ cd packages/<name> && npm publish --access public
 
 Then add the Trusted Publisher on npmjs (same fields as above) and list the package in the `publish.yml` matrix. From the next tag on, CI publishes it with the others. A tag pushed before the manual publish fails that package's job (`ENEEDAUTH`) while the rest publish.
 
-`@oked/scan` is in the matrix and is not on npm yet. The first `npm publish` for it is the manual step above. A tag pushed before that publish fails the `scan` job only.
+`@oked/scan` was first published by hand at 0.6.25 and has a Trusted Publisher. A tag publishes it with the other packages.
 
 ### On npm
 
-Every package that has already been published is on npm and has a Trusted Publisher: organization `oked-ai`, repository `oked-sdk`, workflow `publish.yml`. `hook-core`, `codex`, `cursor`, `copilot`, `langgraph`, `ai-sdk`, and `openai-agents` were first published by hand at 0.6.21. In v0.6.22, `hook-core`, `codex`, `cursor`, and `copilot` failed with the 403 above, because their publishers had only `npm stage publish`. They were fixed for v0.6.23. Confirm each new package has a Trusted Publisher with both permissions (same fields as above) before tagging. A tag pushed before that publisher exists fails that package's job (`ENEEDAUTH`) while the rest publish. A `vX.Y.Z` tag publishes every package in the matrix that already exists on npm. Do not publish from a pull request.
+Every package that has already been published is on npm and has a Trusted Publisher: organization `oked-ai`, repository `oked-sdk`, workflow `publish.yml`. `hook-core`, `codex`, `cursor`, `copilot`, `langgraph`, `ai-sdk`, and `openai-agents` were first published by hand at 0.6.21. `scan` was first published by hand at 0.6.25. In v0.6.22, `hook-core`, `codex`, `cursor`, and `copilot` failed with the 403 above, because their publishers had only `npm stage publish`. They were fixed for v0.6.23. Confirm each new package has a Trusted Publisher with both permissions (same fields as above) before tagging. A tag pushed before that publisher exists fails that package's job (`ENEEDAUTH`) while the rest publish. A `vX.Y.Z` tag publishes every package in the matrix that already exists on npm. Do not publish from a pull request.
 
 ### Why the workflow publishes one package per job
 
