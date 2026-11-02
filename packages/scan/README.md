@@ -42,13 +42,15 @@ Commands in the report are truncated. Values that look like tokens, passwords, o
 
 ## Next step
 
-There is no `@oked/cli` package. The report ends with how many commands would have paused, leaving test runners and scripts out of that count, the two or three most common high-stakes kinds in plain words (force-push, rm -rf / file delete, destructive SQL, prod deploy, and so on), then the install command for the history that was found, then `https://oked.ai`. Those runners stay in the totals, on their own line, with how to allow them. If history exists and nothing would have paused, the report says so and does not invent a count. If no Claude Code transcripts and no Codex sessions are found, it says that no history was found at the paths checked, suggests `--path <dir>`, and does not print a zero table. A short line says decisions happen in Telegram or on the web dashboard. The iPhone app is coming soon.
+There is no `@oked/cli` package. The closing line leads with how many high-stakes commands would have waited for a yes, and the two or three most common high-stakes kinds in plain words (force-push, rm -rf / file delete, destructive SQL, prod deploy, and so on). It then says how many worth a look would also have waited. Test runners and scripts stay out of both of those counts. They stay in the totals, on their own line, with how to allow them. The install command for the history that was parsed comes next, then `https://oked.ai`. If history exists and nothing would have paused, the report says so and does not invent a count. If no Claude Code transcripts and no Codex rollout sessions are found, it says that no history was found at the paths checked, suggests `--path <dir>`, and does not print a zero table. A short line says decisions happen in Telegram or on the web dashboard. The iPhone app is coming soon.
 
-| History found | Command |
+| History parsed | Command |
 |---|---|
 | Claude Code, or none | `npm install -g @oked/claude-code && oked init` |
 | Codex only | `npm install -g @oked/codex && oked-codex init` |
 | Both | `npm install -g @oked/claude-code @oked/codex && oked init && oked-codex init` |
+
+Codex in that table means at least one `rollout-*.jsonl` session was parsed. A missing `~/.codex/sessions` directory, an empty one, or one that only has other files such as `history.jsonl`, is not Codex history.
 
 Claude Code can also be installed with no global package. In Claude Code: `/plugin marketplace add oked-ai/oked-sdk`, then `/plugin install oked@oked`, then `/oked:pair`. See [plugins/claude-code](../../plugins/claude-code).
 
@@ -69,7 +71,7 @@ Exit code 0 when the report is printed, including when no transcripts were found
 
 ## Sample
 
-The counts below are the fixture transcripts in this package (`test/fixtures`), not a person's machine. `npm test` asks for Claude Code and does not ask for Codex, because those are the two hook defaults. The Claude Code one is the routine line. It stays in "Would have paused" and out of the closing count. `vercel --prod` is high-stakes, kind `deploy`. The Claude Code curl is past the top 8. In the JSON report it is `curl -X POST https://example.com/hook -H "Authorization: Bearer [redacted]" -d hi`. When no history is found, the report says so and does not print a zero table.
+The counts below are the fixture transcripts in this package (`test/fixtures`), not a person's machine. `npm test` asks for Claude Code and does not ask for Codex, because those are the two hook defaults. The Claude Code one is the routine line. It stays in "Would have paused" and out of the closing counts. `vercel --prod` is high-stakes, kind `deploy`. The Claude Code curl is past the top 8. In the JSON report it is `curl -X POST https://example.com/hook -H "Authorization: Bearer [redacted]" -d hi`. When no history is found, the report says so and does not print a zero table.
 
 <!-- fixture-report -->
 ```
@@ -115,7 +117,7 @@ To allow those without a prompt, turn on the Bash sandbox and set allowUnsandbox
 
 Decisions happen in Telegram or on the web dashboard (https://oked.ai/dashboard). The iPhone app is coming soon.
 
-OKed would have paused 9 of these commands, including 3 rm -rf / file delete, 2 force-pushes and 2 prod deploys.
+7 high-stakes commands would have waited for your yes, including 3 rm -rf / file delete, 2 force-pushes and 2 prod deploys. 2 worth a look would also have waited.
 Get a yes/no in Telegram before your agent runs them:
   npm install -g @oked/claude-code @oked/codex && oked init && oked-codex init
 https://oked.ai

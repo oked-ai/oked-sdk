@@ -30,9 +30,12 @@ Exit code 0 when the report is printed, including when nothing was found.
 Exit code 1 when the arguments are wrong or --path does not exist.
 
 The text report uses plain words for tiers and command kinds. --json
-keeps the machine names and adds label fields. The report ends with how
-many commands would have paused, the install command for the history
-that was found, and https://oked.ai. When no transcripts and no sessions
+keeps the machine names and adds label fields. The closing line leads
+with how many high-stakes commands would have waited for a yes, then
+how many worth a look would also have waited. Test runners and scripts
+stay on their own line. The install command matches history that was
+parsed (a Codex sessions directory with no rollout file is not Codex
+history), then https://oked.ai. When no transcripts and no sessions
 are found, it says so and suggests --path. It does not print a zero table.
 For example:
   npm install -g @oked/claude-code && oked init
