@@ -2,7 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { createRequire } from "node:module";
-import { mkdtempSync, readFileSync, readdirSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -209,7 +209,7 @@ describe("fixture transcripts", () => {
     assert.match(text, /Runs, logged/);
     assert.match(text, /7 high-stakes: 3 rm -rf \/ file delete, 2 force-pushes, 2 prod deploys/);
     assert.match(text, /3 worth a look: 2 curl POST\/PUT\/DELETE, 1 test runner/);
-    assert.match(text, /OKed would have paused 9 of these commands, including 3 rm -rf \/ file delete, 2 force-pushes and 2 prod deploys\./);
+    assert.match(text, /7 high-stakes commands would have waited for your yes, including 3 rm -rf \/ file delete, 2 force-pushes and 2 prod deploys\. 2 worth a look would also have waited\./);
     assert.match(text, /1 routine command \(test runners, scripts\) would also ask under Claude Code's default sandbox setting\./);
     assert.match(text, /allowUnsandboxedCommands to false/);
     assert.match(text, /Get a yes\/no in Telegram before your agent runs them:\n {2}npm install -g @oked\/claude-code @oked\/codex && oked init && oked-codex init\nhttps:\/\/oked\.ai\n/);
@@ -244,7 +244,7 @@ describe("fixture transcripts", () => {
     assert.match(verbose, /A command would have paused when the tier is review or high_stakes\. warning and safe would have run\./);
     assert.match(verbose, /Claude Code is classified with the Bash sandbox not containing child processes/);
     assert.match(verbose, /Codex is classified the way the Codex hook classifies commands/);
-    assert.match(verbose, /OKed would have paused 9 of these commands, including 3 rm -rf \/ file delete, 2 force-pushes and 2 prod deploys\./);
+    assert.match(verbose, /7 high-stakes commands would have waited for your yes, including 3 rm -rf \/ file delete, 2 force-pushes and 2 prod deploys\. 2 worth a look would also have waited\./);
     assert.equal(verbose.split("The iPhone app is coming soon").length - 1, 1);
     assert.equal(verbose.split("Tiers come from").length - 1, 1);
   });
@@ -287,6 +287,91 @@ describe("fixture transcripts", () => {
     const root = mkdtempSync(join(tmpdir(), "oked-scan-empty-readme-"));
     const report = await scan({ root, explicitRoot: false, home: root, now: NOW });
     assert.equal(sample, formatReport(report));
+  });
+});
+
+describe("install command follows parsed Codex sessions", () => {
+  const claudeInstall = "npm install -g @oked/claude-code && oked init";
+  const claudeLine = `${JSON.stringify({
+    type: "assistant",
+    timestamp: "2026-10-30T12:00:00.000Z",
+    message: {
+      role: "assistant",
+      content: [{ type: "tool_use", id: "toolu_ls", name: "Bash", input: { command: "ls" } }],
+    },
+  })}\n`;
+
+  function withClaude(root: string): void {
+    const dir = join(root, ".claude", "projects", "-tmp-demo");
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, "11111111-1111-1111-1111-111111111111.jsonl"), claudeLine);
+  }
+
+  function scanned(root: string) {
+    return scan({ root, explicitRoot: false, home: root, now: NOW });
+  }
+
+  it("uses the Claude Code install when the Codex sessions directory is missing", async () => {
+    const root = mkdtempSync(join(tmpdir(), "oked-scan-no-codex-"));
+    withClaude(root);
+    const report = await scanned(root);
+    assert.equal(report.hosts["claude-code"].commands, 1);
+    assert.equal(report.hosts.codex.present, false);
+    assert.equal(report.hosts.codex.files, 0);
+    assert.equal(report.hosts.codex.commands, 0);
+    assert.equal(report.next, claudeInstall);
+    const text = formatReport(report);
+    assert.match(text, /no sessions at ~\/\.codex\/sessions/);
+    assert.match(text, / {2}npm install -g @oked\/claude-code && oked init\n/);
+    assert.equal(text.includes("@oked/codex"), false);
+    assert.equal(text.includes("oked-codex init"), false);
+  });
+
+  it("uses the Claude Code install when the Codex sessions directory is empty", async () => {
+    const root = mkdtempSync(join(tmpdir(), "oked-scan-empty-codex-"));
+    withClaude(root);
+    mkdirSync(join(root, ".codex", "sessions"), { recursive: true });
+    const report = await scanned(root);
+    assert.equal(report.hosts.codex.present, true);
+    assert.equal(report.hosts.codex.files, 0);
+    assert.equal(report.hosts.codex.commands, 0);
+    assert.equal(report.next, claudeInstall);
+    const text = formatReport(report);
+    assert.match(text, /no session files in ~\/\.codex\/sessions/);
+    assert.match(text, / {2}npm install -g @oked\/claude-code && oked init\n/);
+    assert.equal(text.includes("@oked/codex"), false);
+    assert.equal(text.includes("oked-codex init"), false);
+  });
+
+  it("uses the Claude Code install when the Codex sessions directory has only non-rollout files", async () => {
+    const root = mkdtempSync(join(tmpdir(), "oked-scan-history-codex-"));
+    withClaude(root);
+    const dir = join(root, ".codex", "sessions", "2026", "10", "30");
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(
+      join(dir, "history.jsonl"),
+      `${JSON.stringify({
+        timestamp: "2026-10-30T12:00:00.000Z",
+        type: "response_item",
+        payload: {
+          type: "function_call",
+          name: "shell_command",
+          arguments: JSON.stringify({ command: "rm -rf /" }),
+          call_id: "call_should_ignore",
+        },
+      })}\n`,
+    );
+    writeFileSync(join(dir, "notes.txt"), "not a session\n");
+    const report = await scanned(root);
+    assert.equal(report.hosts.codex.present, true);
+    assert.equal(report.hosts.codex.files, 0);
+    assert.equal(report.hosts.codex.commands, 0);
+    assert.equal(report.commands.some((command) => command.command.includes("rm -rf")), false);
+    assert.equal(report.next, claudeInstall);
+    const text = formatReport(report);
+    assert.match(text, /no session files in ~\/\.codex\/sessions/);
+    assert.equal(text.includes("oked-codex init"), false);
+    assert.equal(text.includes("@oked/codex"), false);
   });
 });
 
@@ -431,12 +516,12 @@ describe("cli", () => {
     assert.match(shown.stdout, /Tiers come from @oked\/sdk classify\(\)/);
     assert.match(shown.stdout, /Bash sandbox/);
     assert.match(shown.stdout, /Codex is classified the way the Codex hook/);
-    assert.match(shown.stdout, /OKed would have paused 9 of these commands, including 3 rm -rf \/ file delete, 2 force-pushes and 2 prod deploys\./);
+    assert.match(shown.stdout, /7 high-stakes commands would have waited for your yes, including 3 rm -rf \/ file delete, 2 force-pushes and 2 prod deploys\. 2 worth a look would also have waited\./);
     const plain = run(["--path", fixtureHome]);
     assert.equal(plain.status, 0, plain.stderr);
     assert.equal(plain.stdout.includes("Tiers come from"), false);
     assert.equal(plain.stdout.includes("not containing child processes"), false);
-    assert.match(plain.stdout, /OKed would have paused 9 of these commands/);
+    assert.match(plain.stdout, /7 high-stakes commands would have waited for your yes/);
     assert.match(plain.stdout, /1 routine command \(test runners, scripts\)/);
     const parsed = JSON.parse(run(["--path", fixtureHome, "--json"]).stdout) as {
       commands: { command: string; category: string; tier: string; tierLabel: string; routine: boolean }[];
@@ -505,7 +590,7 @@ describe("closing call to action", () => {
 
   function closing(commands: CommandRow[]): string {
     const text = formatReport(reportFor(commands));
-    const line = text.split("\n").find((entry) => entry.startsWith("OKed would have paused") || entry.startsWith("No risky"));
+    const line = text.split("\n").find((entry) => entry.includes("would have waited") || entry.startsWith("No risky"));
     assert.ok(line, text);
     return line;
   }
@@ -521,32 +606,39 @@ describe("closing call to action", () => {
     ];
     assert.equal(
       closing(commands),
-      "OKed would have paused 12 of these commands, including 4 rm -rf / file delete, 3 force-pushes and 2 prod deploys.",
+      "11 high-stakes commands would have waited for your yes, including 4 rm -rf / file delete, 3 force-pushes and 2 prod deploys. 1 worth a look would also have waited.",
     );
   });
 
   it("groups destructive SQL and uses the singular when there is one", () => {
     assert.equal(
       closing([row("sql_drop"), row("sql_truncate"), row("sql_delete_all_rows")]),
-      "OKed would have paused 3 of these commands, including 3 destructive SQL.",
+      "3 high-stakes commands would have waited for your yes, including 3 destructive SQL.",
     );
     assert.equal(
       closing([row("git_force_push")]),
-      "OKed would have paused 1 of these commands, including 1 force-push.",
+      "1 high-stakes command would have waited for your yes, including 1 force-push.",
     );
   });
 
   it("does not invent a category when only review commands paused", () => {
     assert.equal(
       closing([row("npm_test", "review"), row("http_post", "review")]),
-      "OKed would have paused 2 of these commands.",
+      "2 worth a look would have waited for your yes.",
+    );
+  });
+
+  it("does not name other commands in the high-stakes sentence", () => {
+    assert.equal(
+      closing([row("unknown_bash"), row("unknown_bash")]),
+      "2 high-stakes commands would have waited for your yes.",
     );
   });
 
   it("breaks ties by the plain phrase", () => {
     assert.equal(
       closing([row("file_delete"), row("file_delete"), row("git_force_push"), row("git_force_push")]),
-      "OKed would have paused 4 of these commands, including 2 force-pushes and 2 rm -rf / file delete.",
+      "4 high-stakes commands would have waited for your yes, including 2 force-pushes and 2 rm -rf / file delete.",
     );
   });
 
@@ -558,12 +650,19 @@ describe("closing call to action", () => {
     ];
     assert.equal(
       closing(commands),
-      "OKed would have paused 2 of these commands, including 1 rm -rf / file delete.",
+      "1 high-stakes command would have waited for your yes, including 1 rm -rf / file delete. 1 worth a look would also have waited.",
     );
     const text = formatReport(reportFor(commands));
     assert.match(text, /1 routine command \(test runners, scripts\) would also ask under Claude Code's default sandbox setting\./);
     assert.match(text, /allowUnsandboxedCommands to false/);
     assert.match(text, /Would have paused/);
+  });
+
+  it("does not add a closing count when only routine commands would pause", () => {
+    const text = formatReport(reportFor([row("npm_test", "review", true)]));
+    assert.equal(text.includes("would have waited"), false);
+    assert.equal(text.includes("OKed would have paused"), false);
+    assert.match(text, /1 routine command \(test runners, scripts\) would also ask/);
   });
 
   it("keeps the honest line when history exists and nothing would pause", () => {

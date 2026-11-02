@@ -207,7 +207,7 @@ export interface ScanReport {
   badLines: number;
   unreadableFiles: number;
   notes: string[];
-  /** Shell command that installs the host hook for the history that was found. */
+  /** Shell command that installs the host hook for history that was parsed. */
   next: string;
 }
 
@@ -232,6 +232,11 @@ function packageVersion(): string {
   return json.version ?? "0.0.0";
 }
 
+/**
+ * Install command for hosts that had a session file parsed.
+ * True means at least one transcript or rollout file was read.
+ * A directory that exists, but has no such file, is false.
+ */
 export function nextStep(hosts: { claude: boolean; codex: boolean }): string {
   if (hosts.claude && hosts.codex) {
     return "npm install -g @oked/claude-code @oked/codex && oked init && oked-codex init";
@@ -288,18 +293,17 @@ function countedPhrases(rows: CommandRow[], skipUnknown: boolean): string[] {
     .map((bucket) => `${bucket.count} ${bucket.count === 1 ? bucket.one : bucket.many}`);
 }
 
-/** The two or three most common high-stakes kinds, in plain words. */
-function namedHighStakes(commands: CommandRow[]): string[] {
-  const rows = commands.filter((row) => row.tier === "high_stakes");
-  return countedPhrases(rows, true).slice(0, NAMED_CATEGORIES);
-}
-
-function headlinePaused(report: ScanReport): number {
-  return report.commands.filter((row) => row.paused && !row.routine).length;
-}
-
 function routinePaused(report: ScanReport): number {
   return report.commands.filter((row) => row.paused && row.routine).length;
+}
+
+function highStakesRows(report: ScanReport): CommandRow[] {
+  return report.commands.filter((row) => row.tier === "high_stakes");
+}
+
+/** Worth a look, without test runners and scripts. Those have their own line. */
+function worthALookRows(report: ScanReport): CommandRow[] {
+  return report.commands.filter((row) => row.tier === "review" && !row.routine);
 }
 
 function historyFound(report: ScanReport): boolean {
@@ -307,15 +311,29 @@ function historyFound(report: ScanReport): boolean {
 }
 
 function closingLine(report: ScanReport): string | null {
-  const paused = headlinePaused(report);
-  if (paused === 0 && routinePaused(report) === 0) {
+  const highStakes = highStakesRows(report);
+  const worthALook = worthALookRows(report);
+  if (highStakes.length === 0 && worthALook.length === 0 && routinePaused(report) === 0) {
     return "No risky commands found in this history, and OKed would pause things like rm -rf, force-push and prod deploys.";
   }
-  if (paused === 0) return null;
-  const named = namedHighStakes(report.commands);
-  const lead = `OKed would have paused ${paused} of these commands`;
-  if (named.length === 0) return `${lead}.`;
-  return `${lead}, including ${englishList(named)}.`;
+  if (highStakes.length === 0 && worthALook.length === 0) return null;
+
+  const parts: string[] = [];
+  if (highStakes.length > 0) {
+    const noun = highStakes.length === 1 ? "command" : "commands";
+    const named = countedPhrases(highStakes, true).slice(0, NAMED_CATEGORIES);
+    let sentence = `${highStakes.length} high-stakes ${noun} would have waited for your yes`;
+    if (named.length > 0) sentence += `, including ${englishList(named)}`;
+    parts.push(`${sentence}.`);
+  }
+  if (worthALook.length > 0) {
+    parts.push(
+      highStakes.length > 0
+        ? `${worthALook.length} worth a look would also have waited.`
+        : `${worthALook.length} worth a look would have waited for your yes.`,
+    );
+  }
+  return parts.join(" ");
 }
 
 function tierBreakdown(report: ScanReport): string[] {
@@ -546,6 +564,7 @@ export async function scan(options: ScanOptions = {}): Promise<ScanReport> {
     badLines: collected.badLines,
     unreadableFiles: collected.unreadableFiles,
     notes: NOTES,
-    next: nextStep({ claude: claude.present, codex: codex.present }),
+    // An empty sessions directory, or one with only non-rollout files, is not history.
+    next: nextStep({ claude: claude.files > 0, codex: codex.files > 0 }),
   };
 }
