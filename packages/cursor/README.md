@@ -58,7 +58,7 @@ The hook uses the same four-tier classifier as `@oked/claude-code`. The matcher 
 | `Read`, `Grep`, `Glob`, `WebSearch` | the same name | Safe. No prompt. |
 | `WebFetch` | `WebFetch` | Warning. Allowed and logged. |
 | `Write`, `Edit`, `StrReplace` | `Write` or `Edit` | A project file is `warning`. A sensitive path (`/etc`, `~/.ssh`, shell rc, OKed config) is `review`. |
-| `Delete` | `rm` | A temp file is `warning`. Anything else is `high_stakes`. No path is `review`. |
+| `Delete` | `rm` | A temp file or a relative `node_modules` path is `warning`. A project source file is `high_stakes`. No path is `review`. |
 | `MCP:<tool>` or `MCP:<server>:<tool>` | `mcp__...` | `list_*` and `get_*` are safe. `create_*` and `send_*` are `review`. `delete_*` is `high_stakes`. |
 | `Task` | `Agent` | Starting a sub-agent is safe. Its own tool calls are gated on their own. |
 | anything else | the same name | Unknown tools wait for approval. |

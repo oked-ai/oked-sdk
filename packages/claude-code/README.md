@@ -51,9 +51,9 @@ The hook uses a four-tier classifier. Classification is effect-based: it detects
 
 A Bash command that matches none of those effect categories defaults to `safe`. Cloud CLI reads (`aws s3 ls`, `kubectl get`, `terraform plan`), `--help`, and dry runs are `safe`. Running a command is not, by itself, a reason to interrupt you. Unknown tools that are not Bash default to `review`. MCP tools named `delete_*`, `drop_*`, or `remove_*` are `high_stakes`.
 
-`bash -c`, `sh -c`, `powershell -Command`, `pwsh -c`, and `cmd /c` are classified by the command inside them. A broken `\"` on a recursive delete asks even when the text names `node_modules`, a build directory, or a temp folder. That quoting is how a cleanup became a drive-root delete on Windows.
+`bash -c`, `sh -c`, `powershell -Command`, `pwsh -c`, and `cmd /c` are classified by the command inside them. A parenthesis subshell, a brace group, a loop or `if` body, and a command substitution inside double quotes are classified by the inner command too. A broken `\"` on a recursive delete asks even when the text names `node_modules`, a build directory, or a temp folder. That quoting is how a cleanup became a drive-root delete on Windows.
 
-Deleting only a temp directory (`/tmp/foo`, `$env:TEMP\foo`, `%TEMP%\foo`) or a build output directory (`build`, `dist`, `.next`) stays `warning`. `rmdir` of an empty folder stays `warning`. `git clean -n` and `Format-Volume -WhatIf` stay `safe`.
+Deleting only a temp directory (`/tmp/foo`, `$env:TEMP\foo`, `%TEMP%\foo`), a build output directory (`build`, `dist`, `.next`), or a relative `node_modules` path (`node_modules`, `backend/node_modules`) stays `warning`. `rm -rf /abs/node_modules`, `rm -rf $X/node_modules`, and `rm -rf ../node_modules` still ask. `rmdir` of an empty folder stays `warning`. `git clean -n` and `Format-Volume -WhatIf` stay `safe`.
 
 ### Subagents, PowerShell, and commands the hook cannot see
 
