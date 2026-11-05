@@ -1378,3 +1378,20 @@ describe("production deploys", () => {
     assert.equal(classify("Bash", { command: "npx wrangler deploy" }), "high_stakes");
   });
 });
+
+describe("Bash: gh repo create and fork name the repo", () => {
+  it("create names the new repo and its visibility, not the folder's repo", () => {
+    const f = describeFields("Bash", { command: 'gh repo create acme/tool --private --description "x"' });
+    assert.equal(f!.Title, "Create repo acme/tool");
+    assert.equal(f!.Annotation, "private");
+  });
+
+  it("fork names the source and the organization", () => {
+    const f = describeFields("Bash", { command: "gh repo fork acme/tool --org other --clone=false" });
+    assert.equal(f!.Title, "Fork repo acme/tool to other");
+  });
+
+  it("create with no name makes no claim about the place", () => {
+    assert.equal(describeFields("Bash", { command: "gh repo create" })!.Title, "Create repo");
+  });
+});
