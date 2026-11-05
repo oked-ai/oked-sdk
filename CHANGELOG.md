@@ -8,6 +8,16 @@ Decisions are made in Telegram and on the [web dashboard](https://oked.ai/dashbo
 
 - Public docs no longer state a price. The receipt key URL is fixed at https://api.oked.ai and is not taken from the backend address. Local development may use loopback http.
 
+### @oked/sdk
+
+- A parenthesis subshell, a brace group, or `do`, `then`, or `if` no longer hides the command at the start of a stage. `(gh pr merge 5)`, `for x in a; do gh pr merge 5; done`, `(kill 123)`, and `(shutdown now)` are classified as the inner command. They are `high_stakes`. They were `safe`.
+- Double-quoted text that contains a command substitution is classified by that substitution. `echo "$(rm -rf /data)"` and `git commit -m "$(gh pr merge 5)"` are `high_stakes`. Text with no substitution stays text. A substitution inside single quotes stays text.
+- A single-quoted plain `sed` substitution is text. Words such as `npm publish` or `git push --force` inside it do not make the command `high_stakes`. The edit is `warning`. The `e` and `w` flags, double quotes, and a pipe into a shell keep the text.
+- `rm -rf node_modules` with a relative path is `warning`, including `backend/node_modules`. The next install makes that folder again, the same as build output. An absolute path, a variable, or `..` stays `high_stakes`.
+- `kill` of a PID the same subshell started and saved with `p=$!` is `warning`. A PID from elsewhere stays `high_stakes`.
+- `gh repo fork` cards name the source repo and the target org. `gh repo create` cards name the new repo and its visibility (`private`, `public`, or `internal`). A fork with no repo argument still names the folder's repo, because that is the repo it forks.
+- The Claude Code plugin bundle (`plugins/claude-code/scripts/oked-hook.mjs`) was rebuilt from this classifier.
+
 ## 0.6.26 - 2026-11-02
 
 ### Claude Code plugin
