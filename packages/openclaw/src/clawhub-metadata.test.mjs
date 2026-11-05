@@ -94,7 +94,7 @@ assert.ok(openclawReadme.includes("OKED_STRICT_FAIL_CLOSED=1"));
 assert.ok(openclawReadme.includes("2026.5.4"));
 assert.equal(openclawReadme.includes("2026.4.20"), false);
 assert.equal(/push to your phone|from your phone/i.test(openclawReadme), false);
-assert.ok(openclawReadme.includes("free during beta"));
+assert.equal(openclawReadme.includes("free during beta"), false);
 
 const rootReadme = readFileSync(join(repoRoot, "README.md"), "utf8");
 assert.ok(rootReadme.includes("openclaw plugins install clawhub:@oked/openclaw"));

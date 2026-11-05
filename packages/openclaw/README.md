@@ -3,7 +3,7 @@
 [![npm version](https://img.shields.io/npm/v/@oked/openclaw.svg)](https://www.npmjs.com/package/@oked/openclaw)
 [![License: Apache-2.0](https://img.shields.io/npm/l/@oked/openclaw.svg)](./LICENSE)
 
-OKed pauses risky OpenClaw actions, like `rm -rf`, force-push, destructive SQL, and production deploys, until you approve them in Telegram or on the [web dashboard](https://oked.ai/dashboard). Reads and other ordinary actions just run. OKed is free during beta, and every decision gets a signed receipt. The iPhone app is coming soon.
+OKed pauses risky OpenClaw actions, like `rm -rf`, force-push, destructive SQL, and production deploys, until you approve them in Telegram or on the [web dashboard](https://oked.ai/dashboard). Reads and other ordinary actions just run. Every decision gets a signed receipt. The iPhone app is coming soon.
 
 A `before_tool_call` hook runs for every tool the host reports (built-in or registered by a skill) and classifies it. Calls at `review` and `high_stakes` wait until you decide. A denial returns `{ block: true, blockReason }`.
 

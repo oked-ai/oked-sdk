@@ -52,7 +52,7 @@ Pass any of these to `new OKedClient(config)`. Constructor values win over envir
 | `strictFailClosed` | `boolean` | `false` | When true, an unreachable backend denies every tier. When false, it denies only `high_stakes`. |
 | `requireReceipt` | `boolean` | `true` | Deny an approval that arrives without a signed receipt. A receipt that is present but invalid always denies. Set `false` (env `OKED_REQUIRE_RECEIPT=0`) only for a backend that does not sign receipts. |
 | `receiptKeysUrl` | `string` | `https://api.oked.ai/.well-known/oked-receipt-keys.json` | Where to fetch a receipt key the SDK has not seen. https only, except loopback. |
-| `receiptKeys` | `ReceiptKey[]` | | Verify with exactly these keys and never fetch. For self-hosted backends and tests. |
+| `receiptKeys` | `ReceiptKey[]` | | Verify with exactly these keys and never fetch. For tests. |
 | `rulesCacheTtlMs` | `number` | `300000` | How long the on-disk rules cache stays fresh. Env `OKED_RULES_CACHE_TTL` is in seconds. |
 | `heartbeatIntervalMs` | `number` | `86400000` | Minimum gap between presence pings. Env `OKED_HEARTBEAT_INTERVAL` is in seconds. |
 | `client` | `string` | | Your integration's name and version, for example `my-agent@1.2.0`. Recorded on the receipt. |

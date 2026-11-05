@@ -33,10 +33,9 @@ long-poll error path answers `timeout` with no receipt). The PRD says a missing 
 
 **Keys: pinned, then cached, then a fixed URL.** The PRD says keys are fetched once,
 cached next to `~/.oked/config.json`, and new keys accepted only from the well-known URL
-over TLS. That URL is fixed to `https://api.oked.ai/...` (not derived from
-`OKED_BACKEND_URL`, so a lookalike backend cannot supply its own key), with
-`OKED_RECEIPT_KEYS_URL` / `receiptKeys` for self-hosting and loopback http for local
-development. `PINNED_RECEIPT_KEYS` holds the production key `oked-2026-10`.
+over TLS. The receipt key URL is fixed to `https://api.oked.ai` and is not derived from
+the backend address, so a lookalike backend cannot supply its own key. Local development
+may use loopback http. `PINNED_RECEIPT_KEYS` holds the production key `oked-2026-10`.
 
 **`source` and `client` are new request fields.** No client sent `metadata.source`
 before, so old rows say `"sdk"`. The integrations now send `source` (`claude-code`,
