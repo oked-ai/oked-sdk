@@ -103,14 +103,15 @@ function summarize(toolName: string, toolInput: Record<string, unknown>, ctx: De
 /**
  * "Merge PR #49 in o/r" says which PR, not what it does. Put the PR title after
  * the number: `Merge PR #49 "feat: OG image" in o/r`. A title that already
- * quotes something keeps it.
+ * quotes something keeps it. The name is short, so the title stays near 60
+ * characters. The card link opens the whole PR.
  */
 function namePr(r: Rendered, prTitle: string): Rendered {
   const num = r.title.match(/\bPR #(\d+)\b/)?.[1];
   // A subject made by `$(…)` or a variable is not known here.
   const name = prTitle.split("\n")[0].replace(new RegExp(`\\s*\\(#${num}\\)$`), "").trim();
   if (!num || !name || /[$`]/.test(name) || r.title.includes('"')) return r;
-  return { ...r, title: r.title.replace(`PR #${num}`, `PR #${num} "${truncate(name, 60)}"`) };
+  return { ...r, title: r.title.replace(`PR #${num}`, `PR #${num} "${truncate(name, 30)}"`) };
 }
 
 function summarizeTool(toolName: string, toolInput: Record<string, unknown>, ctx: DescribeContext): Rendered {

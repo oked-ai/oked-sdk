@@ -1290,7 +1290,7 @@ describe("git cards name the repo", () => {
 
   it("a merge with a commit subject names the PR in the title", () => {
     const f = at(`gh pr merge 49 --repo aml11/oked-static-web-site --squash --subject "feat: OG image without the beta pill (#49)" --body "x" 2>&1 | tail -3`);
-    assert.equal(f.Title, 'Merge PR #49 "feat: OG image without the beta pill" in aml11/oked-static-web-site');
+    assert.equal(f.Title, 'Merge PR #49 "feat: OG image without the be…" in aml11/oked-static-web-site');
     assert.equal(f.Annotation, "squash");
     assert.equal(at("gh pr merge 76 -s -t 'fix: x'", local).Title, 'Merge PR #76 "fix: x"');
     assert.equal(at('gh pr merge 76 --subject "$(git log -1 --format=%s)"', sdk).Title, "Merge PR #76 in oked-ai/oked-sdk");
@@ -1303,6 +1303,15 @@ describe("git cards name the repo", () => {
     assert.equal(named("gh pr merge 76 -t 'From the command'", "From GitHub").Title, 'Merge PR #76 "From the command" in oked-ai/oked-sdk');
     assert.equal(named("git branch -D old", "x").Title, "Delete local Git branch in oked-ai/oked-sdk");
     assert.equal(describeOne("Bash", { command: "gh pr merge 76" }, { cwd: sdk, prTitle: "Fix" }), 'Merge PR #76 "Fix" in oked-ai/oked-sdk');
+  });
+
+  it("a long PR title stays short on the card", () => {
+    const fields = describeFields("Bash", { command: "gh pr merge 134 --squash" }, {
+      cwd: sdk,
+      prTitle: "Approval review 2026-11-01T1316: hidden commands, sed text, and repo cards",
+    })!;
+    assert.equal(fields.Title, 'Merge PR #134 "Approval review 2026-11-01T13…" in oked-ai/oked-sdk');
+    assert.ok(fields.Title.length <= 70);
   });
 
   it("a command of several steps has no footnote", () => {
