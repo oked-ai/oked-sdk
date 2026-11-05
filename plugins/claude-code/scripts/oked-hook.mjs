@@ -406,7 +406,7 @@ function namePr(r, prTitle) {
   const num = r.title.match(/\bPR #(\d+)\b/)?.[1];
   const name = prTitle.split("\n")[0].replace(new RegExp(`\\s*\\(#${num}\\)$`), "").trim();
   if (!num || !name || /[$`]/.test(name) || r.title.includes('"')) return r;
-  return { ...r, title: r.title.replace(`PR #${num}`, `PR #${num} "${truncate(name, 60)}"`) };
+  return { ...r, title: r.title.replace(`PR #${num}`, `PR #${num} "${truncate(name, 30)}"`) };
 }
 __name(namePr, "namePr");
 function summarizeTool(toolName, toolInput, ctx) {

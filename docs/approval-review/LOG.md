@@ -3,6 +3,34 @@
 Every change the approval review loop made to a card's tier, text or layout, newest first.
 Built from `changes.jsonl` by `node scripts/approval-review/record.mjs log`. Do not edit by hand.
 
+## 2026-11-05 · text · `Bash`
+
+**Why:** The title had 96 characters. The rubric limit is about 60. The PR name now has 30 characters or fewer, and the title has 66. The card link opens the whole PR. The tier stays high stakes. Two cards timed out, with no deny. The person merged PR 134 later, so the timeouts are not about the tier.
+
+| | Before | After |
+|---|---|---|
+| Tier | 🔴 high stakes (Face ID) | 🔴 high stakes (Face ID) |
+| Title | Merge PR #134 "Approval review 2026-11-01T1316: hidden commands, sed text,…" in oked-ai/oked-sdk | Merge PR #134 "Approval review 2026-11-01T13…" in oked-ai/oked-sdk |
+| Annotation | squash, deletes branch | squash, deletes branch |
+| Body | gh pr merge 134 --repo oked-ai/oked-sdk --squash --delete-branch 2>&1 \| grep -v "already used by worktree" \| tail -3 | gh pr merge 134 --repo oked-ai/oked-sdk --squash --delete-branch 2>&1 \| grep -v "already used by worktree" \| tail -3 |
+| Kind | git_pr_merge | git_pr_merge |
+
+Corpus: `2026-11-05-pr-merge-long-title` · PR: https://github.com/oked-ai/oked-sdk/pull/140
+
+## 2026-11-05 · text · `Bash`
+
+**Why:** The title had 95 characters. The rubric limit is about 60. The PR name now has 30 characters or fewer, and the title has 65. The card link opens the whole PR. The tier stays review. The person approved this card in 10 seconds.
+
+| | Before | After |
+|---|---|---|
+| Tier | 🔵 review (asks you) | 🔵 review (asks you) |
+| Title | Edit PR #134 "Approval review 2026-11-01T1316: hidden commands, sed text,…" in oked-ai/oked-sdk | Edit PR #134 "Approval review 2026-11-01T13…" in oked-ai/oked-sdk |
+| Subline | Also: Run command | · |
+| Body | gh pr edit 134 --repo oked-ai/oked-sdk --body-file $SP/pr.md >/dev/null<br>node scripts/approval-review/gate.mjs --fetched $SP/fetched.json 2>&1 \| sed -n '/^GATE/,$p' | gh pr edit 134 --repo oked-ai/oked-sdk --body-file $SP/pr.md >/dev/null |
+| Kind | git_pr_write | git_pr_write |
+
+Corpus: `2026-11-05-pr-merge-long-title` · PR: https://github.com/oked-ai/oked-sdk/pull/140
+
 ## 2026-11-01 · tier · `Bash`
 
 **Why:** A risky step in double-quoted text was safe, so no card showed. The classifier blanked the text of echo and git arguments, also when the text had a command substitution that the shell runs. Examples: echo "$(rm -rf /data)" and echo "$(gh pr merge 5)". Now the classifier reads each substitution as a command. Text with no substitution stays text.
