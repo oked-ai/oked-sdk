@@ -15,7 +15,7 @@ Built from `changes.jsonl` by `node scripts/approval-review/record.mjs log`. Do 
 | Body | gh pr merge 134 --repo oked-ai/oked-sdk --squash --delete-branch 2>&1 \| grep -v "already used by worktree" \| tail -3 | gh pr merge 134 --repo oked-ai/oked-sdk --squash --delete-branch 2>&1 \| grep -v "already used by worktree" \| tail -3 |
 | Kind | git_pr_merge | git_pr_merge |
 
-Corpus: `2026-11-05-pr-merge-long-title`
+Corpus: `2026-11-05-pr-merge-long-title` · PR: https://github.com/oked-ai/oked-sdk/pull/140
 
 ## 2026-11-05 · text · `Bash`
 
@@ -29,7 +29,7 @@ Corpus: `2026-11-05-pr-merge-long-title`
 | Body | gh pr edit 134 --repo oked-ai/oked-sdk --body-file $SP/pr.md >/dev/null<br>node scripts/approval-review/gate.mjs --fetched $SP/fetched.json 2>&1 \| sed -n '/^GATE/,$p' | gh pr edit 134 --repo oked-ai/oked-sdk --body-file $SP/pr.md >/dev/null |
 | Kind | git_pr_write | git_pr_write |
 
-Corpus: `2026-11-05-pr-merge-long-title`
+Corpus: `2026-11-05-pr-merge-long-title` · PR: https://github.com/oked-ai/oked-sdk/pull/140
 
 ## 2026-11-01 · tier · `Bash`
 
