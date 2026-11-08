@@ -3,6 +3,19 @@
 Every change the approval review loop made to a card's tier, text or layout, newest first.
 Built from `changes.jsonl` by `node scripts/approval-review/record.mjs log`. Do not edit by hand.
 
+## 2026-11-08 · tier · `Bash: git branch -d`
+
+**Why:** The classifier marked git branch -d as safe. A local branch delete is a reversible local change, so the rubric tier is warning. An OKed rule set this card to warning, and the classifier now agrees. Warning shows no card, so this adds no approval fatigue. The person approved the card by the rule. There were no denies. git branch -D stays high stakes.
+
+| | Before | After |
+|---|---|---|
+| Tier | ⚪ safe (no card) | 🟡 warning (logged, no card) |
+| Title | Delete local Git branch in oked-ai/oked-sdk | Delete local Git branch in oked-ai/oked-sdk |
+| Target | approval-review/2026-11-08T0441 | approval-review/2026-11-08T0441 |
+| Kind | git_branch_delete | git_branch_delete |
+
+Corpus: `2026-11-08-worktree-remove-then-branch-d` · PR: https://github.com/oked-ai/oked-sdk/pull/142
+
 ## 2026-11-05 · text · `Bash`
 
 **Why:** The title had 96 characters. The rubric limit is about 60. The PR name now has 30 characters or fewer, and the title has 66. The card link opens the whole PR. The tier stays high stakes. Two cards timed out, with no deny. The person merged PR 134 later, so the timeouts are not about the tier.
