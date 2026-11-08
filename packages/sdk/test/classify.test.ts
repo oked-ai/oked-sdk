@@ -226,6 +226,27 @@ describe("mv vs cp — reversible local mutation → warning", () => {
   });
 });
 
+describe("git branch delete: -d → warning, -D → high_stakes", () => {
+  it("git branch -d → warning (reversible local change)", () => {
+    assert.equal(bash("git branch -d approval-review/2026-11-08T0441"), "warning");
+  });
+
+  it("git worktree remove && git branch -d → warning", () => {
+    assert.equal(
+      bash("cd /repo && git worktree remove /tmp/wt/sdk && git branch -d approval-review/x && echo CLEAN"),
+      "warning",
+    );
+  });
+
+  it("git -C repo branch -d → warning", () => {
+    assert.equal(bash("git -C /repo branch -d feature/x"), "warning");
+  });
+
+  it("git branch -D → high_stakes", () => {
+    assert.equal(bash("git branch -D feature/x"), "high_stakes");
+  });
+});
+
 describe("git push: plain → warning, force → high_stakes", () => {
   it("git push → warning", () => {
     assert.equal(bash("git push"), "warning");
