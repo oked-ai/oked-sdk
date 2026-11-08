@@ -14,7 +14,7 @@ Built from `changes.jsonl` by `node scripts/approval-review/record.mjs log`. Do 
 | Target | approval-review/2026-11-08T0441 | approval-review/2026-11-08T0441 |
 | Kind | git_branch_delete | git_branch_delete |
 
-Corpus: `2026-11-08-worktree-remove-then-branch-d`
+Corpus: `2026-11-08-worktree-remove-then-branch-d` · PR: https://github.com/oked-ai/oked-sdk/pull/142
 
 ## 2026-11-05 · text · `Bash`
 
