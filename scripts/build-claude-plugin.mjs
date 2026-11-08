@@ -48,6 +48,23 @@ await build({
     __OKED_PLUGIN_VERSION__: JSON.stringify(pluginVersion),
     __OKED_CLIENT_ID__: JSON.stringify(`oked-plugin@${pluginVersion}`),
   },
+  plugins: [
+    {
+      name: "oked-plugin-stubs",
+      setup(b) {
+        // The plugin must not read a machine API key or run gh with a saved login.
+        b.onResolve({ filter: /(?:^|\/)machine-config\.js$/ }, () => ({
+          path: join(ROOT, "plugins", "claude-code", "src", "machine-config-stub.ts"),
+        }));
+        b.onResolve({ filter: /(?:^|\/)persisted\.js$/ }, () => ({
+          path: join(ROOT, "plugins", "claude-code", "src", "persisted-stub.ts"),
+        }));
+        b.onResolve({ filter: /(?:^|\/)pr-title-gh\.js$/ }, () => ({
+          path: join(ROOT, "plugins", "claude-code", "src", "pr-title-gh-stub.ts"),
+        }));
+      },
+    },
+  ],
   banner: {
     js: [
       "#!/usr/bin/env node",

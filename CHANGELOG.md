@@ -8,6 +8,14 @@ Decisions are made in Telegram and on the [web dashboard](https://oked.ai/dashbo
 
 - Public docs no longer state a price. The receipt key URL is fixed at https://api.oked.ai and is not taken from the backend address. Local development may use loopback http.
 
+### Claude Code plugin
+
+- The plugin PreToolUse hook no longer approves a tool call and never changes tool input. A denial, a timeout, or too many waiting approvals returns `deny`. An unpaired device returns `ask`. A safe action, a warning, a degraded pass, and an action a person already approved return no permission decision, so Claude Code's normal permission flow applies. The settings hook from `@oked/claude-code` is unchanged and can still return allow.
+- The plugin reads the API key only from the plugin API key field (`sensitive: true`). It does not read an API key from the environment or from a file on this machine. If you paired an older plugin version, or you paired with `oked init`, paste that key into `/plugin configure oked@oked`, or run `/oked:pair` again.
+- An optional GitHub token field, also sensitive, is used only to read a pull request title from api.github.com. When it is empty, the plugin does not contact GitHub and does not use a saved `gh` login.
+- `documentationUrl` and `privacyPolicyUrl` stay in `plugin.json`. The plugins reference lists both as directory listing fields, and the directory review says to keep a listing field such as `privacyPolicyUrl`. `icon` is unchanged.
+- The hook file no longer contains a download-and-run command. Detection of a fetch piped into a shell is still in the classifier. The command text is not stored in the plugin file.
+
 ### @oked/sdk
 
 - A parenthesis subshell, a brace group, or `do`, `then`, or `if` no longer hides the command at the start of a stage. `(gh pr merge 5)`, `for x in a; do gh pr merge 5; done`, `(kill 123)`, and `(shutdown now)` are classified as the inner command. They are `high_stakes`. They were `safe`.
