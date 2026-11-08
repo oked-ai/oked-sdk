@@ -49,7 +49,7 @@ mkdirSync(project, { recursive: true });
 mkdirSync(bin, { recursive: true });
 writeFileSync(join(bin, "oked-hook"), "");
 
-function runBundle(args, input, env = {}) {
+function runBundle(args, input, env = {}, raw = false) {
   return new Promise((resolve, reject) => {
     const child = spawn(process.execPath, [BUNDLE, ...args], {
       cwd: project,
@@ -68,8 +68,15 @@ function runBundle(args, input, env = {}) {
     child.on("error", reject);
     child.on("close", (code) => resolve({ code, out, err }));
     if (input === undefined) child.stdin.end();
+    else if (raw) child.stdin.end(String(input));
     else child.stdin.end(JSON.stringify({ session_id: "s1", cwd: project, hook_event_name: "PreToolUse", ...input }));
   });
+}
+
+function decisionOf(out) {
+  const text = out.trim();
+  if (!text) return undefined;
+  return JSON.parse(text).hookSpecificOutput;
 }
 
 function approvePosts() {
@@ -134,7 +141,8 @@ try {
     );
     const before = approvePosts().length;
     const stoodDown = await runBundle([], FORCE, { CLAUDE_PLUGIN_OPTION_APIKEY: "plugin-key" });
-    assert.equal(JSON.parse(stoodDown.out).hookSpecificOutput.permissionDecision, "allow");
+    assert.equal(stoodDown.out.trim(), "", "standing down must not approve the call");
+    assert.equal(decisionOf(stoodDown.out), undefined);
     assert.match(stoodDown.err, /standing down/);
     assert.equal(approvePosts().length, before, "settings hook is the only gate");
     const mcp = await runBundle([], REVIEW, { OKED_API_KEY: "", CLAUDE_PLUGIN_OPTION_APIKEY: "" });
@@ -161,9 +169,84 @@ try {
     assert.equal(approvePosts().at(-1).authorization, "Bearer plugin-key");
     passed++;
   }
+
+  {
+    const source = readFileSync(BUNDLE, "utf8");
+    assert.doesNotMatch(source, /OKED_API_KEY/);
+    assert.doesNotMatch(source, /permissionDecision:\s*"allow"/);
+    assert.doesNotMatch(source, /updatedInput/);
+    assert.doesNotMatch(source, /"pr",\s*"view"/);
+    assert.doesNotMatch(source, /GH_PROMPT_DISABLED/);
+    assert.doesNotMatch(source, /curl[^\n]{0,120}\|[^\n]{0,40}\b(bash|sh|zsh)\b/);
+    assert.doesNotMatch(source, /wget[^\n]{0,120}\|[^\n]{0,40}\b(bash|sh|zsh)\b/);
+    const pipeSource = readFileSync(join(ROOT, "packages", "sdk", "src", "pipe-shell.ts"), "utf8");
+    assert.doesNotMatch(pipeSource, /\bcurl\b/);
+    assert.doesNotMatch(pipeSource, /\bwget\b/);
+    assert.doesNotMatch(pipeSource, /\bbash\b/);
+    passed++;
+  }
+
+  {
+    const before = approvePosts().length;
+    const { code, out } = await runBundle([], { tool_name: "Bash", tool_input: { command: "echo hi" } }, {
+      OKED_API_KEY: "env-key-ignored",
+      CLAUDE_PLUGIN_OPTION_APIKEY: "plugin-key",
+    });
+    assert.equal(code, 0);
+    assert.equal(out.trim(), "", "a safe action does not approve the tool call");
+    assert.equal(approvePosts().length, before);
+    passed++;
+  }
+
+  {
+    reply = { status: 200, body: JSON.stringify({ approval_id: "appr-ok", decision: "approved", status: "approved" }) };
+    const before = approvePosts().length;
+    const { code, out, err } = await runBundle([], FORCE, { CLAUDE_PLUGIN_OPTION_APIKEY: "plugin-key" });
+    assert.equal(code, 0);
+    assert.equal(out.trim(), "", "an approval defers to the normal permission flow");
+    assert.match(err, /Approved/);
+    assert.equal(approvePosts().length, before + 1);
+    reply = { status: 200, body: JSON.stringify({ approval_id: "appr-wait", decision: "timeout", status: "timeout" }) };
+    const timed = await runBundle([], FORCE, { CLAUDE_PLUGIN_OPTION_APIKEY: "plugin-key" });
+    assert.equal(decisionOf(timed.out).permissionDecision, "deny");
+    assert.match(decisionOf(timed.out).permissionDecisionReason, /timed out/);
+    reply = { status: 429, body: JSON.stringify({ message: "too many" }) };
+    const pending = await runBundle([], REVIEW, { CLAUDE_PLUGIN_OPTION_APIKEY: "plugin-key" });
+    assert.equal(decisionOf(pending.out).permissionDecision, "deny");
+    assert.match(decisionOf(pending.out).permissionDecisionReason, /too many approvals are waiting/);
+    reply = { status: 200, body: JSON.stringify({ approval_id: "appr-1", decision: "denied", status: "denied" }) };
+    passed++;
+  }
+
+  {
+    reply = { status: 500, body: JSON.stringify({ message: "unavailable" }) };
+    const { out, err } = await runBundle([], REVIEW, { CLAUDE_PLUGIN_OPTION_APIKEY: "plugin-key" });
+    assert.equal(out.trim(), "", "a degraded pass does not approve the tool call");
+    assert.match(err, /unreachable/);
+    const high = await runBundle([], FORCE, { CLAUDE_PLUGIN_OPTION_APIKEY: "plugin-key" });
+    assert.equal(decisionOf(high.out).permissionDecision, "deny");
+    assert.match(decisionOf(high.out).permissionDecisionReason, /high-stakes denied/);
+    reply = { status: 200, body: JSON.stringify({ approval_id: "appr-1", decision: "denied", status: "denied" }) };
+    passed++;
+  }
+
+  {
+    const before = approvePosts().length;
+    mkdirSync(join(home, ".oked"), { recursive: true });
+    writeFileSync(join(home, ".oked", "config.json"), JSON.stringify({ apiKey: "file-key" }));
+    const fromEnv = await runBundle([], FORCE, { OKED_API_KEY: "env-key", CLAUDE_PLUGIN_OPTION_APIKEY: "" });
+    assert.equal(decisionOf(fromEnv.out).permissionDecision, "ask");
+    const fromFile = await runBundle([], FORCE, { CLAUDE_PLUGIN_OPTION_APIKEY: "" });
+    assert.equal(decisionOf(fromFile.out).permissionDecision, "ask");
+    assert.equal(approvePosts().length, before, "a machine key is not sent");
+    const raw = await runBundle([], "not json", {}, true);
+    assert.equal(raw.code, 0);
+    assert.equal(raw.out.trim(), "");
+    passed++;
+  }
 } finally {
   server.close();
   rmSync(root, { recursive: true, force: true });
 }
 
-console.log(`ok - claude code plugin bundle: ${passed}/6 passed`);
+console.log(`ok - claude code plugin bundle: ${passed} passed`);

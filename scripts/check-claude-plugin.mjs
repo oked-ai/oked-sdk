@@ -38,6 +38,15 @@ if (plugin.author?.name !== "OKed" || plugin.author?.email !== "contact@oked.ai"
 if (plugin.userConfig?.apiKey?.sensitive !== true) {
   fail("plugin.json userConfig.apiKey must be sensitive");
 }
+if (plugin.userConfig?.githubToken?.sensitive !== true) {
+  fail("plugin.json userConfig.githubToken must be sensitive");
+}
+const listingFields = ["documentationUrl", "privacyPolicyUrl", "icon"];
+for (const field of listingFields) {
+  if (typeof plugin[field] !== "string" || !plugin[field]) fail(`plugin.json ${field} must stay set`);
+}
+if (plugin.documentationUrl !== "https://oked.ai/docs") fail("plugin.json documentationUrl is wrong");
+if (!plugin.icon.endsWith("icon.png")) fail("plugin.json icon path is wrong");
 if (plugin.privacyPolicyUrl !== "https://oked.ai/privacy") {
   fail("plugin.json privacyPolicyUrl must be https://oked.ai/privacy");
 }
@@ -67,7 +76,12 @@ if (!/tool name/i.test(readme) || !/command text|tool input/i.test(readme) || !/
   fail("plugin README must say that tool and command text is sent to the OKed service");
 }
 const requiredReadme = [
-  ["OKED_API_KEY", "plugin README must name the OKED_API_KEY fallback"],
+  ["CLAUDE_PLUGIN_OPTION_APIKEY", "plugin README must name the plugin API key field"],
+  ["CLAUDE_PLUGIN_OPTION_GITHUBTOKEN", "plugin README must name the plugin GitHub token field"],
+  ["only from the plugin API key field", "plugin README must say the API key comes only from the plugin field"],
+  ["normal permission flow", "plugin README must say an approval uses the normal permission flow"],
+  ["paste that API key", "plugin README must tell existing users to paste the API key"],
+  ["https://api.github.com", "plugin README must disclose the pull request title request"],
   ["https://api.oked.ai/api/v1/approve", "plugin README must name the approval request"],
   ["https://api.oked.ai/api/v1/heartbeat", "plugin README must disclose the heartbeat"],
   ["https://api.oked.ai/api/v1/rules", "plugin README must disclose the rules fetch"],
@@ -87,7 +101,7 @@ for (const [needle, message] of requiredReadme) {
   if (!readme.includes(needle)) fail(message);
 }
 
-const banned = ["OKED_BACKEND_URL", "backendUrl", "\u2014"];
+const banned = ["OKED_BACKEND_URL", "backendUrl", "OKED_API_KEY", "\u2014"];
 const publicFiles = [
   join(PLUGIN, "README.md"),
   join(PLUGIN, "skills", "pair", "SKILL.md"),
@@ -106,6 +120,24 @@ const committed = readFileSync(BUNDLE);
 if (committed.length > MAX_BYTES) fail(`bundle is ${committed.length} bytes, limit is ${MAX_BYTES}`);
 if (!committed.includes(`oked-plugin@${pkgVersion}`)) {
   fail(`bundle is missing oked-plugin@${pkgVersion}. Run node scripts/build-claude-plugin.mjs`);
+}
+const bundleText = committed.toString("utf8");
+const bundleBanned = [
+  ["OKED_API_KEY", "bundle must not read OKED_API_KEY"],
+  ["permissionDecision: \"allow\"", "bundle must not return permissionDecision allow"],
+  ["permissionDecision:\"allow\"", "bundle must not return permissionDecision allow"],
+  ["updatedInput", "bundle must not change tool input"],
+  ["\"pr\", \"view\"", "bundle must not run gh pr view"],
+  ["GH_PROMPT_DISABLED", "bundle must not pass the environment to gh"],
+];
+for (const [needle, message] of bundleBanned) {
+  if (bundleText.includes(needle)) fail(message);
+}
+if (/curl[^\n]{0,120}\|[^\n]{0,40}\b(bash|sh|zsh)\b/.test(bundleText)) {
+  fail("bundle contains a download-and-run command");
+}
+if (/wget[^\n]{0,120}\|[^\n]{0,40}\b(bash|sh|zsh)\b/.test(bundleText)) {
+  fail("bundle contains a download-and-run command");
 }
 
 const tmp = mkdtempSync(join(tmpdir(), "oked-plugin-bundle-"));

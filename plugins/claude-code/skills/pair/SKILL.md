@@ -20,6 +20,6 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/oked-hook.mjs" pair --no-browser
 
 4. If the script prints an API key because it could not store it, tell the user to copy that key into the OKed plugin API key field. They can open it with `/plugin configure oked@oked`. Do not repeat the full key in your reply.
 
-5. While the plugin API key field, the OKED_API_KEY environment variable, and the key saved by `oked init` are all empty, risky actions return `ask`, so Claude Code's own prompt can decide. That is the safe unpaired behavior.
+5. The plugin reads the API key only from that field. If the user paired an older plugin version, or paired with `oked init`, tell them to paste that key into `/plugin configure oked@oked`, or to run `/oked:pair` again. While the field is empty, risky actions return `ask`, so Claude Code's own prompt can decide. That is the safe unpaired behavior. The hook does not approve a tool call. An approved action returns no permission decision, and Claude Code's normal permission flow applies.
 
 If `oked init` already installed an `oked-hook` settings entry, that entry stands down while this plugin's hook file is on disk, and this plugin gates. One action is asked once. `oked uninstall` removes the project settings entry.

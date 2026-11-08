@@ -2,6 +2,7 @@ import path from "path";
 import os from "os";
 import type { RiskTier } from "./types.js";
 import { findSqlInCommand } from "./describe.js";
+import { pipesFetchToShell } from "./pipe-shell.js";
 import { TIER_ORDER } from "./degraded.js";
 
 // Classification is EFFECT-BASED, not command-name-based. We don't keep an
@@ -218,10 +219,8 @@ const HIGH_STAKES_COMMANDS = [
   // grab a flag belonging to a LATER command (e.g. `curl -o … && unzip … -d dir`
   // false-matched the curl `-d` POST-body pattern on unzip's destination flag).
   // They belong to a single curl invocation, so they're scanned PER-STAGE in
-  // OUTWARD_CURL_STAGE below. Only the download-and-execute patterns
-  // (`curl|wget … | sh`) genuinely span a pipe and stay in this full scan.
-  /\bwget\s+.*\|\s*(bash|sh|zsh)\b/,
-  /\bcurl\s+.*\|\s*(bash|sh|zsh)\b/,
+  // OUTWARD_CURL_STAGE below. A fetch piped into a shell spans a pipe, so
+  // pipesFetchToShell() runs on the full command before this list.
   NPM_PUBLISH_RE,
   /\bnpm\s+unpublish\b/,
   NPX_DEPLOY_RE,
@@ -1583,9 +1582,9 @@ function isInfraVolumeDeleteCurl(command: string): boolean {
 // A curl/wget whose target host is loopback (localhost, 127.0.0.0/8, 0.0.0.0,
 // ::1). A request to a server on this machine is a LOCAL action, not an outward
 // one, so a mutating method/body (POST/PUT/DELETE, -d, …) to it doesn't warrant
-// a prompt — it downgrades to `warning`. (Download-and-execute, `curl … | sh`,
-// is matched earlier on the FULL command and stays high_stakes regardless of
-// host, so this only affects the request-method/body patterns.)
+// a prompt — it downgrades to `warning`. A fetch piped into a shell is matched
+// earlier on the FULL command and stays high_stakes regardless of host, so
+// this only affects the request-method/body patterns.
 function isLoopbackAuthority(authority: string): boolean {
   const host = authority.replace(/^\[/, "").replace(/\]$/, "").toLowerCase();
   return host === "localhost" || host === "0.0.0.0" || host === "::1" ||
@@ -1679,12 +1678,12 @@ function classifyBashCommand(command: string, ephemeralVars: Set<string> = new S
   const stripped = blankTextCommandArgs(stripCurlDataBodies(stripInlineScriptBodies(stripCodeHeredocBodies(intact)))).trim();
 
   // High-stakes scan on the FULL (body-stripped) command, before any splitting.
-  // These patterns use \b and several intentionally span an operator (e.g.
-  // `curl … | bash`, `wget … | sh` — download-and-execute), so they have to be
-  // matched against the whole string. Most-restrictive-wins: a high-stakes match
-  // anywhere in a compound command takes the whole command to high_stakes. (File
-  // deletion is NOT here — it's per-stage below so the ephemeral-temp downgrade
-  // can run.)
+  // These patterns use \b and a fetch piped into a shell spans an operator, so
+  // they have to be matched against the whole string. Most-restrictive-wins: a
+  // high-stakes match anywhere in a compound command takes the whole command
+  // to high_stakes. (File deletion is NOT here — it's per-stage below so the
+  // ephemeral-temp downgrade can run.)
+  if (pipesFetchToShell(stripped, "spaced")) return "high_stakes";
   for (const pattern of HIGH_STAKES_COMMANDS) {
     if (pattern === NPX_DEPLOY_RE && (isLocalPrismaDeploy(stripped) ||
       (ephemeralVars.has(LOCAL_DB) && /\bprisma\s+migrate\s+deploy\b/.test(stripped)))) continue;
@@ -1695,7 +1694,7 @@ function classifyBashCommand(command: string, ephemeralVars: Set<string> = new S
 
   // Text piped into a shell (`echo '…' | sh`, `printf … | bash`) runs as code
   // that no stage shows on its own. At least `review`; a known high-stakes
-  // pattern above (curl | sh) already returned.
+  // pattern above (a fetch piped into a shell) already returned.
   const pipesToShell = splitTopLevel(stripped, { pipes: false }).some((step) => {
     const parts = splitTopLevel(step);
     return parts.length > 1 && parts.slice(1).some((p) => /^(?:sudo\s+)?(?:ba|z|k|da)?sh\b(?!\s+-n\b)/.test(p));

@@ -1,31 +1,24 @@
 /**
  * Claude Code plugin hook. Bundled to scripts/oked-hook.mjs.
  * `node oked-hook.mjs` is the PreToolUse hook. `node oked-hook.mjs pair` pairs.
+ *
+ * PreToolUse output is deny, ask, or no decision. No decision leaves the call
+ * to Claude Code's normal permission flow (exit 0 and no permissionDecision).
+ * This hook never returns permissionDecision "allow" and never sets updatedInput.
  */
 import { spawn } from "child_process";
-import {
-  decide,
-  errorInfo,
-  logDecision,
-  maskKey,
-  pairDevice,
-  pluginHookYieldsToSettingsHook,
-  writeOkedConfig,
-} from "@oked/hook-core";
-import { OKED_CONFIG_PATH, type HookInput, type HookOutput } from "@oked/sdk";
+import { decide, errorInfo, logDecision, maskKey, pairDevice, pluginHookYieldsToSettingsHook } from "@oked/hook-core";
+import type { HookInput } from "@oked/sdk";
 
 const PLUGIN_VERSION = __OKED_PLUGIN_VERSION__;
 const CLIENT_ID = __OKED_CLIENT_ID__;
 const DEFAULT_BACKEND_URL = process.env.OKED_BACKEND_URL || "https://api.oked.ai";
 
-function makeOutput(decision: "allow" | "deny" | "ask", reason?: string): HookOutput {
-  return {
-    hookSpecificOutput: {
-      hookEventName: "PreToolUse",
-      permissionDecision: decision,
-      ...(reason ? { permissionDecisionReason: reason } : {}),
-    },
-  };
+function pluginOption(name: "CLAUDE_PLUGIN_OPTION_APIKEY" | "CLAUDE_PLUGIN_OPTION_GITHUBTOKEN"): string | undefined {
+  const raw = process.env[name];
+  if (typeof raw !== "string") return undefined;
+  const trimmed = raw.trim();
+  return trimmed ? trimmed : undefined;
 }
 
 function errorText(err: unknown): string {
@@ -33,12 +26,40 @@ function errorText(err: unknown): string {
   return `${info.name}: ${info.message}`;
 }
 
-/** Plugin configuration wins. An empty value leaves the usual key lookup in place. */
-function pluginApiKey(): string | undefined {
-  const raw = process.env.CLAUDE_PLUGIN_OPTION_APIKEY;
-  if (typeof raw !== "string") return undefined;
-  const trimmed = raw.trim();
-  return trimmed ? trimmed : undefined;
+/**
+ * Deny or ask. "pass" writes no permissionDecision, so Claude Code's normal
+ * permission flow applies. That is the path for a safe call and for a call
+ * a person already approved. It is not an approval of the tool call.
+ */
+function writeDecision(decision: "pass" | "deny" | "ask", reason?: string): void {
+  if (decision === "deny") {
+    process.stdout.write(
+      JSON.stringify({
+        hookSpecificOutput: {
+          hookEventName: "PreToolUse",
+          permissionDecision: "deny",
+          permissionDecisionReason: reason || "OKed denied this action.",
+        },
+      }),
+    );
+    return;
+  }
+  if (decision === "ask") {
+    process.stdout.write(
+      JSON.stringify({
+        hookSpecificOutput: {
+          hookEventName: "PreToolUse",
+          permissionDecision: "ask",
+          permissionDecisionReason: reason || "OKed needs a decision in Claude Code.",
+        },
+      }),
+    );
+    return;
+  }
+  // No permissionDecision. Exit 0 with no decision leaves the call to Claude
+  // Code's normal permission flow. decide() already logged an approval or a
+  // degraded pass on stderr. Do not write JSON here.
+  void reason;
 }
 
 async function readStdin(): Promise<string> {
@@ -59,7 +80,7 @@ async function runHook(): Promise<void> {
   try {
     input = JSON.parse(rawInput) as HookInput;
   } catch {
-    process.stdout.write(JSON.stringify(makeOutput("allow")));
+    writeDecision("pass");
     return;
   }
 
@@ -69,11 +90,12 @@ async function runHook(): Promise<void> {
     process.stderr.write(
       "[OKed] oked-hook in Claude settings is gating this call. The plugin hook is standing down.\n",
     );
-    process.stdout.write(JSON.stringify(makeOutput("allow")));
+    writeDecision("pass");
     return;
   }
 
-  const apiKey = pluginApiKey();
+  const apiKey = pluginOption("CLAUDE_PLUGIN_OPTION_APIKEY");
+  const githubToken = pluginOption("CLAUDE_PLUGIN_OPTION_GITHUBTOKEN");
   const decision = await decide(
     {
       toolName: input.tool_name,
@@ -85,6 +107,7 @@ async function runHook(): Promise<void> {
       clientId: CLIENT_ID,
       source: "claude-code",
       ...(apiKey ? { apiKey } : {}),
+      ...(githubToken ? { githubToken } : {}),
       unpaired: "ask",
       unpairedReason: "OKed: this device is not paired. Run /oked:pair, then save the API key in the plugin configuration.",
       unpairedLog: "not paired. Run /oked:pair, then set the API key. Falling back to Claude's built-in prompt.",
@@ -92,7 +115,9 @@ async function runHook(): Promise<void> {
         `OKed: invalid API key (HTTP ${status}). Run /oked:pair and update the API key in the plugin configuration.`,
     },
   );
-  process.stdout.write(JSON.stringify(makeOutput(decision.decision, decision.reason)));
+  if (decision.decision === "deny") writeDecision("deny", decision.reason);
+  else if (decision.decision === "ask") writeDecision("ask", decision.reason);
+  else writeDecision("pass", decision.reason);
 }
 
 function savePluginConfig(apiKey: string): Promise<boolean> {
@@ -135,15 +160,13 @@ async function runPair(): Promise<void> {
   });
   if (!apiKey) return;
 
-  writeOkedConfig(apiKey, DEFAULT_BACKEND_URL);
   const saved = await savePluginConfig(apiKey);
   console.log("");
   if (saved) {
-    console.log(`  Paired. API key ${maskKey(apiKey)} saved to the plugin configuration and to ${OKED_CONFIG_PATH}`);
+    console.log(`  Paired. API key ${maskKey(apiKey)} saved to the plugin configuration.`);
     console.log("  Start a new Claude Code session so the hook sees the key.");
     return;
   }
-  console.log(`  Paired. API key saved to ${OKED_CONFIG_PATH}`);
   console.log("  Claude Code could not store the plugin API key from here.");
   console.log("  Paste this key into the OKed plugin API key field (/plugin configure oked@oked):");
   console.log(`    ${apiKey}`);
@@ -169,7 +192,7 @@ if (command === "--help" || command === "-h") {
   runHook().catch((err) => {
     process.stderr.write(`[OKed] Fatal: ${err}\n`);
     const reason = `OKed: internal error (fail-safe): ${errorText(err)}`;
-    process.stdout.write(JSON.stringify(makeOutput("deny", reason)));
+    writeDecision("deny", reason);
     logDecision({
       decision: "deny",
       reason,

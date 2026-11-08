@@ -1,7 +1,7 @@
 {
   "name": "oked",
   "displayName": "OKed",
-  "version": "0.6.26",
+  "version": "0.6.27",
   "description": "Ask a person before Claude Code runs a risky action. Decisions happen in Telegram or on the web dashboard.",
   "author": {
     "name": "OKed",
@@ -23,7 +23,13 @@
     "apiKey": {
       "type": "string",
       "title": "API key",
-      "description": "OKed API key from /oked:pair. Leave this empty until you pair. Risky actions return ask until a key is saved.",
+      "description": "OKed API key from /oked:pair. Leave this empty until you pair. This is the only API key the plugin reads. Risky actions return ask until a key is saved.",
+      "sensitive": true
+    },
+    "githubToken": {
+      "type": "string",
+      "title": "GitHub token",
+      "description": "Optional. Used only to read a pull request title for an approval card. Leave empty to skip that lookup.",
       "sensitive": true
     }
   },

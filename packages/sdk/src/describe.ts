@@ -13,6 +13,7 @@ import { homedir } from "node:os";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import { blankTextCommandArgs, classify, classifyBashSteps, extractShellWriteOps, productionDeployCard, splitTopLevel, stripCodeHeredocBodies, stripInlineScriptBodies } from "./classify.js";
 import { TIER_ORDER } from "./degraded.js";
+import { pipesFetchToShell } from "./pipe-shell.js";
 
 const BODY_PREVIEW_MAX = 200;
 const COMMAND_INLINE_MAX = 50;
@@ -427,7 +428,7 @@ function summarizeBash(command: string, sizeBytes?: number, cwd?: string, sandbo
     }
   }
 
-  if (/\bwget\b.*\|\s*(bash|sh|zsh)\b/.test(cmd) || /\bcurl\b.*\|\s*(bash|sh|zsh)\b/.test(cmd)) {
+  if (pipesFetchToShell(cmd, "word")) {
     const url = cmd.match(/https?:\/\/[^\s|'"]+/)?.[0];
     return {
       title: `Download and execute script${url ? ` from ${extractHost(url)}` : ""}`,
@@ -515,7 +516,7 @@ function summarizeBash(command: string, sizeBytes?: number, cwd?: string, sandbo
  * -X POST …` reads "POST request to api.oked.ai", not a title built from bits
  * of three steps. Other steps that need approval on their own are listed in the
  * subline. Returns null when no step needs approval, or when the tier comes
- * from a pattern that spans steps (`curl … | sh`): the whole-command rules
+ * from a pattern that spans steps (a fetch piped into a shell): the whole-command rules
  * below describe those.
  */
 function summarizeCompoundBash(cmd: string, sizeBytes?: number, cwd?: string, sandboxEnforced?: boolean): Rendered | null {

@@ -2,7 +2,8 @@ import { readFileSync, writeFileSync, mkdirSync } from "fs";
 import { dirname } from "path";
 import type { ApprovalRequest, ApprovalResponse, OKedConfig } from "./types.js";
 import type { Rule } from "./rules.js";
-import { loadOKedConfig, OKED_RULES_CACHE_PATH, OKED_HEARTBEAT_PATH } from "./config.js";
+import { OKED_RULES_CACHE_PATH, OKED_HEARTBEAT_PATH } from "./config.js";
+import { machineSettings } from "./machine-config.js";
 import { OKedAuthError, OKedBackendUnreachableError, OKedHttpError, OKedTooManyPendingError } from "./errors.js";
 import { randomUUID } from "crypto";
 import { checkReceipt, OKED_RECEIPT_KEYS_URL } from "./receipt.js";
@@ -108,16 +109,16 @@ export class OKedClient {
   private config: OKedConfig;
 
   constructor(config?: Partial<OKedConfig>) {
-    const persisted = loadOKedConfig();
+    const persisted = machineSettings();
     this.config = {
-      apiKey: config?.apiKey || process.env.OKED_API_KEY || persisted.apiKey || "",
+      apiKey: config?.apiKey || persisted.apiKey || "",
       backendUrl:
         config?.backendUrl ||
         process.env.OKED_BACKEND_URL ||
         persisted.backendUrl ||
         "https://api.oked.ai",
       timeout: config?.timeout || DEFAULT_APPROVAL_TIMEOUT_MS,
-      // Precedence: constructor > env > ~/.oked/config.json > default false.
+      // Precedence: constructor, then environment, then saved settings, then false.
       strictFailClosed:
         config?.strictFailClosed ??
         envStrictFailClosed() ??
@@ -465,8 +466,9 @@ export type {
 export type { Rendered } from "./describe.js";
 export { CLASSIFIER_VERSION } from "./kinds.js";
 export type { OperationKind } from "./kinds.js";
-export { loadOKedConfig, OKED_CONFIG_PATH, OKED_RECEIPT_KEYS_PATH } from "./config.js";
-export type { PersistedConfig } from "./config.js";
+export { loadOKedConfig, OKED_CONFIG_PATH } from "./persisted.js";
+export type { PersistedConfig } from "./persisted.js";
+export { OKED_RECEIPT_KEYS_PATH } from "./config.js";
 export type {
   RiskTier,
   ApprovalRequest,

@@ -75,7 +75,7 @@ The counts below are the fixture transcripts in this package (`test/fixtures`), 
 
 <!-- fixture-report -->
 ```
-OKed scan 0.6.26
+OKed scan 0.6.27
 Local only. This scan does not use the network and does not send telemetry.
 
 Claude Code   9 commands in 2 files
@@ -127,7 +127,7 @@ An empty home, with no transcript directory, says that no history was found. It 
 
 <!-- empty-report -->
 ```
-OKed scan 0.6.26
+OKed scan 0.6.27
 Local only. This scan does not use the network and does not send telemetry.
 
 Claude Code   no transcripts at ~/.claude/projects

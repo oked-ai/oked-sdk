@@ -53,11 +53,17 @@ export interface DecideOptions {
    */
   invalidKeyReason?: (status: number) => string;
   /**
-   * When set to a non-empty string, this key is used instead of `OKED_API_KEY`
-   * and `~/.oked/config.json`. The Claude Code plugin passes
-   * `CLAUDE_PLUGIN_OPTION_APIKEY`.
+   * When set to a non-empty string, this key is the one the client sends.
+   * The Claude Code plugin passes the plugin API key field and does not
+   * read a key from the machine. Other hosts omit it and use the usual lookup.
    */
   apiKey?: string;
+  /**
+   * GitHub token for a pull request title. When set, the title comes from
+   * the GitHub API. When omitted, hosts that ship the gh helper may run gh.
+   * The Claude Code plugin passes its GitHub token field, or omits this.
+   */
+  githubToken?: string;
   log?: (msg: string) => void;
   /**
    * When set, overrides Claude Code sandbox detection.
@@ -182,7 +188,7 @@ export async function decide(call: ToolCallInput, options: DecideOptions): Promi
     return finish(unpaired, options.unpairedReason, ctx);
   }
 
-  const prTitle = await lookupPrTitle(fields);
+  const prTitle = await lookupPrTitle(fields, 3000, options.githubToken);
   if (prTitle) fields = describeFields(toolName, toolInput, { ...describeCtx, prTitle }) ?? undefined;
 
   const description = describe(toolName, toolInput, { ...describeCtx, prTitle });
