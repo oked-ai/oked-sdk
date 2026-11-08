@@ -2645,6 +2645,9 @@ var WARNING_COMMANDS = [
   /^git\s+checkout\s+-b\b/,
   /^git\s+switch\b/,
   /^git\s+stash\b(?!\s+(?:drop|clear))/,
+  // Safe local branch delete. Git refuses it for an unmerged branch, and the
+  // commits stay in the reflog, so it is a reversible local change.
+  /^git\s+branch\s+-d\b/,
   // Plain push (no force). Outward, but the remote keeps full history and the
   // push is recoverable, so by policy it logs rather than prompts. Force push is
   // high_stakes in the full scan above and wins before reaching here.
