@@ -11,7 +11,7 @@
     "README.md"
   ],
   "scripts": {
-    "test": "node --check bin/oked-openclaw.mjs && node test/install-plan.test.mjs"
+    "test": "node --check bin/oked-openclaw.mjs && node test/install-plan.test.mjs && node test/plugin-config.test.mjs && node test/direct-run.test.mjs"
   },
   "dependencies": {
     "@oked/sdk": "0.6.27"

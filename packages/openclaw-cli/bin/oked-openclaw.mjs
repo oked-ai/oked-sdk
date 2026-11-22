@@ -14,9 +14,10 @@
  */
 
 import { readFile, writeFile, mkdir, access, chmod } from 'node:fs/promises';
+import { realpathSync } from 'node:fs';
 import { homedir, hostname, platform } from 'node:os';
 import path from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'node:url';
 import readline from 'node:readline/promises';
 import { stdin as input, stdout as output } from 'node:process';
 import { spawn, spawnSync } from 'node:child_process';
@@ -427,20 +428,14 @@ async function cmdInit() {
 
   // 4. Update openclaw.json - apiKey/minTier are now declared in the plugin's
   //    configSchema, so OpenClaw 2026.5+ will accept them under entries.oked.
+  //    plugins.allow is the host allowlist. An install that leaves oked off
+  //    that list shows "Plugin allowed: no" and the gateway will not load it.
   process.stdout.write('4. Updating ~/.openclaw/openclaw.json... ');
-  const cfg = existing && typeof existing === 'object' ? existing : {};
-  cfg.plugins = cfg.plugins || {};
-  const allow = Array.isArray(cfg.plugins.allow) ? cfg.plugins.allow : [];
-  if (!allow.includes('oked')) allow.push('oked');
-  cfg.plugins.allow = allow;
-  cfg.plugins.entries = cfg.plugins.entries || {};
-  cfg.plugins.entries.oked = {
-    ...(cfg.plugins.entries.oked || {}),
-    enabled: true,
+  const cfg = applyPluginConfig(existing, {
     apiKey,
-    backendUrl: DEFAULT_BACKEND_URL,
     minTier,
-  };
+    backendUrl: DEFAULT_BACKEND_URL,
+  });
   await writeConfig(cfg);
   console.log('done');
   console.log(`   File: ${OPENCLAW_CONFIG}\n`);
@@ -602,6 +597,30 @@ async function cmdUninstall() {
   console.log('  Restart the OpenClaw daemon to fully unload the plugin.');
 }
 
+/**
+ * Write the OKed plugin entry and make sure `oked` is on plugins.allow.
+ * Mutates and returns cfg. A missing allow list becomes ["oked"]. An existing
+ * list keeps its other ids and gains oked when it is absent.
+ */
+export function applyPluginConfig(cfg, { apiKey, minTier, backendUrl }) {
+  const next = cfg && typeof cfg === 'object' ? cfg : {};
+  next.plugins = next.plugins && typeof next.plugins === 'object' ? next.plugins : {};
+  const allow = Array.isArray(next.plugins.allow) ? next.plugins.allow : [];
+  if (!allow.includes('oked')) allow.push('oked');
+  next.plugins.allow = allow;
+  next.plugins.entries = next.plugins.entries && typeof next.plugins.entries === 'object'
+    ? next.plugins.entries
+    : {};
+  next.plugins.entries.oked = {
+    ...(next.plugins.entries.oked || {}),
+    enabled: true,
+    apiKey,
+    backendUrl,
+    minTier,
+  };
+  return next;
+}
+
 function usage() {
   console.log(`oked-openclaw - pairing CLI for the @oked/openclaw plugin
 
@@ -642,10 +661,21 @@ async function main() {
   }
 }
 
-const isDirectRun =
-  process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
+/**
+ * True when this file is the process entrypoint.
+ * npm and npx put a symlink in the bin path, so process.argv[1] is the link
+ * and import.meta.url is the real file. Compare the real paths.
+ */
+function isDirectRun(argvPath = process.argv[1]) {
+  if (!argvPath) return false;
+  try {
+    return realpathSync(argvPath) === realpathSync(fileURLToPath(import.meta.url));
+  } catch {
+    return false;
+  }
+}
 
-if (isDirectRun) {
+if (isDirectRun()) {
   main().catch((err) => {
     console.error(`oked-openclaw: ${err.message}`);
     process.exit(1);

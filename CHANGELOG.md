@@ -26,6 +26,16 @@ Decisions are made in Telegram and on the [web dashboard](https://oked.ai/dashbo
 - `gh repo fork` cards name the source repo and the target org. `gh repo create` cards name the new repo and its visibility (`private`, `public`, or `internal`). A fork with no repo argument still names the folder's repo, because that is the repo it forks.
 - The Claude Code plugin bundle (`plugins/claude-code/scripts/oked-hook.mjs`) was rebuilt from this classifier.
 
+### @oked/openclaw
+
+- With no API key, the plugin starts device pairing once per gateway start, the same flow as `oked-openclaw init`. The gateway log prints the pair link (`https://app.oked.ai/pair?code=...`) and the code. The code is reused while it is valid. Sensitive tool calls stay denied. The reason tells the agent that OKed is not set up yet and to open that link or run `npx @oked/openclaw-cli init`. A completed pairing saves the key to `~/.oked/config.json` and to `plugins.entries.oked` in `~/.openclaw/openclaw.json`, and adds `oked` to `plugins.allow`.
+- The first gateway start with no API key sends one anonymous install request, `POST /api/v1/install`. The JSON body is only `client_type` (`openclaw`), `plugin_version`, `openclaw_version`, and `install_id`. `install_id` is a random UUID stored in `~/.oked/openclaw-install.json`. It is not derived from the hostname. The request carries no API key. The same install id is sent once, after a successful response. A failure is ignored and retried on a later start. `OKED_TELEMETRY=0` skips the request. The backend for this route is not in this repo.
+
+### @oked/openclaw-cli
+
+- `oked-openclaw` runs when npm or npx starts it through a symlink. `init`, `status`, and `--help` print output again. In 0.6.25 and 0.6.26 the direct-run check compared `import.meta.url` with `process.argv[1]`, the symlink never matched, and every command exited 0 with no output.
+- `oked-openclaw init` adds `oked` to `plugins.allow` in `~/.openclaw/openclaw.json` when that list is how OpenClaw allowlists plugins. Existing ids on the list are kept.
+
 ## 0.6.26 - 2026-11-02
 
 ### Claude Code plugin

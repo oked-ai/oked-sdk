@@ -3,7 +3,21 @@
 [![npm version](https://img.shields.io/npm/v/@oked/openclaw.svg)](https://www.npmjs.com/package/@oked/openclaw)
 [![License: Apache-2.0](https://img.shields.io/npm/l/@oked/openclaw.svg)](./LICENSE)
 
-OKed pauses risky OpenClaw actions, like `rm -rf`, force-push, destructive SQL, and production deploys, until you approve them in Telegram or on the [web dashboard](https://oked.ai/dashboard). Reads and other ordinary actions just run. Every decision gets a signed receipt. The iPhone app is coming soon.
+OKed pauses risky OpenClaw actions, like `rm -rf`, force-push, destructive SQL, and production deploys, until you approve them in Telegram or on the [web dashboard](https://oked.ai/dashboard). Reads and other ordinary actions just run. Every decision gets a signed receipt.
+
+```bash
+openclaw plugins install clawhub:@oked/openclaw
+npx @oked/openclaw-cli init
+```
+
+A non-interactive install needs `--accept-capabilities` so OpenClaw can record the capability consent:
+
+```bash
+openclaw plugins install clawhub:@oked/openclaw --accept-capabilities
+npx @oked/openclaw-cli init
+```
+
+The install asks you to allow the Prompt injection capability. OKed asks for it because a denial returns the reason to the agent. That text is how the agent learns the action was blocked and should stop.
 
 A `before_tool_call` hook runs for every tool the host reports (built-in or registered by a skill) and classifies it. Calls at `review` and `high_stakes` wait until you decide. A denial returns `{ block: true, blockReason }`.
 
@@ -11,26 +25,17 @@ OpenClaw 2026.5.4 or newer is required. That release treats the returned denial 
 
 ## Install
 
-Install from [ClawHub](https://clawhub.ai/plugins/@oked/openclaw):
+The two commands above install from [ClawHub](https://clawhub.ai/plugins/@oked/openclaw) and pair this machine. `npx @oked/openclaw-cli init` needs the `openclaw` command on your PATH. It pairs this device (or reuses an existing API key), sets `minTier` (a terminal prompt when none is set), adds `oked` to `plugins.allow`, writes `plugins.entries.oked` in `~/.openclaw/openclaw.json`, and offers to restart the gateway.
 
-```bash
-openclaw plugins install clawhub:@oked/openclaw
-```
+On OpenClaw 2026.10.9 a package name with no source locator is an npm install. A noninteractive npm install stops with `Install cancelled; rerun with --force`. The `clawhub:` locator selects ClawHub.
 
-On OpenClaw 2026.10.9 a package name with no source locator is an npm install. A noninteractive npm install stops with `Install cancelled; rerun with --force`. The `clawhub:` locator selects ClawHub. That install may also ask you to accept the plugin capabilities.
-
-To install straight from npm instead:
+To install the plugin straight from npm instead:
 
 ```bash
 openclaw plugins install npm:@oked/openclaw
 ```
 
-Pair this machine with [`@oked/openclaw-cli`](../openclaw-cli). The CLI needs the `openclaw` command on your PATH. It pairs this device (or reuses an existing API key), sets `minTier` (a terminal prompt when none is set), writes the entry into `~/.openclaw/openclaw.json`, and offers to restart the gateway.
-
-```bash
-npm install -g @oked/openclaw-cli
-oked-openclaw init
-```
+You can also install the CLI globally with `npm install -g @oked/openclaw-cli` and run `oked-openclaw init`.
 
 If this package is not already installed, and there is no local checkout, `oked-openclaw init` tries `openclaw plugins install clawhub:@oked/openclaw` ([ClawHub](https://clawhub.ai/plugins/@oked/openclaw)). If that fails, it retries `openclaw plugins install npm:@oked/openclaw`. A checkout or a global npm copy is still linked with `openclaw plugins install --link`.
 
@@ -59,7 +64,7 @@ Keys live under `plugins.entries.oked`. The plugin manifest sets `additionalProp
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `apiKey` | `string` | `OKED_API_KEY` env | OKed API key. Required. With no key, sensitive calls are denied. |
+| `apiKey` | `string` | `OKED_API_KEY` env | OKed API key. With no key, the gateway starts pairing and sensitive calls are denied. |
 | `minTier` | `"safe" \| "warning" \| "review" \| "high_stakes"` | `"review"` | Lowest tier that can ask for approval. `warning` never blocks: only `review` and `high_stakes` do. Env `OKED_MIN_TIER` is the fallback when the config value is absent. |
 | `alwaysApprove` | `string[]` | `[]` | Tool names that are always `high_stakes`, whatever the classifier says. |
 | `alwaysAllow` | `string[]` | `[]` | Tool names that are always `safe`. Use sparingly. |
@@ -87,7 +92,7 @@ Each approval is one JSON request. These fields are in the body:
 | `description` | One-line summary built from the tool arguments. |
 | `tier` | `review` or `high_stakes`. |
 | `nonce` | A new id for this request, so an old receipt cannot approve a later call. |
-| `client` | This package and version, for example `@oked/openclaw@0.6.25`. |
+| `client` | This package and version, for example `@oked/openclaw@0.6.27`. |
 | `metadata.tool_input` | The full tool arguments. |
 | `metadata.cwd` | Working directory of the OpenClaw process. |
 | `metadata.source` | `openclaw`. |
@@ -105,9 +110,24 @@ The signed receipt is bound to the action, description, tool input (including an
 
 To stop sending the excerpt, set `sendScriptContent` to `false` or export `OKED_SEND_SCRIPT_CONTENT=0`. The default is to send it.
 
+### Unpaired install
+
+On the first gateway start with no API key, OKed sends one install request. The body has four fields:
+
+| Field | Contents |
+|---|---|
+| `client_type` | `openclaw`. |
+| `plugin_version` | This package's version, for example `0.6.27`. |
+| `openclaw_version` | The OpenClaw version the gateway reports. `unknown` when the host does not provide one. |
+| `install_id` | A random id stored in `~/.oked/openclaw-install.json` on this machine. |
+
+The body contains only those fields. The same install id is sent once. Set `OKED_TELEMETRY=0` to skip the request. A failed request is ignored and retried on a later gateway start until one succeeds.
+
+The gateway log also prints a pair link (`https://app.oked.ai/pair?code=...`) and the code. Sensitive calls stay denied until pairing finishes or you run `npx @oked/openclaw-cli init`. The denial text tells the agent to open that link or run that command.
+
 ## Degraded-mode behavior
 
-Explicit denials, invalid API keys, a missing API key, receipts that do not verify, and unexpected plugin errors deny the tool call. If OKed cannot be reached, the default is to deny `high_stakes` and allow lower tiers, so a short outage does not stop every workflow. Set `OKED_STRICT_FAIL_CLOSED=1` (or `true`) to deny every sensitive action during an outage. That is the recommended setting when these actions should stay blocked until you can decide.
+Explicit denials, invalid API keys, a missing API key, receipts that do not verify, and unexpected plugin errors deny the tool call. A missing API key denies every sensitive call, including `review`. If OKed cannot be reached and a key is set, the default is to deny `high_stakes` and allow lower tiers, so a short outage does not stop every workflow. Set `OKED_STRICT_FAIL_CLOSED=1` (or `true`) to deny every sensitive action during an outage. That is the recommended setting when these actions should stay blocked until you can decide.
 
 ## Development
 

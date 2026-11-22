@@ -17,6 +17,8 @@ import { join } from "node:path";
 process.env.HOME = mkdtempSync(join(tmpdir(), "oked-smoke-"));
 process.env.USERPROFILE = process.env.HOME;
 delete process.env.OKED_API_KEY;
+process.env.OKED_TELEMETRY = "0";
+process.env.OKED_BACKEND_URL = "http://127.0.0.1:1";
 const { classifyOpenClawTool } = await import("../dist/classify-openclaw.js");
 const { default: plugin } = await import("../dist/index.js");
 
@@ -131,11 +133,17 @@ function makeStubApi(pluginConfig) {
     handler,
     { toolName: "imessage_send", params: { to: "+1", body: "hi" } },
     { toolName: "imessage_send", sessionKey: "agent:main:main" },
-    /fail-safe|deny|unreachable/i,
+    /not set up yet/i,
+  );
+  await assertDenied(
+    handler,
+    { toolName: "create_note", params: {} },
+    { toolName: "create_note" },
+    /npx @oked\/openclaw-cli init/,
   );
   assert.ok(
-    logs.some(([lvl, m]) => lvl === "warn" && /apiKey/.test(m)),
-    "warns about missing apiKey",
+    logs.some(([lvl, m]) => lvl === "warn" && /not set up/i.test(m)),
+    "warns that OKed is not set up",
   );
   console.log("OK plugin: fail-safe deny (returns block) when no apiKey");
 }

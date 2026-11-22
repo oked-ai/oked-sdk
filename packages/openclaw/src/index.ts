@@ -36,6 +36,8 @@ import {
   type RiskTier,
 } from "@oked/sdk";
 import { classifyOpenClawTool, type ClassifyOptions } from "./classify-openclaw.js";
+import { sendAnonymousInstallPing } from "./install-ping.js";
+import { beginDevicePairing, persistPairedApiKey, unpairedDenyReason, type PairingSession } from "./pairing.js";
 import { redactScriptExcerpt, resolveSendScriptContent, tryReadScriptFile } from "./script-excerpt.js";
 
 function tryStatRmTarget(command: string): number | undefined {
@@ -104,6 +106,8 @@ interface PluginLogger {
 interface OpenClawPluginApi {
   pluginConfig?: OkedPluginConfig;
   logger?: PluginLogger;
+  /** Present on a live gateway. Metadata-only registration may omit it or throw on access. */
+  runtime?: { version?: string };
   on: (
     hookName: string,
     handler: (
@@ -151,6 +155,23 @@ const CLIENT_ID = (() => {
 
 const PLUGIN_ID = "oked";
 
+function pluginVersion(): string {
+  const at = CLIENT_ID.lastIndexOf("@");
+  return at > 0 ? CLIENT_ID.slice(at + 1) : "0.0.0";
+}
+
+function readHostVersion(api: OpenClawPluginApi): string {
+  try {
+    const version = api.runtime?.version;
+    if (typeof version === "string" && version.trim()) return version.trim();
+  } catch {
+    // Metadata-only registration has no runtime object.
+  }
+  const fromEnv = process.env.OPENCLAW_VERSION;
+  if (typeof fromEnv === "string" && fromEnv.trim()) return fromEnv.trim();
+  return "unknown";
+}
+
 const LISTING_DESCRIPTION =
   "Pauses risky OpenClaw actions, like rm -rf, force-push, destructive SQL and prod deploys, until you approve them in Telegram or on the OKed web dashboard. Everything else just runs. Every decision gets a signed receipt.";
 
@@ -163,22 +184,41 @@ const plugin = {
     const cfg = api.pluginConfig ?? {};
     const log = api.logger;
 
-    const oked = new OKedClient({
-      apiKey: cfg.apiKey ?? process.env.OKED_API_KEY,
-      backendUrl: cfg.backendUrl ?? process.env.OKED_BACKEND_URL,
-      ...(cfg.timeoutMs ? { timeout: cfg.timeoutMs } : {}),
-      ...(cfg.strictFailClosed !== undefined
-        ? { strictFailClosed: cfg.strictFailClosed }
-        : {}),
-      client: CLIENT_ID,
-      source: "openclaw",
-    });
+    const makeClient = (apiKey?: string) =>
+      new OKedClient({
+        apiKey: apiKey ?? cfg.apiKey ?? process.env.OKED_API_KEY,
+        backendUrl: cfg.backendUrl ?? process.env.OKED_BACKEND_URL,
+        ...(cfg.timeoutMs ? { timeout: cfg.timeoutMs } : {}),
+        ...(cfg.strictFailClosed !== undefined
+          ? { strictFailClosed: cfg.strictFailClosed }
+          : {}),
+        client: CLIENT_ID,
+        source: "openclaw",
+      });
+    let oked = makeClient();
+    let pairing: PairingSession | undefined;
 
     if (!oked.apiKey) {
-      log?.warn?.(
-        `[oked] no apiKey configured. Plugin will fail-safe DENY every sensitive tool call. ` +
-          `Set OKED_API_KEY env var or plugins.entries.oked.apiKey in openclaw.json.`,
-      );
+      pairing = beginDevicePairing({
+        backendUrl: oked.backendUrl,
+        clientVersion: pluginVersion(),
+        hostname: os.hostname(),
+        log: (line) => log?.warn?.(line),
+        onApproved: (apiKey) => {
+          oked = makeClient(apiKey);
+          const saved = persistPairedApiKey(apiKey, oked.backendUrl);
+          if (!saved.savedOkedConfig) {
+            log?.error?.(
+              "[oked] Paired. The key is active for this gateway run. Saving ~/.oked/config.json failed.",
+            );
+          }
+        },
+      });
+      void sendAnonymousInstallPing({
+        backendUrl: oked.backendUrl,
+        pluginVersion: pluginVersion(),
+        openclawVersion: readHostVersion(api),
+      }).catch(() => {});
     }
 
     // minTier resolution order: openclaw.json > OKED_MIN_TIER env var > default.
@@ -237,6 +277,16 @@ const plugin = {
       // Warning is informational only; only review/high_stakes can block.
       if (TIER_ORDER[tier] < minTierLevel || !APPROVAL_TIERS.has(tier)) {
         return; // void = allow
+      }
+
+      // No key: deny. Do not call approve(), which would treat a dead backend
+      // as an outage and allow review-tier calls. Wait briefly so the reason
+      // can include the pair URL from the one pairing attempt started above.
+      if (!oked.apiKey && pairing) {
+        await pairing.ready;
+      }
+      if (!oked.apiKey) {
+        return deny(unpairedDenyReason(pairing?.state ?? { phase: "unavailable" }));
       }
 
       // Sensitive. Ask the human.
