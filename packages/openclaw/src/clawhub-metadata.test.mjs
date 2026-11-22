@@ -86,15 +86,26 @@ for (const rel of publicDocs) {
 const openclawReadme = readFileSync(join(pkgDir, "README.md"), "utf8");
 assert.ok(openclawReadme.includes("openclaw plugins install clawhub:@oked/openclaw"));
 assert.equal(openclawReadme.includes("openclaw plugins install @oked/openclaw\n"), false);
-assert.ok(openclawReadme.includes("npm install -g @oked/openclaw-cli"));
-assert.ok(openclawReadme.includes("The iPhone app is coming soon."));
+assert.ok(openclawReadme.includes("npx @oked/openclaw-cli init"));
+assert.ok(openclawReadme.includes("--accept-capabilities"));
+assert.ok(openclawReadme.includes("Prompt injection"));
 assert.ok(openclawReadme.includes("## What OKed sends"));
 assert.ok(openclawReadme.includes("OKED_SEND_SCRIPT_CONTENT=0"));
+assert.ok(openclawReadme.includes("OKED_TELEMETRY=0"));
 assert.ok(openclawReadme.includes("OKED_STRICT_FAIL_CLOSED=1"));
 assert.ok(openclawReadme.includes("2026.5.4"));
 assert.equal(openclawReadme.includes("2026.4.20"), false);
 assert.equal(/push to your phone|from your phone/i.test(openclawReadme), false);
 assert.equal(openclawReadme.includes("free during beta"), false);
+assert.equal(openclawReadme.includes("iPhone app is coming soon"), false);
+assert.equal(openclawReadme.includes("Once the package is listed on ClawHub"), false);
+const cliReadme = readFileSync(join(repoRoot, "packages/openclaw-cli/README.md"), "utf8");
+assert.ok(cliReadme.includes("npx @oked/openclaw-cli init"));
+assert.ok(cliReadme.includes("--accept-capabilities"));
+assert.ok(cliReadme.includes("plugins.allow"));
+assert.equal(cliReadme.includes("free during beta"), false);
+assert.equal(cliReadme.includes("iPhone app is coming soon"), false);
+assert.equal(cliReadme.includes("Once the package is listed on ClawHub"), false);
 
 const rootReadme = readFileSync(join(repoRoot, "README.md"), "utf8");
 assert.ok(rootReadme.includes("openclaw plugins install clawhub:@oked/openclaw"));
