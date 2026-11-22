@@ -96,16 +96,29 @@ assert.ok(openclawReadme.includes("OKED_STRICT_FAIL_CLOSED=1"));
 assert.ok(openclawReadme.includes("2026.5.4"));
 assert.equal(openclawReadme.includes("2026.4.20"), false);
 assert.equal(/push to your phone|from your phone/i.test(openclawReadme), false);
-assert.equal(openclawReadme.includes("free during beta"), false);
 assert.equal(openclawReadme.includes("iPhone app is coming soon"), false);
 assert.equal(openclawReadme.includes("Once the package is listed on ClawHub"), false);
 const cliReadme = readFileSync(join(repoRoot, "packages/openclaw-cli/README.md"), "utf8");
+const cliPkg = JSON.parse(readFileSync(join(repoRoot, "packages/openclaw-cli/package.json"), "utf8"));
 assert.ok(cliReadme.includes("npx @oked/openclaw-cli init"));
 assert.ok(cliReadme.includes("--accept-capabilities"));
 assert.ok(cliReadme.includes("plugins.allow"));
-assert.equal(cliReadme.includes("free during beta"), false);
 assert.equal(cliReadme.includes("iPhone app is coming soon"), false);
 assert.equal(cliReadme.includes("Once the package is listed on ClawHub"), false);
+
+const pricingWord = /\b(free|beta|pricing|price)\b/i;
+const listingCopy = [
+  ["packages/openclaw/README.md", openclawReadme],
+  ["packages/openclaw-cli/README.md", cliReadme],
+  ["@oked/openclaw description", pkg.description],
+  ["@oked/openclaw-cli description", cliPkg.description],
+  ["openclaw.plugin.json", JSON.stringify(manifest)],
+  ["plugin.description", plugin.description],
+];
+for (const [label, text] of listingCopy) {
+  const hit = String(text).match(pricingWord);
+  assert.equal(hit, null, `${label} mentions "${hit && hit[0]}"`);
+}
 
 const rootReadme = readFileSync(join(repoRoot, "README.md"), "utf8");
 assert.ok(rootReadme.includes("openclaw plugins install clawhub:@oked/openclaw"));
