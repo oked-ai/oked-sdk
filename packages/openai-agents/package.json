@@ -31,8 +31,8 @@
     "@oked/sdk": "0.6.27"
   },
   "devDependencies": {
-    "@openai/agents": "^0.21.0",
-    "@types/node": "^26.6.5",
+    "@openai/agents": "^0.22.0",
+    "@types/node": "^26.6.6",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",
     "zod": "^4.6.7"
